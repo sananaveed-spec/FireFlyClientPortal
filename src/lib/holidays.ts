@@ -246,6 +246,7 @@ export function normalizeHolidays(value: unknown): HolidaysStore {
     ) {
       continue;
     }
+    const countryId: HolidayCountryId = raw.id;
 
     const holidays = Array.isArray(raw.holidays)
       ? raw.holidays
@@ -267,15 +268,15 @@ export function normalizeHolidays(value: unknown): HolidaysStore {
               name,
               date,
             };
-            if (holidayUsesRegion(raw.id)) {
-              entry.state = normalizeHolidayState(holiday.state, raw.id);
+            if (holidayUsesRegion(countryId)) {
+              entry.state = normalizeHolidayState(holiday.state, countryId);
             }
             return entry;
           })
           .filter((item): item is HolidayEntry => item !== null)
       : [];
 
-    byId.set(raw.id, holidays);
+    byId.set(countryId, holidays);
   }
 
   return {
