@@ -10,6 +10,7 @@ import {
 } from "react";
 import { mailSendRequest } from "@/auth/authConfig";
 import { useAccess } from "@/auth/accessContext";
+import { getAccountEmail } from "@/auth/organization";
 import {
   formatBusinessDayLabel,
   getScheduleBusinessDate,
@@ -420,6 +421,8 @@ export function ClientManagementPanel() {
   const { email } = useAccess();
   const msalAccount = accounts[0] ?? null;
   const msalName = msalAccount?.name ?? "";
+  const emailFrom =
+    getAccountEmail(msalAccount) || email.trim().toLowerCase() || "";
 
   const [resources, setResources] = useState<ResourceClientEntry[]>([]);
   const [profiles, setProfiles] = useState<ClientProfileEntry[]>([]);
@@ -448,7 +451,6 @@ export function ClientManagementPanel() {
   const [editRequestLabel, setEditRequestLabel] = useState("");
   const [savingRequestList, setSavingRequestList] = useState(false);
   const [emailTo, setEmailTo] = useState("");
-  const [emailFrom, setEmailFrom] = useState("");
   const [emailCc, setEmailCc] = useState("");
   const [emailBcc, setEmailBcc] = useState("");
   const [emailDeadline, setEmailDeadline] = useState("");
@@ -787,9 +789,8 @@ export function ClientManagementPanel() {
     ) {
       return;
     }
-    // Leave To / From empty on load for testing.
+    // Leave To empty on load; From always follows the signed-in account.
     setEmailTo("");
-    setEmailFrom("");
     setEmailCc("");
     setEmailBcc("");
     setEmailDeadline("");
@@ -1062,7 +1063,7 @@ export function ClientManagementPanel() {
       msalAccount;
 
     if (!account) {
-      const hint = email?.trim() || emailFrom.trim() || "";
+      const hint = emailFrom || email?.trim() || "";
       setEmailSendMessage("Connecting your Microsoft account to send…");
       const result = await instance.loginPopup({
         ...mailSendRequest,
@@ -1846,14 +1847,13 @@ export function ClientManagementPanel() {
                           <label className="field">
                             <span className="field-label">From</span>
                             <input
-                              className="field-input"
-                              type="text"
-                              inputMode="email"
+                              className="field-input field-input--readonly"
+                              type="email"
                               value={emailFrom}
-                              onChange={(event) =>
-                                setEmailFrom(event.target.value)
-                              }
-                              placeholder="email@example.com"
+                              readOnly
+                              tabIndex={-1}
+                              aria-readonly="true"
+                              title="From is the Microsoft account you signed in with"
                             />
                           </label>
                           <label className="field">
