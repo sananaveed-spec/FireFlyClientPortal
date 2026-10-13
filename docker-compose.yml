@@ -1,0 +1,25 @@
+# Deploy with a .env file in this folder (copy from .env.example).
+# NEXT_PUBLIC_* are passed at build time.
+services:
+  firefly-client-portal:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_AZURE_CLIENT_ID: ${NEXT_PUBLIC_AZURE_CLIENT_ID}
+        NEXT_PUBLIC_AZURE_TENANT_ID: ${NEXT_PUBLIC_AZURE_TENANT_ID}
+        NEXT_PUBLIC_ALLOWED_EMAIL_DOMAINS: ${NEXT_PUBLIC_ALLOWED_EMAIL_DOMAINS:-fireflyaccountancy.com}
+        NEXT_PUBLIC_AZURE_AUTHORITY: ${NEXT_PUBLIC_AZURE_AUTHORITY:-https://login.microsoftonline.com/organizations}
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      DATA_DIR: /app/data
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
+    volumes:
+      - firefly-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  firefly-data:
