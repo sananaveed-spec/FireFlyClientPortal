@@ -31,7 +31,7 @@ export function MultiSearchableSelect({
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    function handlePointerDown(event: MouseEvent) {
+    function handlePointerDown(event: globalThis.MouseEvent) {
       if (!rootRef.current?.contains(event.target as Node)) {
         setOpen(false);
         setQuery("");

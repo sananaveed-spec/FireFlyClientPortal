@@ -60,13 +60,13 @@ export function Sidebar({
       return;
     }
 
-    function onPointerDown(event: MouseEvent) {
+    function onPointerDown(event: globalThis.MouseEvent) {
       if (!menuRef.current?.contains(event.target as Node)) {
         setMenuOpen(false);
       }
     }
 
-    function onKeyDown(event: KeyboardEvent) {
+    function onKeyDown(event: globalThis.KeyboardEvent) {
       if (event.key === "Escape") {
         setMenuOpen(false);
       }

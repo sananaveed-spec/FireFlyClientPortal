@@ -52,7 +52,7 @@ export function SearchableChecklist({
   );
 
   useEffect(() => {
-    function handlePointerDown(event: MouseEvent) {
+    function handlePointerDown(event: globalThis.MouseEvent) {
       if (!rootRef.current?.contains(event.target as Node)) {
         setOpen(false);
         setQuery("");

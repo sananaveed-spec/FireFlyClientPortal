@@ -48,7 +48,7 @@ export function DataListToolbar({
       return;
     }
 
-    function handlePointerDown(event: MouseEvent) {
+    function handlePointerDown(event: globalThis.MouseEvent) {
       const target = event.target as Node;
       if (openFilterRef.current?.contains(target)) {
         return;
@@ -57,7 +57,7 @@ export function DataListToolbar({
       setFilterSearch("");
     }
 
-    function handleKeyDown(event: KeyboardEvent) {
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
       if (event.key === "Escape") {
         setOpenFilterId(null);
         setFilterSearch("");
