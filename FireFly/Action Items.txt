@@ -1,0 +1,16 @@
+Done
+- Which one USA, which one CA, so only that compliance year appear 
+- Which one USA, which one CA, hide/show fields SSN, FEIN, Business Account Number
+- Renamed CT Tax Registration No to Provincial Sales Tax Numbers in the Client Profile table and form.
+- BD1 to BD7 logic is implemented for both BD1 template categories
+
+-------------------------------------------------------------
+
+
+3 timezone, reporting currency, 1
+- Access Level
+BD holiday inbetween
+
+
+
+

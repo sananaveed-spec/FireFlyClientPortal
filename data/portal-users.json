@@ -1,0 +1,23 @@
+[
+  {
+    "email": "sana@fireflyaccountancy.com",
+    "role": "admin",
+    "name": "Sana Naveed",
+    "position": "Executive Assistant",
+    "phone": "03342886108"
+  },
+  {
+    "email": "sana@epsfresno.com",
+    "role": "admin",
+    "name": "Sana Naveed",
+    "position": "Executive Assistant",
+    "phone": "03342886108"
+  },
+  {
+    "email": "test@fireflyaccountancy.com",
+    "role": "team",
+    "name": "Test",
+    "position": "Test",
+    "phone": "03342886108"
+  }
+]

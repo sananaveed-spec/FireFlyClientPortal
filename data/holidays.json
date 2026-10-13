@@ -1,0 +1,218 @@
+{
+  "countries": [
+    {
+      "id": "pakistan",
+      "name": "Pakistan",
+      "holidays": [
+        {
+          "id": "seed-1-kashmir-day",
+          "name": "Kashmir Day",
+          "date": "2026-02-05"
+        },
+        {
+          "id": "seed-2-pakistan-day",
+          "name": "Pakistan Day",
+          "date": "2026-03-23"
+        },
+        {
+          "id": "seed-3-eid-ul-fitr-day-1",
+          "name": "Eid-ul-Fitr - Day 1",
+          "date": "2026-03-21"
+        },
+        {
+          "id": "seed-4-eid-ul-fitr-day-2",
+          "name": "Eid-ul-Fitr - Day 2",
+          "date": "2026-03-22"
+        },
+        {
+          "id": "seed-5-eid-ul-fitr-day-3",
+          "name": "Eid-ul-Fitr - Day 3",
+          "date": "2026-03-23"
+        },
+        {
+          "id": "seed-6-labour-day",
+          "name": "Labour Day",
+          "date": "2026-05-01"
+        },
+        {
+          "id": "seed-7-day-of-arafa",
+          "name": "Day of Arafa",
+          "date": "2026-05-26"
+        },
+        {
+          "id": "seed-8-eid-ul-adha-day-1",
+          "name": "Eid ul-Adha - Day 1",
+          "date": "2026-05-27"
+        },
+        {
+          "id": "seed-9-eid-ul-adha-day-2",
+          "name": "Eid ul-Adha - Day 2",
+          "date": "2026-05-28"
+        },
+        {
+          "id": "seed-10-ashura-9th-moharram",
+          "name": "Ashura - 9th Moharram",
+          "date": "2026-06-24"
+        },
+        {
+          "id": "seed-11-ashura-10th-moharram",
+          "name": "Ashura - 10th Moharram",
+          "date": "2026-06-25"
+        },
+        {
+          "id": "seed-12-independence-day",
+          "name": "Independence Day",
+          "date": "2026-08-14"
+        },
+        {
+          "id": "seed-13-12th-of-rabi-ul-awal",
+          "name": "12th of Rabi-ul-Awal",
+          "date": "2026-08-25"
+        },
+        {
+          "id": "seed-14-quaid-e-azam-day",
+          "name": "Quaid-e-Azam Day",
+          "date": "2026-12-25"
+        }
+      ]
+    },
+    {
+      "id": "unitedStates",
+      "name": "United States",
+      "holidays": [
+        {
+          "id": "seed-us-1-new-year-s-day",
+          "name": "New Year's Day",
+          "date": "2026-01-01",
+          "state": "All"
+        },
+        {
+          "id": "seed-us-2-birthday-of-martin-luther-king-jr",
+          "name": "Birthday of Martin Luther King, Jr.",
+          "date": "2026-01-19",
+          "state": "All"
+        },
+        {
+          "id": "seed-us-3-washington-s-birthday",
+          "name": "Washington's Birthday",
+          "date": "2026-02-16",
+          "state": "All"
+        },
+        {
+          "id": "seed-us-4-memorial-day",
+          "name": "Memorial Day",
+          "date": "2026-05-25",
+          "state": "All"
+        },
+        {
+          "id": "seed-us-5-juneteenth-national-independence-day",
+          "name": "Juneteenth National Independence Day",
+          "date": "2026-06-19",
+          "state": "All"
+        },
+        {
+          "id": "seed-us-6-independence-day",
+          "name": "Independence Day",
+          "date": "2026-07-03",
+          "state": "All"
+        },
+        {
+          "id": "seed-us-7-labor-day",
+          "name": "Labor Day",
+          "date": "2026-09-07",
+          "state": "All"
+        },
+        {
+          "id": "seed-us-8-columbus-day",
+          "name": "Columbus Day",
+          "date": "2026-10-12",
+          "state": "All"
+        },
+        {
+          "id": "seed-us-9-veterans-day",
+          "name": "Veterans Day",
+          "date": "2026-11-11",
+          "state": "All"
+        },
+        {
+          "id": "seed-us-10-thanksgiving-day",
+          "name": "Thanksgiving Day",
+          "date": "2026-11-26",
+          "state": "All"
+        },
+        {
+          "id": "seed-us-11-christmas-day",
+          "name": "Christmas Day",
+          "date": "2026-12-25",
+          "state": "All"
+        }
+      ]
+    },
+    {
+      "id": "canada",
+      "name": "Canada",
+      "holidays": [
+        {
+          "id": "seed-ca-1-new-year-s-day",
+          "name": "New Year's Day",
+          "date": "2026-01-01",
+          "state": "All"
+        },
+        {
+          "id": "seed-ca-2-good-friday",
+          "name": "Good Friday",
+          "date": "2026-04-03",
+          "state": "All"
+        },
+        {
+          "id": "seed-ca-3-victoria-day",
+          "name": "Victoria Day",
+          "date": "2026-05-18",
+          "state": "All"
+        },
+        {
+          "id": "seed-ca-4-canada-day",
+          "name": "Canada Day",
+          "date": "2026-07-01",
+          "state": "All"
+        },
+        {
+          "id": "seed-ca-5-labour-day",
+          "name": "Labour Day",
+          "date": "2026-09-07",
+          "state": "All"
+        },
+        {
+          "id": "seed-ca-6-national-day-for-truth-and-reconciliation",
+          "name": "National Day for Truth and Reconciliation",
+          "date": "2026-09-30",
+          "state": "All"
+        },
+        {
+          "id": "seed-ca-7-thanksgiving-day",
+          "name": "Thanksgiving Day",
+          "date": "2026-10-12",
+          "state": "All"
+        },
+        {
+          "id": "seed-ca-8-remembrance-day",
+          "name": "Remembrance Day",
+          "date": "2026-11-11",
+          "state": "All"
+        },
+        {
+          "id": "seed-ca-9-christmas-day",
+          "name": "Christmas Day",
+          "date": "2026-12-25",
+          "state": "All"
+        },
+        {
+          "id": "seed-ca-10-boxing-day",
+          "name": "Boxing Day",
+          "date": "2026-12-26",
+          "state": "All"
+        }
+      ]
+    }
+  ]
+}

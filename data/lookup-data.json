@@ -1,0 +1,516 @@
+{
+  "fields": [
+    {
+      "id": "bookkeepingDeadlines",
+      "name": "Bookkeeping Deadlines",
+      "items": [
+        {
+          "id": "seed-1-nil",
+          "label": "NIL"
+        }
+      ]
+    },
+    {
+      "id": "bookkeeping",
+      "name": "Bookkeeping services",
+      "items": [
+        {
+          "id": "seed-5-ap-and-ar-management",
+          "label": "AP and AR Management"
+        },
+        {
+          "id": "seed-1-folder-update",
+          "label": "Folder Update"
+        },
+        {
+          "id": "seed-4-inbox",
+          "label": "Inbox"
+        },
+        {
+          "id": "seed-7-monthly-bookkeeping",
+          "label": "Monthly Bookkeeping"
+        },
+        {
+          "id": "seed-2-pos",
+          "label": "Pos"
+        },
+        {
+          "id": "seed-8-quarterly-bookeeping",
+          "label": "Quarterly Bookeeping"
+        },
+        {
+          "id": "seed-9-quarterly-budger-reports-tax-advisory",
+          "label": "Quarterly Budger Reports & Tax Advisory"
+        },
+        {
+          "id": "seed-3-quarterly-commission",
+          "label": "Quarterly Commission"
+        },
+        {
+          "id": "seed-6-weekly-bookkeeping",
+          "label": "Weekly Bookkeeping"
+        }
+      ]
+    },
+    {
+      "id": "businessActivity",
+      "name": "Business Activity",
+      "items": [
+        {
+          "id": "seed-2-material-handling",
+          "label": "Material Handling"
+        },
+        {
+          "id": "seed-1-restaurant-caterer",
+          "label": "Restaurant/Caterer"
+        }
+      ]
+    },
+    {
+      "id": "deliverables",
+      "name": "Deliverables",
+      "items": [
+        {
+          "id": "seed-4-a-p-report-weekly",
+          "label": "A/P Report Weekly"
+        },
+        {
+          "id": "seed-3-a-r-report-weekly",
+          "label": "A/R Report Weekly"
+        },
+        {
+          "id": "seed-8-monthly-p-l",
+          "label": "Monthly P&L"
+        },
+        {
+          "id": "seed-2-p-l-and-bs-quarterly",
+          "label": "P&L and BS - Quarterly"
+        },
+        {
+          "id": "item-1791285186481-i6hkqr",
+          "label": "P&L and BS – Monthly"
+        },
+        {
+          "id": "seed-1-p-l-and-bs-monthly",
+          "label": "P&L and BS â€“ Monthly"
+        },
+        {
+          "id": "seed-6-payroll-report-biweekly",
+          "label": "Payroll Report Biweekly"
+        },
+        {
+          "id": "seed-7-quarterly-p-l",
+          "label": "Quarterly P&L"
+        },
+        {
+          "id": "seed-5-uncategorized-report-weekly",
+          "label": "Uncategorized Report Weekly"
+        }
+      ]
+    },
+    {
+      "id": "deliverablesTimelines",
+      "name": "Deliverables Timelines",
+      "items": [
+        {
+          "id": "seed-1-nil",
+          "label": "NIL"
+        }
+      ]
+    },
+    {
+      "id": "entityType",
+      "name": "Entity Type",
+      "items": [
+        {
+          "id": "seed-1-business-corporation",
+          "label": "Business Corporation"
+        },
+        {
+          "id": "seed-2-c-corpoation",
+          "label": "C Corpoation"
+        },
+        {
+          "id": "seed-3-llc",
+          "label": "LLC"
+        },
+        {
+          "id": "seed-4-partnership",
+          "label": "Partnership"
+        },
+        {
+          "id": "seed-5-s-corp",
+          "label": "S Corp"
+        }
+      ]
+    },
+    {
+      "id": "industry",
+      "name": "Industry",
+      "items": [
+        {
+          "id": "seed-10-construction",
+          "label": "Construction"
+        },
+        {
+          "id": "import-dismantling-services",
+          "label": "Dismantling services"
+        },
+        {
+          "id": "seed-13-e-commerce",
+          "label": "E commerce"
+        },
+        {
+          "id": "seed-8-educational",
+          "label": "Educational"
+        },
+        {
+          "id": "seed-3-engineering",
+          "label": "Engineering"
+        },
+        {
+          "id": "import-engineering-service",
+          "label": "Engineering service"
+        },
+        {
+          "id": "import-engineering-services",
+          "label": "Engineering services"
+        },
+        {
+          "id": "seed-12-environmental-services",
+          "label": "Environmental services"
+        },
+        {
+          "id": "import-food",
+          "label": "Food"
+        },
+        {
+          "id": "item-1791443912214-fgcp9e",
+          "label": "Home Moving"
+        },
+        {
+          "id": "seed-9-hotel",
+          "label": "Hotel"
+        },
+        {
+          "id": "import-hotel-management",
+          "label": "Hotel management"
+        },
+        {
+          "id": "import-industrial-instrument-trading",
+          "label": "Industrial Instrument Trading"
+        },
+        {
+          "id": "seed-2-installation",
+          "label": "Installation"
+        },
+        {
+          "id": "import-jackets-export",
+          "label": "Jackets Export"
+        },
+        {
+          "id": "seed-11-lamination",
+          "label": "Lamination"
+        },
+        {
+          "id": "import-lamination-services",
+          "label": "Lamination services"
+        },
+        {
+          "id": "import-material-handling",
+          "label": "Material Handling"
+        },
+        {
+          "id": "seed-6-moving",
+          "label": "Moving"
+        },
+        {
+          "id": "item-1791444099652-0jyo0r",
+          "label": "NGO"
+        },
+        {
+          "id": "item-1791443482094-pg5yga",
+          "label": "Online Retail"
+        },
+        {
+          "id": "seed-4-online-store",
+          "label": "Online store"
+        },
+        {
+          "id": "seed-14-parlour",
+          "label": "Parlour"
+        },
+        {
+          "id": "seed-1-resturant",
+          "label": "Resturant"
+        },
+        {
+          "id": "seed-7-service",
+          "label": "Service"
+        },
+        {
+          "id": "import-service-provider",
+          "label": "Service provider"
+        },
+        {
+          "id": "seed-5-trading",
+          "label": "Trading"
+        }
+      ]
+    },
+    {
+      "id": "meetingFrequency",
+      "name": "Meeting Frequency",
+      "items": [
+        {
+          "id": "seed-2-bi-weekly",
+          "label": "Bi-Weekly"
+        },
+        {
+          "id": "seed-3-monthly",
+          "label": "Monthly"
+        },
+        {
+          "id": "seed-4-quarterly",
+          "label": "Quarterly"
+        },
+        {
+          "id": "seed-1-weekly",
+          "label": "Weekly"
+        },
+        {
+          "id": "seed-5-yearly",
+          "label": "Yearly"
+        }
+      ]
+    },
+    {
+      "id": "meetingRequirements",
+      "name": "Meeting Requirements",
+      "items": [
+        {
+          "id": "seed-1-nil",
+          "label": "NIL"
+        },
+        {
+          "id": "seed-2-on-demand",
+          "label": "On demand"
+        },
+        {
+          "id": "seed-3-yes",
+          "label": "Yes"
+        }
+      ]
+    },
+    {
+      "id": "payroll",
+      "name": "Payroll",
+      "items": [
+        {
+          "id": "seed-2-bi-weekly",
+          "label": "Bi-Weekly"
+        },
+        {
+          "id": "seed-3-gusto",
+          "label": "Gusto"
+        },
+        {
+          "id": "seed-1-nil",
+          "label": "NIL"
+        }
+      ]
+    },
+    {
+      "id": "payrollAndSalesTaxes",
+      "name": "Payroll and Sales Taxes",
+      "items": [
+        {
+          "id": "seed-2-monthly-sales-tax",
+          "label": "Monthly Sales Tax"
+        },
+        {
+          "id": "seed-1-nil",
+          "label": "NIL"
+        },
+        {
+          "id": "seed-5-payroll-taxes",
+          "label": "Payroll Taxes"
+        },
+        {
+          "id": "seed-6-quarterly-gst-and-hst",
+          "label": "Quarterly GST and HST"
+        },
+        {
+          "id": "seed-4-quarterly-sales-tax",
+          "label": "Quarterly Sales Tax"
+        },
+        {
+          "id": "seed-8-wsib",
+          "label": "WSIB"
+        },
+        {
+          "id": "seed-7-yearly-gst-and-hst",
+          "label": "Yearly GST and HST"
+        },
+        {
+          "id": "seed-3-yearly-sales-tax",
+          "label": "Yearly Sales Tax"
+        }
+      ]
+    },
+    {
+      "id": "payrollDeadlines",
+      "name": "Payroll Deadlines",
+      "items": [
+        {
+          "id": "seed-1-nil",
+          "label": "NIL"
+        }
+      ]
+    },
+    {
+      "id": "payrollTaxesDeadlines",
+      "name": "Payroll Taxes Deadlines",
+      "items": [
+        {
+          "id": "seed-1-nil",
+          "label": "NIL"
+        }
+      ]
+    },
+    {
+      "id": "primaryAssignee",
+      "name": "Primary Assignee",
+      "items": [
+        {
+          "id": "seed-2-abdul",
+          "label": "Abdul"
+        },
+        {
+          "id": "seed-1-asad",
+          "label": "Asad"
+        },
+        {
+          "id": "item-1791530802558-7ppxsx",
+          "label": "Sana"
+        }
+      ]
+    },
+    {
+      "id": "secondaryAssignee",
+      "name": "Secondary Assignee",
+      "items": [
+        {
+          "id": "seed-2-ahsan",
+          "label": "Ahsan"
+        },
+        {
+          "id": "seed-3-ali",
+          "label": "Ali"
+        },
+        {
+          "id": "seed-1-ishaq",
+          "label": "Ishaq"
+        },
+        {
+          "id": "seed-4-khizer",
+          "label": "Khizer"
+        }
+      ]
+    },
+    {
+      "id": "status",
+      "name": "Status",
+      "items": [
+        {
+          "id": "seed-2-onboading",
+          "label": "Onboading"
+        },
+        {
+          "id": "item-1791285186481-eag3v3",
+          "label": "Onboarding stage"
+        },
+        {
+          "id": "seed-1-ongoing",
+          "label": "Ongoing"
+        }
+      ]
+    },
+    {
+      "id": "timeZone",
+      "name": "Time Zone",
+      "items": [
+        {
+          "id": "seed-1-est",
+          "label": "EST"
+        },
+        {
+          "id": "item-1791456988172-8sny1k",
+          "label": "MST"
+        },
+        {
+          "id": "seed-2-pst",
+          "label": "PST"
+        },
+        {
+          "id": "seed-3-vietnam-2-hours-ahead",
+          "label": "Vietnam 2 hours ahead"
+        }
+      ]
+    },
+    {
+      "id": "yearlyCompliance",
+      "name": "Yearly Compliance",
+      "items": [
+        {
+          "id": "seed-yc-2",
+          "label": "1040"
+        },
+        {
+          "id": "seed-yc-5",
+          "label": "1065"
+        },
+        {
+          "id": "seed-yc-3",
+          "label": "1099"
+        },
+        {
+          "id": "seed-yc-1",
+          "label": "1120"
+        },
+        {
+          "id": "seed-yc-4",
+          "label": "1120S"
+        },
+        {
+          "id": "seed-yc-12",
+          "label": "990 Form"
+        },
+        {
+          "id": "seed-yc-11",
+          "label": "NIL"
+        },
+        {
+          "id": "seed-yc-6",
+          "label": "T1"
+        },
+        {
+          "id": "seed-yc-7",
+          "label": "T2 (Calendar Year, 31 Dec)"
+        },
+        {
+          "id": "seed-yc-8",
+          "label": "T2 (Fiscal Year, 30 June)"
+        },
+        {
+          "id": "seed-yc-9",
+          "label": "T4"
+        },
+        {
+          "id": "seed-yc-10",
+          "label": "T5"
+        }
+      ]
+    }
+  ]
+}

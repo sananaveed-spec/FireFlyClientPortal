@@ -1,0 +1,94 @@
+[
+  {
+    "id": "1791531789814-vfjh5v",
+    "bookkeepingCategory": "ACC1",
+    "clientName": "2 Jacked Guyz",
+    "industry": "Home Moving",
+    "status": "Onboading",
+    "supervisor": "Abdul",
+    "bookkeeperAccountant": [
+      "Ahsan",
+      "Ali"
+    ],
+    "bookkeeping": [
+      "Monthly Bookkeeping"
+    ],
+    "payroll": "",
+    "payrollAndSalesTaxes": [],
+    "deliverables": [],
+    "yearlyCompliance": [],
+    "meetingRequirements": "",
+    "meetingFrequency": "",
+    "bookkeepingDeadline": "",
+    "payrollDeadline": "",
+    "payrollTaxesDeadlines": "",
+    "deliverablesTimelines": "",
+    "yearlyComplianceTimelines": "",
+    "createdAt": "2026-10-09T07:43:09.815Z"
+  },
+  {
+    "id": "1791349853419-ajpy9g",
+    "bookkeepingCategory": "ACC2",
+    "clientName": "Lash & Co",
+    "industry": "Parlour",
+    "status": "Onboading",
+    "supervisor": "Sana",
+    "bookkeeperAccountant": [
+      "Ali",
+      "Khizer"
+    ],
+    "bookkeeping": [
+      "Monthly Bookkeeping"
+    ],
+    "payroll": "Bi-Weekly",
+    "payrollAndSalesTaxes": [
+      "NIL"
+    ],
+    "deliverables": [
+      "P&L and BS - Quarterly",
+      "A/R Report Weekly"
+    ],
+    "yearlyCompliance": [
+      "1120",
+      "1120S"
+    ],
+    "meetingRequirements": "Yes",
+    "meetingFrequency": "Bi-Weekly",
+    "bookkeepingDeadline": "NIL",
+    "payrollDeadline": "NIL",
+    "payrollTaxesDeadlines": "NIL",
+    "deliverablesTimelines": "NIL",
+    "yearlyComplianceTimelines": "1120 - 30th April\n1120S - 15th March",
+    "createdAt": "2026-10-07T05:10:53.419Z"
+  },
+  {
+    "id": "1791349452403-02arxm",
+    "bookkeepingCategory": "ACC1",
+    "clientName": "The Pantry",
+    "industry": "Food",
+    "status": "Onboading",
+    "supervisor": "Sana",
+    "bookkeeperAccountant": [
+      "Ishaq",
+      "Ahsan"
+    ],
+    "bookkeeping": [
+      "Monthly Bookkeeping"
+    ],
+    "payroll": "",
+    "payrollAndSalesTaxes": [],
+    "deliverables": [],
+    "yearlyCompliance": [
+      "1120",
+      "1120S"
+    ],
+    "meetingRequirements": "",
+    "meetingFrequency": "",
+    "bookkeepingDeadline": "",
+    "payrollDeadline": "",
+    "payrollTaxesDeadlines": "",
+    "deliverablesTimelines": "",
+    "yearlyComplianceTimelines": "1120 - 30th April\n1120S - 15th March",
+    "createdAt": "2026-10-07T05:04:12.403Z"
+  }
+]

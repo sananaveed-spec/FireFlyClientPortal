@@ -1,0 +1,169 @@
+{
+  "templates": [
+    {
+      "id": "template-1",
+      "label": "Template 1",
+      "title": "Bank and Credit Card Statements Request",
+      "whenSent": "BD1 of each month (automatic). Lists only accounts not covered by a working bank feed.",
+      "subject": "[Client Name]: Bank and credit card statements for [Period]",
+      "body": "Hi [Contact First Name],\n\nWe are starting the bookkeeping for [Period] and need the statements for the accounts below:\n• [List of bank and credit card accounts, with last 4 digits]\n\nPlease upload them to the portal by [Due Date]: [Portal Link]\n\nPDF statements downloaded from your online banking are perfect but a CSV is always welcomed. Please send the full statement, including every page, even if some pages have no transactions.\n\nIf an account was closed, or you opened a new account during the month, just let us know in the portal so we can update our records.",
+      "bookkeepingServices": [
+        "Monthly Bookkeeping"
+      ]
+    },
+    {
+      "id": "template-2",
+      "label": "Template 2",
+      "title": "Other Statements Request (Loans, Other Institutions, Leases)",
+      "whenSent": "BD1 of each month, or quarterly, depending on how often the lender or lessor issues statements.",
+      "subject": "[Client Name]: Loan, lease and other account statements for [Period]",
+      "body": "Hi [Contact First Name],\n\nAlong with your bank statements, we also need the statements below for [Period] so we can reconcile the balances on your balance sheet:\n• [List of loan, line of credit, lease, investment or other accounts]\n\nThis usually includes:\n• Loan and line of credit statements showing principal, interest and the closing balance\n• Equipment or vehicle lease statements and any rental agreements that changed this month\n• Statements from any other financial institution, investment or brokerage account held by the business\n\nPlease upload them to the portal by [Due Date]: [Portal Link]\n\nIf you took out a new loan, signed a new lease, or paid off an existing one during the month, please upload the agreement or payoff letter as well.",
+      "bookkeepingServices": [
+        "Monthly Bookkeeping"
+      ]
+    },
+    {
+      "id": "template-3",
+      "label": "Template 3",
+      "title": "Uncategorized Transactions: Questions for the Client",
+      "whenSent": "By BD8, once reconciliations are complete. Transactions are pulled from QBO into the portal question list.",
+      "subject": "[Client Name]: A few transactions we need your help with for [Period]",
+      "body": "Hi [Contact First Name],\n\nWe are working through your [Period] books and have [Number] transactions we could not identify from the bank and card details alone. They total [Total Amount].\n\nYou can see the full list in the portal here: [Portal Link]\n\nFor each one, please tell us:\n• What it was for (for example, software subscription, materials for a job, owner personal expense)\n• Whether it relates to a specific customer, job or project\n• A receipt or invoice if you have one (required for anything over [Receipt Threshold])\n\nA short answer is enough. \"Lunch with a client\" or \"Personal, please treat as owner draw\" works fine.\n\nPlease add attachments where necessary\n\nPlease reply by [Due Date] so we can close your books on schedule. Anything still open by then will be recorded as uncategorized and listed in your financial package.",
+      "bookkeepingServices": [
+        "Monthly Bookkeeping"
+      ]
+    },
+    {
+      "id": "template-4",
+      "label": "Template 4",
+      "title": "Missing Receipts and Bills",
+      "whenSent": "Alongside the question list (BD8), for transactions above the receipt threshold with no supporting document.",
+      "subject": "[Client Name]: Receipts needed for [Period]",
+      "body": "Hi [Contact First Name],\n\nWe need receipts or invoices for the following transactions from [Period], as they are over [Receipt Threshold]:\n• [List: date, payee, amount]\n\nYou can upload them directly against each item in the portal: [Portal Link]. A photo taken on your phone is fine as long as the date, vendor and amount are readable.\n\nKeeping receipts on file for larger purchases makes things much easier if you are ever asked to support an expense.\n\nPlease upload them by [Due Date].",
+      "bookkeepingServices": [
+        "Monthly Bookkeeping"
+      ]
+    },
+    {
+      "id": "template-5",
+      "label": "Template 5",
+      "title": "Month-End Coming (Pre-Close Reminder)",
+      "whenSent": "Last 3 business days of the month (automatic).",
+      "subject": "[Client Name]: Month-end is coming up, here is what we will need",
+      "body": "Hi [Contact First Name],\n\nA quick heads-up that [Month] is wrapping up. To keep your books on track, here is what we will be looking for in the first few days of next month:\n• [List of statements and reports for this client]\n• Receipts for purchases over [Receipt Threshold]\n• Any notes on unusual items this month: new loans, large purchases, money put into or taken out of the business\n\nWe will send the formal request on [BD1 Date], and the due date will be [Due Date]. If you already have anything ready, you are welcome to upload it now: [Portal Link]",
+      "bookkeepingServices": [
+        "Monthly Bookkeeping"
+      ]
+    },
+    {
+      "id": "template-6",
+      "label": "Template 6",
+      "title": "Reminder 1: Missing Documents",
+      "whenSent": "BD7, if any items from the document request are still outstanding (automatic).",
+      "subject": "Reminder: [Client Name] documents for [Period]",
+      "body": "Hi [Contact First Name],\n\nJust a friendly reminder that we are still waiting on the following for [Period]:\n• [List of outstanding items only]\n\nThese were due on [Due Date]. Once we have them we can finish reconciling your accounts and get your financials to you.\n\nYou can upload them here: [Portal Link]\n\nIf anything is difficult to get hold of, let us know and we will help.",
+      "bookkeepingServices": [
+        "Monthly Bookkeeping"
+      ]
+    },
+    {
+      "id": "template-7",
+      "label": "Template 7",
+      "title": "Reminder 2: Final Reminder for Missing Documents",
+      "whenSent": "BD10, if items are still outstanding. Copied to the business owner / decision-maker (automatic).",
+      "subject": "Second reminder: [Client Name] documents needed to close [Period]",
+      "body": "Hi [Contact First Name],\n\nWe are following up again as the items below for [Period] are still outstanding:\n• [List of outstanding items only]\n\nWithout these, we are unable to complete your reconciliations, and your financial statements will be delayed. Our delivery date moves back by the number of days the documents are late, so the current expected date for your financials is [Revised Delivery Date].\n\nPlease upload what you can here: [Portal Link]. If it is easier, reply to this email with a good time and we will give you a quick call to sort it out together.",
+      "bookkeepingServices": [
+        "Monthly Bookkeeping"
+      ]
+    },
+    {
+      "id": "template-8",
+      "label": "Template 8",
+      "title": "Reminder: Open Questions",
+      "whenSent": "3 business days after the question list was sent, if any questions are still unanswered (automatic).",
+      "subject": "Reminder: [Number] open questions on your [Period] books",
+      "body": "Hi [Contact First Name],\n\nWe still have [Number] open questions on your [Period] books, totaling [Total Amount]. You can see and answer them here: [Portal Link]\n\nMost of them should only take a few seconds each. If you are unsure about any item, just say so and we will look into it further.\n\nWe plan to close your books on [Close Date]. Anything still open by then will be recorded as uncategorized and listed in your financial package.",
+      "bookkeepingServices": [
+        "Monthly Bookkeeping"
+      ]
+    },
+    {
+      "id": "template-9",
+      "label": "Template 9",
+      "title": "Timeline Update: Late Documents",
+      "whenSent": "When documents arrive after the due date and the close and delivery dates shift (automatic).",
+      "subject": "[Client Name]: Updated delivery date for your [Period] financials",
+      "body": "Hi [Contact First Name],\n\nThank you for sending your documents for [Period]. Since they arrived [Number] business days after the due date, your financials will now be ready by [Revised Delivery Date] instead of [Original Delivery Date].\n\nWe will keep you posted if anything else comes up. Going forward, having everything in by [Standard Due Day] each month lets us deliver your numbers on the usual schedule.",
+      "bookkeepingServices": [
+        "Monthly Bookkeeping"
+      ]
+    },
+    {
+      "id": "template-10",
+      "label": "Template 10",
+      "title": "Bank Feed Disconnected",
+      "whenSent": "When the portal detects that a QBO bank feed has stopped updating for more than a few days.",
+      "subject": "Action needed: [Bank Name] connection to QuickBooks has stopped",
+      "body": "Hi [Contact First Name],\n\nThe connection between your [Bank Name] account ending in [Last 4 Digits] and QuickBooks Online stopped updating on [Date]. This usually happens when a password is changed or the bank asks for the connection to be re-approved.\n\nTo fix it, please log in to QuickBooks, go to Transactions, then Bank transactions, and follow the prompt to reconnect the account. It normally takes a couple of minutes.\n\nIf you would rather not reconnect, please upload the [Period] statement to the portal instead: [Portal Link]\n\nLet us know if you run into any trouble and we can walk you through it.",
+      "bookkeepingServices": [
+        "Monthly Bookkeeping"
+      ]
+    },
+    {
+      "id": "template-11",
+      "label": "Template 11",
+      "title": "Your Financial Statements Are Ready",
+      "whenSent": "When the monthly package is released to the client portal after review.",
+      "subject": "[Client Name]: Your financial statements for [Period] are ready",
+      "body": "Hi [Contact First Name],\n\nYour financial statements for [Period] are ready and available in the portal: [Portal Link]\n\nThe package includes:\n• Profit and Loss (month and year to date)\n• Balance Sheet\n• Accounts receivable and accounts payable aging\n\nA few highlights for the month: [if applicable]\n• [Short commentary point 1]\n• [Short commentary point 2]\n• [Short commentary point 3]\n\n[If applicable] There are [Number] open items still waiting on your input, listed at the end of the package.\n\nIf you have any questions, reply to this email or book a time with us here: [Booking Link]",
+      "bookkeepingServices": [
+        "Monthly Bookkeeping"
+      ]
+    },
+    {
+      "id": "template-12",
+      "label": "Template 12",
+      "title": "Review Meeting: Invitation and Agenda",
+      "whenSent": "2 business days before the scheduled review meeting (automatic).",
+      "subject": "[Client Name]: Agenda for our [Period] review on [Meeting Date]",
+      "body": "Hi [Contact First Name],\n\nLooking forward to our call on [Meeting Date] at [Meeting Time, client time zone]. Here is the link to join: [Meeting Link]\n\nAgenda:\n• Quick walk-through of the [Period] results\n• Cash position and anything coming up\n• Open questions: [Number] items, listed in the portal\n• Anything you would like to discuss\n\nYour financial statements are in the portal here: [Portal Link]. If you have a chance to look before the call, we can spend more of the time on what matters to you.\n\nIf the time no longer works, you can reschedule here: [Booking Link]",
+      "bookkeepingServices": [
+        "Monthly Bookkeeping"
+      ]
+    },
+    {
+      "id": "template-13",
+      "label": "Template 13",
+      "title": "Review Meeting: Recap and Action Items",
+      "whenSent": "Same day as the review meeting.",
+      "subject": "[Client Name]: Recap of our [Period] review",
+      "body": "Hi [Contact First Name],\n\nThanks for your time today. Here is a quick summary of what we covered.\n\nKey points / Minutes of the Meeting:\n• [Point 1]\n• [Point 2]\n\nAction items:\n• [Action, owner, due date]\n• [Action, owner, due date]\n\nIf we missed anything, just reply to this email. Our next review is planned for [Next Meeting Date].",
+      "bookkeepingServices": [
+        "Monthly Bookkeeping"
+      ]
+    },
+    {
+      "id": "template-14",
+      "label": "Template 14",
+      "title": "New Client Welcome and Onboarding",
+      "whenSent": "When a new bookkeeping client is set up in the portal.",
+      "subject": "Welcome to [Firm Name]: getting your bookkeeping set up",
+      "body": "Hi [Contact First Name],\n\nWelcome aboard. We are glad to be working with you. Your portal account is ready, and you can log in here: [Portal Link]\n\nTo get started, we need the following:\n• Accountant (user) access to your QuickBooks Online company\n• A list of all bank, credit card, loan and lease accounts used by the business\n• Your most recent bank and credit card statements for each account\n• Payroll provider details and access to payroll reports, if applicable\n• Your prior year financial statements or last tax return, if available\n• Any loan or lease agreements currently in place\n\nYour main contact here will be [Staff Name], and [Manager Name] will review your work each month.\n\nHow the month will work:\n• Around the 1st, we will request your statements and documents\n• Documents are due by [Standard Due Day]\n• Around the [Question Day], we will send any questions about transactions\n• Your financial statements will be ready by [Standard Delivery Day]\n\nPlease upload the items above by [Due Date]. If you have any questions, just reply here.",
+      "bookkeepingServices": [
+        "Monthly Bookkeeping"
+      ]
+    },
+    {
+      "id": "template-15",
+      "label": "Template 15",
+      "title": "Year-End Bookkeeping Documents",
+      "whenSent": "In the last month of the client's fiscal year, with a reminder after year-end.",
+      "subject": "[Client Name]: Year-end bookkeeping items for [Fiscal Year]",
+      "body": "Hi [Contact First Name],\n\nAs [Fiscal Year] comes to a close, we will be finalizing your books for the full year. In addition to your regular monthly documents, please send the following:\n• December (or year-end month) statements for all bank, credit card, loan and lease accounts\n• Year-end loan statements showing the interest paid for the year\n• Details of any equipment, vehicles or other assets purchased or sold during the year\n• A list of customers who owed you money at year-end, and any amounts you do not expect to collect\n• A list of unpaid bills at year-end\n• Inventory count at year-end, if applicable\n• Details of any money put into or taken out of the business by the owners\n\nPlease upload these to the portal by [Due Date]: [Portal Link]\n\nGetting these in early means your final year-end numbers will be ready by [Year-End Delivery Date].",
+      "bookkeepingServices": [
+        "Monthly Bookkeeping"
+      ]
+    }
+  ]
+}
