@@ -23,6 +23,11 @@ export type GraphMailPayload = {
   /** Terms to wrap in <strong> inside the body. */
   highlights?: string[];
   signature: EmailSignature;
+  /**
+   * When set (must be in the future), Outlook holds the message until this
+   * time via PidTagDeferredSendTime (SystemTime 0x3FEF).
+   */
+  sendAt?: Date;
 };
 
 function escapeHtml(value: string): string {
@@ -174,6 +179,28 @@ async function acquireMailToken(
   }
 }
 
+/** Format a Date for `<input type="datetime-local">` (local wall clock). */
+export function toDateTimeLocalValue(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hour = String(date.getHours()).padStart(2, "0");
+  const minute = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hour}:${minute}`;
+}
+
+export function parseDateTimeLocalValue(value: string): Date | null {
+  const trimmed = value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(trimmed)) {
+    return null;
+  }
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  return parsed;
+}
+
 export async function sendGraphMail(
   instance: IPublicClientApplication,
   account: AccountInfo,
@@ -187,7 +214,37 @@ export async function sendGraphMail(
     throw new Error("Subject is required.");
   }
 
+  const sendAt = payload.sendAt;
+  if (sendAt) {
+    const soonest = Date.now() + 60_000;
+    if (sendAt.getTime() < soonest) {
+      throw new Error(
+        "Choose a send time at least one minute in the future, or use Send Now.",
+      );
+    }
+  }
+
   const token = await acquireMailToken(instance, account);
+  const message: Record<string, unknown> = {
+    subject: payload.subject.trim(),
+    body: {
+      contentType: "HTML",
+      content: buildGraphMailHtml(payload),
+    },
+    toRecipients: toRecipientList(to),
+    ccRecipients: toRecipientList(parseEmailList(payload.cc ?? "")),
+    bccRecipients: toRecipientList(parseEmailList(payload.bcc ?? "")),
+  };
+
+  if (sendAt) {
+    message.singleValueExtendedProperties = [
+      {
+        id: "SystemTime 0x3FEF",
+        value: sendAt.toISOString(),
+      },
+    ];
+  }
+
   const response = await fetch("https://graph.microsoft.com/v1.0/me/sendMail", {
     method: "POST",
     headers: {
@@ -195,16 +252,7 @@ export async function sendGraphMail(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      message: {
-        subject: payload.subject.trim(),
-        body: {
-          contentType: "HTML",
-          content: buildGraphMailHtml(payload),
-        },
-        toRecipients: toRecipientList(to),
-        ccRecipients: toRecipientList(parseEmailList(payload.cc ?? "")),
-        bccRecipients: toRecipientList(parseEmailList(payload.bcc ?? "")),
-      },
+      message,
       saveToSentItems: true,
     }),
   });

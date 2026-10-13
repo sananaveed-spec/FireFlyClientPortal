@@ -63,7 +63,27 @@ import {
 import { portalFetch } from "@/lib/portal-api";
 import type { PortalUser } from "@/lib/portal-users";
 import type { ResourceClientEntry } from "@/lib/resource-clients";
-import { sendGraphMail } from "@/lib/send-graph-mail";
+import {
+  parseDateTimeLocalValue,
+  sendGraphMail,
+  toDateTimeLocalValue,
+} from "@/lib/send-graph-mail";
+
+/** Default Outlook send time: schedule business day at 8:00 local, or tomorrow 8:00 if past. */
+function defaultScheduleSendAt(
+  scheduleDate: Date | null,
+  now: Date = new Date(),
+): string {
+  const candidate = new Date(scheduleDate ?? now);
+  candidate.setHours(8, 0, 0, 0);
+  if (candidate.getTime() <= now.getTime() + 60_000) {
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(8, 0, 0, 0);
+    return toDateTimeLocalValue(tomorrow);
+  }
+  return toDateTimeLocalValue(candidate);
+}
 
 /** Bold auto-filled values (client name, period, etc.) inside subject/body. */
 function renderAutofilledText(
@@ -432,6 +452,7 @@ export function ClientManagementPanel() {
   const [emailCc, setEmailCc] = useState("");
   const [emailBcc, setEmailBcc] = useState("");
   const [emailDeadline, setEmailDeadline] = useState("");
+  const [emailSendAt, setEmailSendAt] = useState("");
   const [emailSubject, setEmailSubject] = useState("");
   const [emailBody, setEmailBody] = useState("");
   const [emailAutofillHighlights, setEmailAutofillHighlights] = useState<
@@ -439,6 +460,7 @@ export function ClientManagementPanel() {
   >([]);
   const [clientInfoOpen, setClientInfoOpen] = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false);
+  const [schedulingEmail, setSchedulingEmail] = useState(false);
   const [emailSendMessage, setEmailSendMessage] = useState<string | null>(null);
   const [emailSendError, setEmailSendError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
@@ -771,6 +793,7 @@ export function ClientManagementPanel() {
     setEmailCc("");
     setEmailBcc("");
     setEmailDeadline("");
+    setEmailSendAt("");
     setEmailSendError(null);
     setEmailSendMessage(null);
   }, [selectedClientId, selectedScheduleId, requestTypeId]);
@@ -778,6 +801,32 @@ export function ClientManagementPanel() {
   const selectedSchedule =
     CLIENT_SCHEDULE_ITEMS.find((item) => item.id === selectedScheduleId) ??
     CLIENT_SCHEDULE_ITEMS[0];
+
+  const selectedScheduleBusinessDate = useMemo(() => {
+    if (!selected) {
+      return null;
+    }
+    return getScheduleBusinessDate(
+      selectedScheduleId,
+      holidays,
+      selected.profile?.country,
+      selected.profile?.state ?? "",
+    );
+  }, [
+    selected,
+    selectedScheduleId,
+    holidays,
+  ]);
+
+  useEffect(() => {
+    if (
+      selectedScheduleId !== "bd1" &&
+      selectedScheduleId !== "bd7"
+    ) {
+      return;
+    }
+    setEmailSendAt(defaultScheduleSendAt(selectedScheduleBusinessDate));
+  }, [selectedClientId, selectedScheduleId, selectedScheduleBusinessDate]);
 
   const scheduleDateById = useMemo(() => {
     const map = new Map<string, string>();
@@ -1006,6 +1055,50 @@ export function ClientManagementPanel() {
     await persistList(reopenActionItem(owner, itemId));
   }
 
+  async function resolveMailAccount() {
+    let account =
+      instance.getActiveAccount() ??
+      instance.getAllAccounts()[0] ??
+      msalAccount;
+
+    if (!account) {
+      const hint = email?.trim() || emailFrom.trim() || "";
+      setEmailSendMessage("Connecting your Microsoft account to send…");
+      const result = await instance.loginPopup({
+        ...mailSendRequest,
+        loginHint: hint || undefined,
+        prompt: "select_account",
+      });
+      account = result.account;
+      if (account) {
+        instance.setActiveAccount(account);
+      }
+    }
+
+    if (!account) {
+      throw new Error(
+        "Microsoft sign-in was cancelled. Sign in with the Microsoft account that owns this mailbox, then try again.",
+      );
+    }
+
+    return account;
+  }
+
+  function formatMailSendError(sendError: unknown): string {
+    const raw =
+      sendError instanceof Error ? sendError.message : "Failed to send email.";
+    const lower = raw.toLowerCase();
+    if (
+      lower.includes("aadsts50020") ||
+      lower.includes("does not exist in tenant")
+    ) {
+      return (
+        "sana@epsfresno.com is not in the Fire Fly Azure tenant. In Azure Portal, set this app to multi-tenant (any organizational directory), restart the app, then try again and sign in with sana@epsfresno.com."
+      );
+    }
+    return raw;
+  }
+
   async function handleSendEmailNow() {
     if (!emailTo.trim() || !emailSubject.trim()) {
       setEmailSendError("To and Subject are required.");
@@ -1017,32 +1110,7 @@ export function ClientManagementPanel() {
     setEmailSendError(null);
     setEmailSendMessage(null);
     try {
-      let account =
-        instance.getActiveAccount() ??
-        instance.getAllAccounts()[0] ??
-        msalAccount;
-
-      // No Graph account yet — prompt Microsoft sign-in for the send mailbox.
-      if (!account) {
-        const hint = email?.trim() || emailFrom.trim() || "";
-        setEmailSendMessage("Connecting your Microsoft account to send…");
-        const result = await instance.loginPopup({
-          ...mailSendRequest,
-          loginHint: hint || undefined,
-          prompt: "select_account",
-        });
-        account = result.account;
-        if (account) {
-          instance.setActiveAccount(account);
-        }
-      }
-
-      if (!account) {
-        throw new Error(
-          "Microsoft sign-in was cancelled. Sign in with the Microsoft account that owns this mailbox, then try Send Now again.",
-        );
-      }
-
+      const account = await resolveMailAccount();
       setEmailSendMessage(null);
       await sendGraphMail(instance, account, {
         to: emailTo,
@@ -1055,24 +1123,51 @@ export function ClientManagementPanel() {
       });
       setEmailSendMessage("Email sent.");
     } catch (sendError) {
-      const raw =
-        sendError instanceof Error
-          ? sendError.message
-          : "Failed to send email.";
-      const lower = raw.toLowerCase();
-      if (
-        lower.includes("aadsts50020") ||
-        lower.includes("does not exist in tenant")
-      ) {
-        setEmailSendError(
-          "sana@epsfresno.com is not in the Fire Fly Azure tenant. In Azure Portal, set this app to multi-tenant (any organizational directory), restart the app, then try Send Now again and sign in with sana@epsfresno.com.",
-        );
-      } else {
-        setEmailSendError(raw);
-      }
+      setEmailSendError(formatMailSendError(sendError));
       setEmailSendMessage(null);
     } finally {
       setSendingEmail(false);
+    }
+  }
+
+  async function handleScheduleEmail() {
+    if (!emailTo.trim() || !emailSubject.trim()) {
+      setEmailSendError("To and Subject are required.");
+      setEmailSendMessage(null);
+      return;
+    }
+
+    const sendAt = parseDateTimeLocalValue(emailSendAt);
+    if (!sendAt) {
+      setEmailSendError("Choose a valid Send at date and time.");
+      setEmailSendMessage(null);
+      return;
+    }
+
+    setSchedulingEmail(true);
+    setEmailSendError(null);
+    setEmailSendMessage(null);
+    try {
+      const account = await resolveMailAccount();
+      setEmailSendMessage(null);
+      await sendGraphMail(instance, account, {
+        to: emailTo,
+        cc: emailCc,
+        bcc: emailBcc,
+        subject: emailSubject,
+        bodyText: emailBody,
+        highlights: emailAutofillHighlights,
+        signature: emailSignature,
+        sendAt,
+      });
+      setEmailSendMessage(
+        `Email scheduled for ${formatBusinessDayLabel(sendAt)} at ${sendAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.`,
+      );
+    } catch (sendError) {
+      setEmailSendError(formatMailSendError(sendError));
+      setEmailSendMessage(null);
+    } finally {
+      setSchedulingEmail(false);
     }
   }
 
@@ -1798,6 +1893,17 @@ export function ClientManagementPanel() {
                               }
                             />
                           </label>
+                          <label className="field">
+                            <span className="field-label">Send at</span>
+                            <input
+                              className="field-input"
+                              type="datetime-local"
+                              value={emailSendAt}
+                              onChange={(event) =>
+                                setEmailSendAt(event.target.value)
+                              }
+                            />
+                          </label>
                           <div className="field field--wide">
                             <span className="field-label">Subject</span>
                             <div className="field-input field-input--readonly client-schedule-email-rich">
@@ -1842,6 +1948,7 @@ export function ClientManagementPanel() {
                             className="button primary"
                             disabled={
                               sendingEmail ||
+                              schedulingEmail ||
                               !emailTo.trim() ||
                               !emailSubject.trim()
                             }
@@ -1854,14 +1961,14 @@ export function ClientManagementPanel() {
                             className="button secondary-solid"
                             disabled={
                               sendingEmail ||
+                              schedulingEmail ||
                               !emailTo.trim() ||
-                              !emailSubject.trim()
+                              !emailSubject.trim() ||
+                              !emailSendAt.trim()
                             }
-                            onClick={() => {
-                              // Schedule wiring comes next.
-                            }}
+                            onClick={() => void handleScheduleEmail()}
                           >
-                            Schedule
+                            {schedulingEmail ? "Scheduling…" : "Schedule"}
                           </button>
                         </div>
                         {emailSendMessage ? (
