@@ -1,5 +1,4 @@
 import { isAllowedOrganizationEmail } from "@/auth/organization";
-import { isLocalTestEmail } from "@/lib/local-auth";
 import {
   normalizeEmail,
   type PortalRole,
@@ -23,18 +22,6 @@ export function resolveAccess(
   users: PortalUser[] | null,
 ): ResolvedAccess {
   const normalized = normalizeEmail(email);
-
-  // Test ID/password login — full portal access without Azure domain check.
-  if (isLocalTestEmail(normalized)) {
-    return {
-      email: normalized,
-      role: "admin",
-      canView: true,
-      canEdit: true,
-      canManageUsers: true,
-    };
-  }
-
   const onDomain = canViewPortalDomain(normalized);
 
   if (!onDomain) {

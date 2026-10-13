@@ -12,10 +12,6 @@ import {
   getAccountEmail,
   isAllowedOrganizationEmail,
 } from "@/auth/organization";
-import {
-  readLocalAuthSession,
-  type LocalAuthSession,
-} from "@/lib/local-auth";
 import type { PortalUser } from "@/lib/portal-users";
 
 export default function Home() {
@@ -26,39 +22,15 @@ export default function Home() {
     : "";
   const onDomain =
     isAuthenticated && isAllowedOrganizationEmail(authenticatedEmail);
+  const displayName = accounts[0]?.name ?? authenticatedEmail;
 
-  const [localSession, setLocalSession] = useState<LocalAuthSession | null>(
-    null,
-  );
-  const [localReady, setLocalReady] = useState(false);
   const [access, setAccess] = useState<ResolvedAccess | null>(null);
   const [accessReady, setAccessReady] = useState(false);
-
-  useEffect(() => {
-    setLocalSession(readLocalAuthSession());
-    setLocalReady(true);
-  }, []);
-
-  const isLocalAuthenticated = Boolean(localSession);
-  const effectiveEmail = isLocalAuthenticated
-    ? localSession!.email
-    : authenticatedEmail;
-  const displayName = isLocalAuthenticated
-    ? localSession!.name || localSession!.email
-    : (accounts[0]?.name ?? authenticatedEmail);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadAccess() {
-      if (isLocalAuthenticated && effectiveEmail) {
-        if (!cancelled) {
-          setAccess(resolveAccess(effectiveEmail, []));
-          setAccessReady(true);
-        }
-        return;
-      }
-
       if (!onDomain || !authenticatedEmail) {
         if (!cancelled) {
           setAccess(null);
@@ -93,14 +65,9 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [
-    isLocalAuthenticated,
-    effectiveEmail,
-    onDomain,
-    authenticatedEmail,
-  ]);
+  }, [onDomain, authenticatedEmail]);
 
-  if (!localReady || ((isAuthenticated && onDomain) || isLocalAuthenticated) && !accessReady) {
+  if (isAuthenticated && onDomain && !accessReady) {
     return (
       <main className="page">
         <div className="layout">
@@ -133,7 +100,7 @@ export default function Home() {
             <h1 className="dashboard-title">Fire Fly Client Portal</h1>
           </div>
 
-          {!isAuthenticated && !isLocalAuthenticated ? (
+          {!isAuthenticated ? (
             <>
               <div className="divider" />
               <LoginPage />
@@ -141,13 +108,7 @@ export default function Home() {
           ) : (
             <>
               <div className="divider" />
-              <UnauthorizedPage
-                reason={
-                  onDomain
-                    ? "notListed"
-                    : "domain"
-                }
-              />
+              <UnauthorizedPage reason={onDomain ? "notListed" : "domain"} />
             </>
           )}
         </div>

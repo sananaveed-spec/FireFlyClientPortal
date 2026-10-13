@@ -1,22 +1,12 @@
 "use client";
 
 import { useMsal } from "@azure/msal-react";
-import { useState, type FormEvent } from "react";
 import { isAzureConfigured } from "@/auth/env";
 import { allowedEmailDomainsLabel } from "@/auth/organization";
 import { loginWithCredentials } from "@/auth/session";
-import {
-  LOCAL_TEST_EMAIL,
-  LOCAL_TEST_NAME,
-  writeLocalAuthSession,
-} from "@/lib/local-auth";
 
 export function LoginPage() {
   const { instance } = useMsal();
-  const [id, setId] = useState(LOCAL_TEST_EMAIL);
-  const [password, setPassword] = useState("");
-  const [localError, setLocalError] = useState<string | null>(null);
-  const [localSaving, setLocalSaving] = useState(false);
 
   function handleSignIn() {
     if (!isAzureConfigured) {
@@ -29,79 +19,8 @@ export function LoginPage() {
     void loginWithCredentials(instance);
   }
 
-  async function handleLocalSignIn(event: FormEvent) {
-    event.preventDefault();
-    setLocalError(null);
-    setLocalSaving(true);
-    try {
-      const response = await fetch("/api/local-login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, password }),
-      });
-      const data = (await response.json()) as {
-        email?: string;
-        name?: string;
-        error?: string;
-      };
-      if (!response.ok) {
-        throw new Error(data.error || "Invalid ID or password.");
-      }
-      writeLocalAuthSession({
-        email: data.email || LOCAL_TEST_EMAIL,
-        name: data.name || LOCAL_TEST_NAME,
-        loggedInAt: new Date().toISOString(),
-      });
-      window.location.assign(window.location.origin);
-    } catch (error) {
-      setLocalError(
-        error instanceof Error ? error.message : "Invalid ID or password.",
-      );
-    } finally {
-      setLocalSaving(false);
-    }
-  }
-
   return (
     <div className="login-panel">
-      <form className="local-login-form" onSubmit={handleLocalSignIn}>
-        <p className="login-subtitle">Log in with ID and password</p>
-        <label className="field">
-          <span className="field-label">ID</span>
-          <input
-            className="field-input"
-            type="email"
-            autoComplete="username"
-            value={id}
-            onChange={(event) => setId(event.target.value)}
-            required
-          />
-        </label>
-        <label className="field">
-          <span className="field-label">Password</span>
-          <input
-            className="field-input"
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            required
-          />
-        </label>
-        {localError ? <p className="form-message error">{localError}</p> : null}
-        <button
-          type="submit"
-          className="sign-in-button"
-          disabled={localSaving}
-        >
-          {localSaving ? "Signing in…" : "Log in with ID"}
-        </button>
-      </form>
-
-      <div className="login-or" aria-hidden="true">
-        <span>or</span>
-      </div>
-
       <div className="microsoft-logo">
         <svg
           xmlns="http://www.w3.org/2000/svg"

@@ -60,7 +60,6 @@ import {
   normalizeHolidays,
   type HolidaysStore,
 } from "@/lib/holidays";
-import { readLocalAuthSession } from "@/lib/local-auth";
 import { portalFetch } from "@/lib/portal-api";
 import type { PortalUser } from "@/lib/portal-users";
 import type { ResourceClientEntry } from "@/lib/resource-clients";
@@ -1023,14 +1022,9 @@ export function ClientManagementPanel() {
         instance.getAllAccounts()[0] ??
         msalAccount;
 
-      // ID/password portal login does not create a Graph token. If this is also
-      // a Microsoft account, connect it now (login hint = portal email).
+      // No Graph account yet — prompt Microsoft sign-in for the send mailbox.
       if (!account) {
-        const hint =
-          email?.trim() ||
-          readLocalAuthSession()?.email ||
-          emailFrom.trim() ||
-          "";
+        const hint = email?.trim() || emailFrom.trim() || "";
         setEmailSendMessage("Connecting your Microsoft account to send…");
         const result = await instance.loginPopup({
           ...mailSendRequest,

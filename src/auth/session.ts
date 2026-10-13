@@ -1,5 +1,4 @@
 import type { IPublicClientApplication } from "@azure/msal-browser";
-import { clearLocalAuthSession } from "@/lib/local-auth";
 import { loginRequest } from "./authConfig";
 
 export function loginWithCredentials(instance: IPublicClientApplication) {
@@ -10,8 +9,6 @@ export function loginWithCredentials(instance: IPublicClientApplication) {
 }
 
 export function logoutCompletely(instance: IPublicClientApplication) {
-  clearLocalAuthSession();
-
   const account =
     instance.getActiveAccount() ?? instance.getAllAccounts()[0] ?? null;
 
