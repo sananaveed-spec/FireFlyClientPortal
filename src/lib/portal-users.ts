@@ -16,6 +16,7 @@ export type PortalUser = {
 export const DEFAULT_ADMIN_EMAILS = [
   "sana@fireflyaccountancy.com",
   "sana.naveed@fireflyaccountancy.com",
+  "sana@epsfresno.com",
 ] as const;
 
 export const ROLE_LABELS: Record<PortalRole, string> = {
