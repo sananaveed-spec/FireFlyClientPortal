@@ -830,6 +830,50 @@ h2,
   white-space: normal;
 }
 
+.adjustable-settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin-top: 1rem;
+}
+
+.adjustable-settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.adjustable-settings-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.adjustable-settings-header .lookup-hint {
+  margin: 0;
+  flex: 1;
+}
+
+.adjustable-settings-header .adjustable-settings-actions {
+  flex: 0 0 auto;
+}
+
+.adjustable-settings-table {
+  width: 100%;
+}
+
+.adjustable-settings-table .field-input {
+  width: 100%;
+  min-width: 10rem;
+}
+
+.adjustable-settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
 .client-schedule-layout {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
@@ -1471,6 +1515,10 @@ h2,
   font-weight: 600;
 }
 
+.email-signature-link .email-template-autofill {
+  color: inherit;
+}
+
 .email-signature-image {
   display: block;
   max-width: min(100%, 21rem);
@@ -1957,7 +2005,7 @@ h2,
 }
 
 .dialog-panel--wide {
-  width: min(100%, 42rem);
+  width: min(100%, 52rem);
 }
 
 .dialog-header {
@@ -2020,6 +2068,46 @@ h2,
   border-radius: 0;
   background: transparent;
   overflow: visible;
+  gap: 1rem;
+}
+
+.client-form-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.client-form-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.95rem 1rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.8rem;
+  background: #f5f8fc;
+}
+
+.client-form-section-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid rgba(10, 22, 40, 0.08);
+}
+
+.client-form-section-title {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.01em;
+}
+
+.client-form-section-desc {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: var(--muted);
 }
 
 .client-form-grid {
@@ -2042,6 +2130,74 @@ h2,
   grid-column: 1 / -1;
 }
 
+.client-form-subsection-label {
+  margin: 0.15rem 0 0;
+  padding-top: 0.35rem;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--muted);
+  border-top: 1px dashed rgba(10, 22, 40, 0.1);
+}
+
+.catch-up-plan-field {
+  gap: 0.55rem;
+}
+
+.catch-up-plan-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.financial-accounts {
+  gap: 0.65rem;
+}
+
+.financial-accounts-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.financial-accounts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.financial-account-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.7rem;
+  background: #eef3f9;
+}
+
+.financial-account-row-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.financial-account-row-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.financial-account-row-grid .field--radio {
+  grid-column: 1 / -1;
+}
+
 .field--radio {
   border: none;
   min-width: 0;
@@ -2051,6 +2207,18 @@ h2,
   font-size: 0.85rem;
   color: var(--muted);
   font-weight: 500;
+}
+
+.field--checkbox .field-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.field--checkbox .field-label input[type="checkbox"] {
+  margin-top: 0.2rem;
 }
 
 .field-required {
@@ -2787,6 +2955,10 @@ h2,
 
 @media (max-width: 900px) {
   .client-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .financial-account-row-grid {
     grid-template-columns: 1fr;
   }
 

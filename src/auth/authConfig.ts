@@ -28,7 +28,15 @@ export function getMsalConfig(): Configuration {
 }
 
 export const loginRequest = {
-  scopes: ["User.Read", "Mail.Send"],
+  scopes: [
+    "User.Read",
+    "User.ReadBasic.All",
+    "Mail.Send",
+    "Sites.Selected",
+    "Sites.Read.All",
+    "Files.ReadWrite.All",
+    "Group.ReadWrite.All",
+  ],
 };
 
 /** Use when connecting a mailbox outside the Fire Fly home tenant. */
@@ -43,4 +51,25 @@ export const organizationsAuthority =
 export const mailSendRequest = {
   scopes: ["Mail.Send", "User.Read"],
   authority: organizationsAuthority,
+};
+
+/**
+ * SharePoint scopes (Fire Fly tenant):
+ * - Sites.Selected: granted sites
+ * - Sites.Read.All: list/search sites for Portal Link picker
+ * - Files.ReadWrite.All: create year/month folders in new client sites
+ * - Group.ReadWrite.All: create CLIENT - {Name} Team sites
+ */
+export const sharePointRequest = {
+  scopes: [
+    "Sites.Selected",
+    "Sites.Read.All",
+    "Files.ReadWrite.All",
+    "Group.ReadWrite.All",
+    "User.Read",
+    "User.ReadBasic.All",
+  ],
+  authority: azureTenantId
+    ? `https://login.microsoftonline.com/${azureTenantId}`
+    : azureAuthority,
 };

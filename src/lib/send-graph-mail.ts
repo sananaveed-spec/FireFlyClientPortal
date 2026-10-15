@@ -13,6 +13,7 @@ import {
   SIGNATURE_CONFIDENTIALITY_NOTICE,
   type EmailSignature,
 } from "@/lib/email-signatures";
+import { linkPortalKeywordsHtml } from "@/lib/email-portal-link";
 
 export type GraphMailPayload = {
   to: string;
@@ -22,6 +23,8 @@ export type GraphMailPayload = {
   bodyText: string;
   /** Terms to wrap in <strong> inside the body. */
   highlights?: string[];
+  /** When set, whole-word "portal" in the body becomes a hyperlink. */
+  portalHref?: string | null;
   signature: EmailSignature;
   /**
    * When set (must be in the future), Outlook holds the message until this
@@ -141,10 +144,15 @@ function buildSignatureHtml(signature: EmailSignature): string {
 }
 
 export function buildGraphMailHtml(payload: GraphMailPayload): string {
-  const bodyHtml = boldHighlightsHtml(
+  let bodyHtml = boldHighlightsHtml(
     payload.bodyText,
     payload.highlights ?? [],
-  ).replace(/\r\n|\n|\r/g, "<br/>");
+  );
+  const portalHref = payload.portalHref?.trim();
+  if (portalHref) {
+    bodyHtml = linkPortalKeywordsHtml(bodyHtml, portalHref, escapeHtml);
+  }
+  bodyHtml = bodyHtml.replace(/\r\n|\n|\r/g, "<br/>");
   const signatureHtml = buildSignatureHtml(payload.signature);
 
   return [

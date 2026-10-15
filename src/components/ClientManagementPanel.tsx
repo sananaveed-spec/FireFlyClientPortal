@@ -49,6 +49,11 @@ import {
   type EmailSignature,
 } from "@/lib/email-signatures";
 import {
+  applyPortalLinkPlaceholders,
+  PORTAL_WORD_MARKER,
+  resolvePortalHref,
+} from "@/lib/email-portal-link";
+import {
   applyPeriodPlaceholder,
   createDefaultEmailTemplates,
   formatCurrentPeriod,
@@ -90,30 +95,61 @@ function defaultScheduleSendAt(
 function renderAutofilledText(
   text: string,
   highlights: string[],
+  portalHref?: string | null,
 ): ReactNode {
   if (!text) {
     return null;
   }
-  const unique = [
-    ...new Set(highlights.map((value) => value.trim()).filter(Boolean)),
-  ].sort((a, b) => b.length - a.length);
-  if (unique.length === 0) {
-    return text;
+
+  function renderHighlighted(segment: string, keyPrefix: string): ReactNode {
+    const unique = [
+      ...new Set(highlights.map((value) => value.trim()).filter(Boolean)),
+    ].sort((a, b) => b.length - a.length);
+    if (unique.length === 0) {
+      return segment;
+    }
+    const pattern = unique
+      .map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+      .join("|");
+    const splitter = new RegExp(`(${pattern})`, "g");
+    const isHighlight = new Set(unique);
+    return segment.split(splitter).map((part, index) =>
+      !part ? null : isHighlight.has(part) ? (
+        <strong
+          key={`${keyPrefix}-${part}-${index}`}
+          className="email-template-autofill"
+        >
+          {part}
+        </strong>
+      ) : (
+        <span key={`${keyPrefix}-${index}-${part.slice(0, 12)}`}>{part}</span>
+      ),
+    );
   }
-  const pattern = unique
-    .map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-    .join("|");
-  const splitter = new RegExp(`(${pattern})`, "g");
-  const isHighlight = new Set(unique);
-  return text.split(splitter).map((part, index) =>
-    isHighlight.has(part) ? (
-      <strong key={`${part}-${index}`} className="email-template-autofill">
-        {part}
-      </strong>
-    ) : (
-      <span key={`${index}-${part.slice(0, 12)}`}>{part}</span>
-    ),
-  );
+
+  if (portalHref && text.includes(PORTAL_WORD_MARKER)) {
+    const chunks = text.split(PORTAL_WORD_MARKER);
+    const nodes: ReactNode[] = [];
+    chunks.forEach((chunk, index) => {
+      nodes.push(renderHighlighted(chunk, `chunk-${index}`));
+      if (index < chunks.length - 1) {
+        nodes.push(
+          <a
+            key={`portal-link-${index}`}
+            className="email-signature-link"
+            href={portalHref}
+            target="_blank"
+            rel="noreferrer"
+          >
+            portal
+          </a>,
+        );
+      }
+    });
+    return nodes;
+  }
+
+  return renderHighlighted(text, "body");
 }
 
 function ClientScheduleEmailSignature({
@@ -193,7 +229,11 @@ const CLIENT_INFO_FIELDS: { key: string; label: string }[] = [
   { key: "operatingName", label: "Operating Name" },
   { key: "industry", label: "Industry" },
   { key: "entityType", label: "Entity Type" },
+  { key: "serviceFrequency", label: "Service Frequency" },
+  { key: "reportingTier", label: "Reporting Tier" },
+  { key: "paymentType", label: "Payment Type" },
   { key: "country", label: "Country" },
+  { key: "reportingCurrency", label: "Reporting Currency" },
   { key: "state", label: "State/Province" },
   { key: "timeZone", label: "Client Time Zone" },
   { key: "yourTimeZone", label: "Your Time Zone" },
@@ -369,8 +409,24 @@ function clientInfoValue(
       return profile?.industry?.trim() || resource.industry?.trim() || "—";
     case "entityType":
       return profile?.entityType?.trim() || "—";
+    case "serviceFrequency":
+      return profile?.serviceFrequency?.trim() || "—";
+    case "reportingTier":
+      return profile?.reportingTier?.trim() || "—";
+    case "paymentType": {
+      const paymentType = profile?.paymentType?.trim() || "";
+      if (paymentType === "Cash") {
+        return "Cash basis";
+      }
+      if (paymentType === "Accrual") {
+        return "Accrual basis";
+      }
+      return paymentType || "—";
+    }
     case "country":
       return profile?.country?.trim() || "—";
+    case "reportingCurrency":
+      return profile?.reportingCurrency?.trim() || "—";
     case "state":
       return profile?.state?.trim() || "—";
     case "timeZone":
@@ -457,6 +513,8 @@ export function ClientManagementPanel() {
   const [emailSendAt, setEmailSendAt] = useState("");
   const [emailSubject, setEmailSubject] = useState("");
   const [emailBody, setEmailBody] = useState("");
+  /** Period month folder URL (existing SharePoint year/month path). */
+  const [emailPortalHref, setEmailPortalHref] = useState<string | null>(null);
   const [emailAutofillHighlights, setEmailAutofillHighlights] = useState<
     string[]
   >([]);
@@ -701,7 +759,9 @@ export function ClientManagementPanel() {
       "[Client Name]";
     const contactName = selectedPointOfContact || "[Contact First Name]";
     const portalLink = selectedPortalLink || "[Portal Link]";
-    const period = formatCurrentPeriod();
+    const periodDate = new Date();
+    const period = formatCurrentPeriod(periodDate);
+    const periodPortalHref = resolvePortalHref(portalLink, periodDate);
     const dueDate = emailDeadlineLabel;
     const typeActionItems = getActionItemsForRequestType(
       requestLists,
@@ -729,20 +789,23 @@ export function ClientManagementPanel() {
 
     function fillPlaceholders(text: string) {
       return applyPeriodPlaceholder(
-        text
-          .replace(/\[Client Name\]/gi, clientName)
-          .replace(/\[Contact First Name\]/gi, contactName)
-          .replace(/\[Due Date\]/gi, dueDate)
-          .replace(/\[Deadline\]/gi, dueDate)
-          .replace(/\[Portal Link\]/gi, portalLink)
-          .replace(
-            /(?:•\s*)?\[List of bank and credit card accounts, with last 4 digits\]/gi,
-            actionListText,
-          )
-          .replace(
-            /(?:•\s*)?\[List of loan, line of credit, lease, investment or other accounts\]/gi,
-            actionListText,
-          ),
+        applyPortalLinkPlaceholders(
+          text
+            .replace(/\[Client Name\]/gi, clientName)
+            .replace(/\[Contact First Name\]/gi, contactName)
+            .replace(/\[Due Date\]/gi, dueDate)
+            .replace(/\[Deadline\]/gi, dueDate)
+            .replace(
+              /(?:•\s*)?\[List of bank and credit card accounts, with last 4 digits\]/gi,
+              actionListText,
+            )
+            .replace(
+              /(?:•\s*)?\[List of loan, line of credit, lease, investment or other accounts\]/gi,
+              actionListText,
+            ),
+          portalLink,
+          periodDate,
+        ),
       );
     }
 
@@ -755,7 +818,6 @@ export function ClientManagementPanel() {
       contactName,
       period,
       dueDate,
-      portalLink,
       ...emailListItems.map((item) => item.label),
     ].filter(
       (value) =>
@@ -769,6 +831,7 @@ export function ClientManagementPanel() {
 
     setEmailSubject(subject);
     setEmailBody(body);
+    setEmailPortalHref(periodPortalHref);
     setEmailAutofillHighlights(highlights);
   }, [
     selectedClientId,
@@ -1120,6 +1183,7 @@ export function ClientManagementPanel() {
         subject: emailSubject,
         bodyText: emailBody,
         highlights: emailAutofillHighlights,
+        portalHref: emailPortalHref,
         signature: emailSignature,
       });
       setEmailSendMessage("Email sent.");
@@ -1158,6 +1222,7 @@ export function ClientManagementPanel() {
         subject: emailSubject,
         bodyText: emailBody,
         highlights: emailAutofillHighlights,
+        portalHref: emailPortalHref,
         signature: emailSignature,
         sendAt,
       });
@@ -1910,6 +1975,7 @@ export function ClientManagementPanel() {
                               {renderAutofilledText(
                                 emailSubject,
                                 emailAutofillHighlights,
+                                emailPortalHref,
                               ) || "—"}
                             </div>
                           </div>
@@ -1921,6 +1987,7 @@ export function ClientManagementPanel() {
                                   {renderAutofilledText(
                                     emailBody,
                                     emailAutofillHighlights,
+                                    emailPortalHref,
                                   )}
                                   {"\n\n"}
                                   <span>Thank you,</span>

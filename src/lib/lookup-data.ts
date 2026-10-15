@@ -1,6 +1,8 @@
 export type LookupFieldId =
   | "industry"
   | "entityType"
+  | "serviceFrequency"
+  | "reportingTier"
   | "businessActivity"
   | "timeZone"
   | "status"
@@ -8,6 +10,7 @@ export type LookupFieldId =
   | "secondaryAssignee"
   | "bookkeeping"
   | "payroll"
+  | "payrollProvider"
   | "payrollAndSalesTaxes"
   | "deliverables"
   | "yearlyCompliance"
@@ -139,6 +142,20 @@ export const LOOKUP_FIELD_META: {
     ],
   },
   {
+    id: "serviceFrequency",
+    name: "Service Frequency",
+    defaults: ["Monthly", "Quarterly", "Catch-up/Cleanup"],
+  },
+  {
+    id: "reportingTier",
+    name: "Reporting Tier",
+    defaults: [
+      "Standard (financials by the 18th)",
+      "Priority (by BD10 – BD15, for lender or board clients)",
+      "Quarterly (within 20 – 30 days of quarter-end)",
+    ],
+  },
+  {
     id: "businessActivity",
     name: "Business Activity",
     defaults: ["Restaurant/Caterer", "Material Handling"],
@@ -182,6 +199,11 @@ export const LOOKUP_FIELD_META: {
     id: "payroll",
     name: "Payroll",
     defaults: ["NIL", "Bi-Weekly", "Gusto"],
+  },
+  {
+    id: "payrollProvider",
+    name: "Payroll Provider",
+    defaults: ["Gusto", "QBO", "Paychex", "ADP", "NIL"],
   },
   {
     id: "payrollAndSalesTaxes",

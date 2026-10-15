@@ -13,11 +13,35 @@ import { createPortal } from "react-dom";
 import { useAccess } from "@/auth/accessContext";
 import {
   createEmptyClientProfileForm,
+  createEmptyFinancialAccount,
+  FINANCIAL_ACCOUNT_SOURCE_OPTIONS,
+  FINANCIAL_ACCOUNT_TYPE_OPTIONS,
+  formatFinancialAccountsList,
   generateUniqueId,
   normalizeClientProfile,
+  normalizeFinancialAccounts,
+  CLIENT_MEETING_FREQUENCY_OPTIONS,
+  normalizeClientMeetingFrequency,
+  normalizePaymentType,
+  normalizePayrollReportsNeeded,
+  normalizeReportingTier,
+  normalizeServiceFrequency,
+  normalizeYesNo,
+  parseFinancialAccountsFromText,
+  PAYMENT_TYPE_OPTIONS,
+  PAYROLL_REPORTS_NEEDED_OPTIONS,
+  reportingCurrencyForCountry,
+  YES_NO_OPTIONS,
   type ClientCountry,
+  type ClientMeetingFrequency,
   type ClientProfileEntry,
   type ClientProfileInput,
+  type FinancialAccount,
+  type FinancialAccountSource,
+  type FinancialAccountType,
+  type PaymentType,
+  type PayrollReportsNeeded,
+  type YesNo,
 } from "@/lib/client-profiles";
 import { portalFetch } from "@/lib/portal-api";
 import {
@@ -49,6 +73,28 @@ import {
   YEAR_END_DAYS,
   YEAR_END_MONTHS,
 } from "@/lib/year-end";
+import {
+  clientSharePointSiteDisplayName,
+  createClientSharePointSite,
+  isClientSharePointSite,
+  listSharePointSitesForPicker,
+  parseMemberEmails,
+  type SharePointSiteOption,
+} from "@/lib/sharepoint-graph";
+import type { SearchableOption } from "@/components/SearchableSelect";
+
+function siteMatchesLegalName(siteName: string, legalName: string): boolean {
+  const site = siteName.trim().toLowerCase();
+  const legal = legalName.trim().toLowerCase();
+  if (!site || !legal) {
+    return false;
+  }
+  if (site.includes(legal)) {
+    return true;
+  }
+  const stripped = site.replace(/^clients?\s*-\s*/i, "").trim();
+  return stripped.includes(legal) || legal.includes(stripped);
+}
 
 async function persistLookupData(data: LookupDataStore) {
   const response = await portalFetch("/api/lookup-data", {
@@ -83,7 +129,15 @@ const TABLE_COLUMNS: { key: keyof ClientProfileEntry; label: string }[] = [
   { key: "industry", label: "Industry" },
   { key: "businessActivity", label: "Business Activity" },
   { key: "entityType", label: "Entity Type" },
+  { key: "serviceFrequency", label: "Service Frequency" },
+  { key: "reportingTier", label: "Reporting Tier" },
+  { key: "paymentType", label: "Payment Type" },
+  { key: "financialAccounts", label: "Financial Accounts" },
+  { key: "hasUsdAndCadAccounts", label: "USD and CAD Accounts" },
+  { key: "meetingFrequency", label: "Meeting Frequency" },
+  { key: "onCatchUpPlan", label: "On Catch-up Plan" },
   { key: "country", label: "Country" },
+  { key: "reportingCurrency", label: "Reporting Currency" },
   { key: "state", label: "State/Province" },
   { key: "streetAddress", label: "Business Address" },
   { key: "businessAccountNumber", label: "Business Account Number" },
@@ -97,6 +151,8 @@ const TABLE_COLUMNS: { key: keyof ClientProfileEntry; label: string }[] = [
   { key: "portalLink", label: "Portal Link" },
   { key: "canadianBusinessNumber", label: "Canadian Business Number" },
   { key: "gstHst", label: "GST/HST" },
+  { key: "payrollProvider", label: "Payroll Provider" },
+  { key: "payrollReportsNeeded", label: "Payroll Reports Needed" },
   { key: "payrollAccountNumbers", label: "Payroll Account Numbers" },
   { key: "ownerName", label: "Owner Name" },
   { key: "ownerEmail", label: "Owner Email" },
@@ -104,6 +160,12 @@ const TABLE_COLUMNS: { key: keyof ClientProfileEntry; label: string }[] = [
   { key: "pointOfContact", label: "Point Of Contact" },
   { key: "pocEmail", label: "POC Email" },
   { key: "pocPhone", label: "POC Phone Number" },
+  { key: "documentRequestContact", label: "Document Request Contact" },
+  { key: "documentRequestEmail", label: "Document Request Email" },
+  { key: "documentRequestPhone", label: "Document Request Phone" },
+  { key: "financialsContact", label: "Financials Contact" },
+  { key: "financialsEmail", label: "Financials Email" },
+  { key: "financialsPhone", label: "Financials Phone" },
 ];
 
 /** Display YYYY-MM-DD as MM/DD/YYYY (e.g. 06/07/1977). */
@@ -149,10 +211,10 @@ function parseImportCountry(value: string): ClientCountry {
 function importFieldValue(
   key: keyof ClientProfileEntry,
   raw: string,
-): string {
+): string | FinancialAccount[] {
   const value = raw.trim();
   if (!value || value === "—") {
-    return "";
+    return key === "financialAccounts" ? [] : "";
   }
   if (key === "ssn" && value === "***") {
     return "";
@@ -165,6 +227,21 @@ function importFieldValue(
   }
   if (key === "country") {
     return parseImportCountry(value);
+  }
+  if (key === "paymentType") {
+    return normalizePaymentType(value);
+  }
+  if (key === "payrollReportsNeeded") {
+    return normalizePayrollReportsNeeded(value);
+  }
+  if (key === "hasUsdAndCadAccounts" || key === "onCatchUpPlan") {
+    return normalizeYesNo(value);
+  }
+  if (key === "meetingFrequency") {
+    return normalizeClientMeetingFrequency(value);
+  }
+  if (key === "financialAccounts") {
+    return parseFinancialAccountsFromText(value);
   }
   return value;
 }
@@ -190,6 +267,10 @@ function formatProfileCell(
   value: unknown,
   options?: { revealSensitive?: boolean },
 ): string {
+  if (key === "financialAccounts") {
+    const accounts = normalizeFinancialAccounts(value);
+    return formatFinancialAccountsList(accounts);
+  }
   const text = String(value ?? "").trim();
   if (!text) {
     return "";
@@ -199,6 +280,38 @@ function formatProfileCell(
   }
   if (key === "doi") {
     return formatProfileDate(text);
+  }
+  if (key === "paymentType") {
+    if (text === "Cash") {
+      return "Cash basis";
+    }
+    if (text === "Accrual") {
+      return "Accrual basis";
+    }
+  }
+  if (key === "payrollReportsNeeded") {
+    if (text === "Yes") {
+      return "Yes — need reports";
+    }
+    if (text === "No") {
+      return "No — reports not needed";
+    }
+  }
+  if (key === "hasUsdAndCadAccounts") {
+    if (text === "Yes") {
+      return "Yes — USD and CAD accounts";
+    }
+    if (text === "No") {
+      return "No — single currency";
+    }
+  }
+  if (key === "onCatchUpPlan") {
+    if (text === "Yes") {
+      return "Yes — on catch-up plan";
+    }
+    if (text === "No") {
+      return "No — monthly cycle";
+    }
   }
   return text;
 }
@@ -259,14 +372,46 @@ function profileSnapshot(entry: ClientProfileEntry) {
   );
 }
 
+function FormSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="client-form-section">
+      <header className="client-form-section-header">
+        <h4 className="client-form-section-title">{title}</h4>
+        {description ? (
+          <p className="client-form-section-desc">{description}</p>
+        ) : null}
+      </header>
+      <div className="client-form-grid">{children}</div>
+    </section>
+  );
+}
+
 export function ClientProfilePanel() {
-  const { accounts } = useMsal();
+  const { instance, accounts } = useMsal();
   const { canEdit } = useAccess();
   const actor = getActorFromAccount(accounts[0]);
+  const account = accounts[0] ?? null;
   const [profiles, setProfiles] = useState<ClientProfileEntry[]>([]);
   const [lookups, setLookups] = useState<LookupDataStore | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [createSharePointSite, setCreateSharePointSite] = useState(false);
+  const [sharePointMemberEmails, setSharePointMemberEmails] = useState("");
+  const [sharePointSites, setSharePointSites] = useState<SharePointSiteOption[]>(
+    [],
+  );
+  const [loadingSharePointSites, setLoadingSharePointSites] = useState(false);
+  const [sharePointSitesError, setSharePointSitesError] = useState<
+    string | null
+  >(null);
   const [form, setForm] = useState<ClientProfileInput>(
     createEmptyClientProfileForm(),
   );
@@ -358,6 +503,9 @@ export function ClientProfilePanel() {
 
   function openAddForm() {
     setEditingId(null);
+    setCreateSharePointSite(false);
+    setSharePointMemberEmails("");
+    setSharePointSitesError(null);
     setForm(
       createEmptyClientProfileForm(profiles.map((profile) => profile.uniqueId)),
     );
@@ -368,6 +516,9 @@ export function ClientProfilePanel() {
 
   function openEditForm(profile: ClientProfileEntry) {
     setEditingId(profile.id);
+    setCreateSharePointSite(false);
+    setSharePointMemberEmails("");
+    setSharePointSitesError(null);
     setForm({
       uniqueId: profile.uniqueId,
       legalName: profile.legalName,
@@ -379,6 +530,24 @@ export function ClientProfilePanel() {
       entityType: profile.entityType,
       fiscalYearEnd: profile.fiscalYearEnd,
       country: profile.country,
+      reportingCurrency:
+        profile.reportingCurrency ||
+        reportingCurrencyForCountry(profile.country),
+      serviceFrequency: profile.serviceFrequency || "",
+      reportingTier: profile.reportingTier || "",
+      paymentType: profile.paymentType || "",
+      financialAccounts: normalizeFinancialAccounts(profile.financialAccounts),
+      hasUsdAndCadAccounts: profile.hasUsdAndCadAccounts || "",
+      meetingFrequency: profile.meetingFrequency || "",
+      onCatchUpPlan: profile.onCatchUpPlan || "",
+      payrollProvider: profile.payrollProvider || "",
+      payrollReportsNeeded: profile.payrollReportsNeeded || "",
+      documentRequestContact: profile.documentRequestContact || "",
+      documentRequestEmail: profile.documentRequestEmail || "",
+      documentRequestPhone: profile.documentRequestPhone || "",
+      financialsContact: profile.financialsContact || "",
+      financialsEmail: profile.financialsEmail || "",
+      financialsPhone: profile.financialsPhone || "",
       state: profile.state,
       streetAddress: profile.streetAddress,
       businessAccountNumber: profile.businessAccountNumber,
@@ -409,15 +578,137 @@ export function ClientProfilePanel() {
     }
     setFormOpen(false);
     setEditingId(null);
+    setCreateSharePointSite(false);
+    setSharePointMemberEmails("");
+    setSharePointSitesError(null);
     setError(null);
     syncYearEndParts("");
   }
+
+  const portalLinkOptions = useMemo((): SearchableOption[] => {
+    const legalName = form.legalName.trim();
+    // Only CLIENT - / CLIENTS - sites (not All Company, Team Site, etc.).
+    const options: SearchableOption[] = sharePointSites
+      .filter(isClientSharePointSite)
+      .map((site) => ({
+        value: site.webUrl,
+        label: site.displayName,
+        meta: site.webUrl,
+        keywords: `${site.displayName} ${site.webUrl}`,
+      }));
+
+    // Do not mix in saved profile links — only live CLIENT -/CLIENTS - sites.
+
+    return options.sort((a, b) => {
+      const aMatch = siteMatchesLegalName(a.label, legalName) ? 0 : 1;
+      const bMatch = siteMatchesLegalName(b.label, legalName) ? 0 : 1;
+      if (aMatch !== bMatch) {
+        return aMatch - bMatch;
+      }
+      return a.label.localeCompare(b.label, undefined, { sensitivity: "base" });
+    });
+  }, [sharePointSites, profiles, form.legalName]);
+
+  useEffect(() => {
+    // Load existing sites for Add (picker) and Edit (link existing site).
+    if (!formOpen || createSharePointSite || !account) {
+      return;
+    }
+    let cancelled = false;
+    async function loadSites() {
+      setLoadingSharePointSites(true);
+      setSharePointSitesError(null);
+      try {
+        const sites = await listSharePointSitesForPicker(
+          instance,
+          account!,
+          form.legalName,
+        );
+        if (!cancelled) {
+          setSharePointSites(sites);
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setSharePointSites([]);
+          setSharePointSitesError(
+            loadError instanceof Error
+              ? loadError.message
+              : "Failed to load SharePoint sites.",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingSharePointSites(false);
+        }
+      }
+    }
+    void loadSites();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    formOpen,
+    createSharePointSite,
+    account,
+    instance,
+    form.legalName,
+  ]);
 
   function updateField<K extends keyof ClientProfileInput>(
     key: K,
     value: ClientProfileInput[K],
   ) {
     setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function addFinancialAccount() {
+    setForm((current) => ({
+      ...current,
+      financialAccounts: [
+        ...current.financialAccounts,
+        createEmptyFinancialAccount(),
+      ],
+    }));
+  }
+
+  function updateFinancialAccount<K extends keyof FinancialAccount>(
+    accountId: string,
+    key: K,
+    value: FinancialAccount[K],
+  ) {
+    setForm((current) => ({
+      ...current,
+      financialAccounts: current.financialAccounts.map((account) =>
+        account.id === accountId ? { ...account, [key]: value } : account,
+      ),
+    }));
+  }
+
+  function removeFinancialAccount(accountId: string) {
+    setForm((current) => ({
+      ...current,
+      financialAccounts: current.financialAccounts.filter(
+        (account) => account.id !== accountId,
+      ),
+    }));
+  }
+
+  function handleServiceFrequencyChange(value: string) {
+    const normalized = normalizeServiceFrequency(value);
+    setForm((current) => ({
+      ...current,
+      serviceFrequency: normalized,
+      onCatchUpPlan:
+        normalized === "Catch-up/Cleanup" ? "Yes" : current.onCatchUpPlan,
+    }));
+  }
+
+  function switchToMonthlyCycle() {
+    setForm((current) => ({
+      ...current,
+      onCatchUpPlan: "No",
+      serviceFrequency: "Monthly",
+    }));
   }
 
   function setYearEndParts(day: string, month: string) {
@@ -447,6 +738,7 @@ export function ClientProfilePanel() {
       return {
         ...current,
         country,
+        reportingCurrency: reportingCurrencyForCountry(country),
         state: country === "Not Sure" ? "Not Sure" : "",
         uniqueId: generateUniqueId(existingIds, country),
         // Clear country-specific tax fields that no longer apply.
@@ -546,9 +838,38 @@ export function ClientProfilePanel() {
     [lookups],
   );
 
+  const serviceFrequencyOptions = useMemo(
+    () => getLookupOptions(lookups, "serviceFrequency"),
+    [lookups],
+  );
+
+  const reportingTierOptions = useMemo(
+    () => getLookupOptions(lookups, "reportingTier"),
+    [lookups],
+  );
+
+  const payrollProviderOptions = useMemo(
+    () => getLookupOptions(lookups, "payrollProvider"),
+    [lookups],
+  );
+
   async function createLookupValueFromProfile(
-    fieldId: "industry" | "businessActivity" | "timeZone" | "entityType",
-    formKey: "industry" | "businessActivity" | "timeZone" | "entityType",
+    fieldId:
+      | "industry"
+      | "businessActivity"
+      | "timeZone"
+      | "entityType"
+      | "serviceFrequency"
+      | "reportingTier"
+      | "payrollProvider",
+    formKey:
+      | "industry"
+      | "businessActivity"
+      | "timeZone"
+      | "entityType"
+      | "serviceFrequency"
+      | "reportingTier"
+      | "payrollProvider",
     fieldLabel: string,
     label: string,
   ) {
@@ -569,12 +890,22 @@ export function ClientProfilePanel() {
       return;
     }
 
+    const hasField = lookups.fields.some((field) => field.id === fieldId);
     const next: LookupDataStore = {
-      fields: lookups.fields.map((field) =>
-        field.id === fieldId
-          ? { ...field, items: [...field.items, createLookupItem(trimmed)] }
-          : field,
-      ),
+      fields: hasField
+        ? lookups.fields.map((field) =>
+            field.id === fieldId
+              ? { ...field, items: [...field.items, createLookupItem(trimmed)] }
+              : field,
+          )
+        : [
+            ...lookups.fields,
+            {
+              id: fieldId,
+              name: fieldLabel,
+              items: [createLookupItem(trimmed)],
+            },
+          ],
     };
     const saved = await persistLookupData(next);
     setLookups({ fields: saved.fields ?? [] });
@@ -931,7 +1262,13 @@ export function ClientProfilePanel() {
           if (key === "ssn" && !imported) {
             continue;
           }
-          (values as Record<string, string>)[key] = imported;
+          if (key === "financialAccounts") {
+            values.financialAccounts = Array.isArray(imported)
+              ? imported
+              : [];
+            continue;
+          }
+          (values as Record<string, string>)[key] = String(imported);
         }
 
         const legalName = String(values.legalName ?? "").trim();
@@ -1052,6 +1389,36 @@ export function ClientProfilePanel() {
         form.country,
       );
 
+    let portalLink = form.portalLink.trim();
+    let memberWarnings: string[] = [];
+    if (!editingId && createSharePointSite) {
+      if (!account) {
+        setError("Sign in with Microsoft to create a SharePoint site.");
+        return;
+      }
+      setSaving(true);
+      setError(null);
+      try {
+        const created = await createClientSharePointSite(
+          instance,
+          account,
+          legalName,
+          parseMemberEmails(sharePointMemberEmails),
+        );
+        portalLink = created.webUrl;
+        memberWarnings = created.memberWarnings;
+        setForm((current) => ({ ...current, portalLink }));
+      } catch (createError) {
+        setSaving(false);
+        setError(
+          createError instanceof Error
+            ? createError.message
+            : "Failed to create SharePoint site.",
+        );
+        return;
+      }
+    }
+
     const entry: ClientProfileEntry = {
       id: existing?.id ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       ...form,
@@ -1059,11 +1426,19 @@ export function ClientProfilePanel() {
       legalName,
       operatingName: form.operatingName.trim(),
       website: form.website.trim(),
-      portalLink: form.portalLink.trim(),
+      portalLink,
       industry: form.industry.trim(),
       businessActivity: form.businessActivity.trim(),
       entityType: form.entityType.trim(),
       fiscalYearEnd: normalizeYearEnd(form.fiscalYearEnd),
+      reportingCurrency: reportingCurrencyForCountry(form.country),
+      serviceFrequency: normalizeServiceFrequency(form.serviceFrequency),
+      reportingTier: normalizeReportingTier(form.reportingTier),
+      paymentType: normalizePaymentType(form.paymentType),
+      financialAccounts: normalizeFinancialAccounts(form.financialAccounts),
+      hasUsdAndCadAccounts: normalizeYesNo(form.hasUsdAndCadAccounts),
+      meetingFrequency: normalizeClientMeetingFrequency(form.meetingFrequency),
+      onCatchUpPlan: normalizeYesNo(form.onCatchUpPlan),
       state: form.state.trim(),
       streetAddress: form.streetAddress.trim(),
       businessAccountNumber:
@@ -1078,6 +1453,10 @@ export function ClientProfilePanel() {
       gstHst: form.country === "CA" ? form.gstHst.trim() : "",
       provincialSalesTaxNumbers:
         form.country === "US" ? form.provincialSalesTaxNumbers.trim() : "",
+      payrollProvider: form.payrollProvider.trim(),
+      payrollReportsNeeded: normalizePayrollReportsNeeded(
+        form.payrollReportsNeeded,
+      ),
       payrollAccountNumbers: form.payrollAccountNumbers.trim(),
       ownerName: form.ownerName.trim(),
       ownerEmail: form.ownerEmail.trim(),
@@ -1085,6 +1464,12 @@ export function ClientProfilePanel() {
       pointOfContact: form.pointOfContact.trim(),
       pocEmail: form.pocEmail.trim(),
       pocPhone: form.pocPhone.trim(),
+      documentRequestContact: form.documentRequestContact.trim(),
+      documentRequestEmail: form.documentRequestEmail.trim(),
+      documentRequestPhone: form.documentRequestPhone.trim(),
+      financialsContact: form.financialsContact.trim(),
+      financialsEmail: form.financialsEmail.trim(),
+      financialsPhone: form.financialsPhone.trim(),
       createdAt: existing?.createdAt ?? new Date().toISOString(),
     };
 
@@ -1099,12 +1484,19 @@ export function ClientProfilePanel() {
       setProfiles(next);
       setFormOpen(false);
       setEditingId(null);
+      setCreateSharePointSite(false);
+      setSharePointMemberEmails("");
       setForm(
         createEmptyClientProfileForm(
           next.map((profile) => profile.uniqueId),
         ),
       );
       syncYearEndParts("");
+      if (memberWarnings.length > 0) {
+        setNotice(
+          `Client saved. Some SharePoint members could not be added: ${memberWarnings.join("; ")}`,
+        );
+      }
 
       const after = profileSnapshot(entry);
       if (existing) {
@@ -1390,7 +1782,11 @@ export function ClientProfilePanel() {
                   className="client-form client-form--dialog"
                   onSubmit={handleSave}
                 >
-          <div className="client-form-grid">
+          <div className="client-form-sections">
+          <FormSection
+            title="Basics"
+            description="Who the client is and how the business is classified."
+          >
             <label className="field">
               <span className="field-label">Unique ID</span>
               <input
@@ -1478,6 +1874,59 @@ export function ClientProfilePanel() {
               }}
             />
 
+            <label className="field">
+              <span className="field-label">Website</span>
+              <input
+                className="field-input"
+                type="text"
+                inputMode="url"
+                value={form.website}
+                placeholder="https://"
+                onChange={(e) => updateField("website", e.target.value)}
+              />
+            </label>
+
+            <label className="field">
+              <span className="field-label">Year End</span>
+              <div className="year-end-row">
+                <select
+                  className="field-input field-select year-end-day"
+                  aria-label="Year End day"
+                  value={yearEndDay}
+                  onChange={(e) =>
+                    setYearEndParts(e.target.value, yearEndMonth)
+                  }
+                >
+                  <option value="">Day</option>
+                  {YEAR_END_DAYS.map((day) => (
+                    <option key={day.value} value={day.value}>
+                      {day.label}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="field-input field-select year-end-month"
+                  aria-label="Year End month"
+                  value={yearEndMonth}
+                  onChange={(e) =>
+                    setYearEndParts(yearEndDay, e.target.value)
+                  }
+                >
+                  <option value="">Month</option>
+                  {YEAR_END_MONTHS.map((month) => (
+                    <option key={month.value} value={month.value}>
+                      {month.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </label>
+          </FormSection>
+
+          <FormSection
+            title="Location & currency"
+            description="Where the client is based and how currency is handled."
+          >
             <fieldset className="field field--radio">
               <legend className="field-label">Country</legend>
               <div className="radio-row">
@@ -1496,6 +1945,38 @@ export function ClientProfilePanel() {
               </div>
             </fieldset>
 
+            <fieldset className="field field--radio">
+              <legend className="field-label">Payment Type</legend>
+              <div className="radio-row">
+                {PAYMENT_TYPE_OPTIONS.map((option) => (
+                  <label key={option} className="radio-option">
+                    <input
+                      type="radio"
+                      name="paymentType"
+                      value={option}
+                      checked={form.paymentType === option}
+                      onChange={() =>
+                        updateField("paymentType", option as PaymentType)
+                      }
+                    />
+                    {option === "Cash" ? "Cash basis" : "Accrual basis"}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+
+            <label className="field">
+              <span className="field-label">Reporting Currency</span>
+              <input
+                className="field-input"
+                value={
+                  form.reportingCurrency ||
+                  reportingCurrencyForCountry(form.country)
+                }
+                readOnly
+              />
+            </label>
+
             <SearchableSelect
               label={stateLabel}
               value={form.state}
@@ -1513,19 +1994,6 @@ export function ClientProfilePanel() {
               />
             </label>
 
-            {form.country === "CA" ? (
-              <label className="field">
-                <span className="field-label">Business Account Number</span>
-                <input
-                  className="field-input"
-                  value={form.businessAccountNumber}
-                  onChange={(e) =>
-                    updateField("businessAccountNumber", e.target.value)
-                  }
-                />
-              </label>
-            ) : null}
-
             <SearchableSelect
               label="Time Zone"
               value={form.timeZone}
@@ -1542,6 +2010,264 @@ export function ClientProfilePanel() {
                 );
               }}
             />
+          </FormSection>
+
+          <FormSection
+            title="Engagement"
+            description="How often you work with them, reporting expectations, and plan type."
+          >
+            <SearchableSelect
+              label="Service Frequency"
+              value={form.serviceFrequency}
+              options={serviceFrequencyOptions}
+              allowCreate
+              placeholder="Search/Select from the list"
+              onChange={handleServiceFrequencyChange}
+              onCreateOption={(label) => {
+                void createLookupValueFromProfile(
+                  "serviceFrequency",
+                  "serviceFrequency",
+                  "Service Frequency",
+                  label,
+                ).then(() => handleServiceFrequencyChange(label));
+              }}
+            />
+
+            <SearchableSelect
+              label="Reporting Tier"
+              value={form.reportingTier}
+              options={reportingTierOptions}
+              allowCreate
+              placeholder="Search/Select from the list"
+              onChange={(value) => updateField("reportingTier", value)}
+              onCreateOption={(label) => {
+                void createLookupValueFromProfile(
+                  "reportingTier",
+                  "reportingTier",
+                  "Reporting Tier",
+                  label,
+                );
+              }}
+            />
+
+            <SearchableSelect
+              label="Meeting Frequency"
+              value={form.meetingFrequency}
+              options={[...CLIENT_MEETING_FREQUENCY_OPTIONS]}
+              placeholder="Select monthly, quarterly, or none"
+              onChange={(value) =>
+                updateField(
+                  "meetingFrequency",
+                  value as ClientMeetingFrequency,
+                )
+              }
+            />
+
+            <fieldset className="field field--radio">
+              <legend className="field-label">
+                Accounts in both USD and CAD?
+              </legend>
+              <div className="radio-row">
+                {YES_NO_OPTIONS.map((option) => (
+                  <label key={option} className="radio-option">
+                    <input
+                      type="radio"
+                      name="hasUsdAndCadAccounts"
+                      value={option}
+                      checked={form.hasUsdAndCadAccounts === option}
+                      onChange={() =>
+                        updateField("hasUsdAndCadAccounts", option as YesNo)
+                      }
+                    />
+                    {option}
+                  </label>
+                ))}
+              </div>
+              <p className="lookup-hint">
+                Yes includes foreign-currency accounts in the request list and
+                reconciliations.
+              </p>
+            </fieldset>
+
+            <div className="field field--wide catch-up-plan-field">
+              <fieldset className="field field--radio">
+                <legend className="field-label">On catch-up project plan?</legend>
+                <div className="radio-row">
+                  {YES_NO_OPTIONS.map((option) => (
+                    <label key={option} className="radio-option">
+                      <input
+                        type="radio"
+                        name="onCatchUpPlan"
+                        value={option}
+                        checked={form.onCatchUpPlan === option}
+                        onChange={() =>
+                          updateField("onCatchUpPlan", option as YesNo)
+                        }
+                      />
+                      {option}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+              {form.onCatchUpPlan === "Yes" ? (
+                <div className="catch-up-plan-actions">
+                  <p className="lookup-hint">
+                    Catch-up clients stay on a separate project plan until the
+                    books are current.
+                  </p>
+                  <button
+                    type="button"
+                    className="button primary"
+                    onClick={switchToMonthlyCycle}
+                  >
+                    Switch to monthly cycle
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </FormSection>
+
+          <FormSection
+            title="Financial accounts"
+            description="Bank, credit card, loan, and merchant accounts — and whether each needs a statement."
+          >
+            <div className="field field--wide financial-accounts">
+              <div className="financial-accounts-header">
+                <span className="field-label">Accounts</span>
+                <button
+                  type="button"
+                  className="button secondary-solid"
+                  onClick={addFinancialAccount}
+                >
+                  Add account
+                </button>
+              </div>
+              {form.financialAccounts.length === 0 ? (
+                <p className="lookup-hint">
+                  Add bank, credit card, loan, and merchant accounts. For each,
+                  note whether it is on a bank feed or needs a statement from
+                  the client.
+                </p>
+              ) : (
+                <div className="financial-accounts-list">
+                  {form.financialAccounts.map((account, index) => (
+                    <div
+                      key={account.id}
+                      className="financial-account-row"
+                    >
+                      <div className="financial-account-row-title">
+                        <span>Account {index + 1}</span>
+                        <button
+                          type="button"
+                          className="button secondary"
+                          onClick={() => removeFinancialAccount(account.id)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      <div className="financial-account-row-grid">
+                        <label className="field">
+                          <span className="field-label">Account type</span>
+                          <select
+                            className="field-input"
+                            value={account.accountType}
+                            onChange={(event) =>
+                              updateFinancialAccount(
+                                account.id,
+                                "accountType",
+                                event.target.value as FinancialAccountType | "",
+                              )
+                            }
+                          >
+                            <option value="">Select type</option>
+                            {FINANCIAL_ACCOUNT_TYPE_OPTIONS.map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="field">
+                          <span className="field-label">Institution name</span>
+                          <input
+                            className="field-input"
+                            value={account.institutionName}
+                            placeholder="e.g. Chase, Amex, Square"
+                            onChange={(event) =>
+                              updateFinancialAccount(
+                                account.id,
+                                "institutionName",
+                                event.target.value,
+                              )
+                            }
+                          />
+                        </label>
+                        <label className="field">
+                          <span className="field-label">Last 4 digits</span>
+                          <input
+                            className="field-input"
+                            value={account.lastFour}
+                            inputMode="numeric"
+                            maxLength={4}
+                            placeholder="1234"
+                            onChange={(event) =>
+                              updateFinancialAccount(
+                                account.id,
+                                "lastFour",
+                                event.target.value.replace(/\D/g, "").slice(0, 4),
+                              )
+                            }
+                          />
+                        </label>
+                        <fieldset className="field field--radio">
+                          <legend className="field-label">Statement source</legend>
+                          <div className="radio-row">
+                            {FINANCIAL_ACCOUNT_SOURCE_OPTIONS.map((option) => (
+                              <label key={option} className="radio-option">
+                                <input
+                                  type="radio"
+                                  name={`financial-source-${account.id}`}
+                                  value={option}
+                                  checked={account.source === option}
+                                  onChange={() =>
+                                    updateFinancialAccount(
+                                      account.id,
+                                      "source",
+                                      option as FinancialAccountSource,
+                                    )
+                                  }
+                                />
+                                {option === "Needs statement"
+                                  ? "Needs statement from client"
+                                  : option}
+                              </label>
+                            ))}
+                          </div>
+                        </fieldset>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </FormSection>
+
+          <FormSection
+            title="Tax & registration"
+            description="IDs and numbers used for filings and setup."
+          >
+            {form.country === "CA" ? (
+              <label className="field">
+                <span className="field-label">Business Account Number</span>
+                <input
+                  className="field-input"
+                  value={form.businessAccountNumber}
+                  onChange={(e) =>
+                    updateField("businessAccountNumber", e.target.value)
+                  }
+                />
+              </label>
+            ) : null}
 
             {form.country === "US" ? (
               <label className="field">
@@ -1588,76 +2314,6 @@ export function ClientProfilePanel() {
               />
             </label>
 
-            <label className="field">
-              <span className="field-label">Year End</span>
-              <div className="year-end-row">
-                <select
-                  className="field-input field-select year-end-day"
-                  aria-label="Year End day"
-                  value={yearEndDay}
-                  onChange={(e) =>
-                    setYearEndParts(e.target.value, yearEndMonth)
-                  }
-                >
-                  <option value="">Day</option>
-                  {YEAR_END_DAYS.map((day) => (
-                    <option key={day.value} value={day.value}>
-                      {day.label}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  className="field-input field-select year-end-month"
-                  aria-label="Year End month"
-                  value={yearEndMonth}
-                  onChange={(e) =>
-                    setYearEndParts(yearEndDay, e.target.value)
-                  }
-                >
-                  <option value="">Month</option>
-                  {YEAR_END_MONTHS.map((month) => (
-                    <option key={month.value} value={month.value}>
-                      {month.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </label>
-
-            <label className="field">
-              <span className="field-label">Website</span>
-              <input
-                className="field-input"
-                type="text"
-                inputMode="url"
-                value={form.website}
-                placeholder="https://"
-                onChange={(e) => updateField("website", e.target.value)}
-              />
-            </label>
-
-            <label className="field">
-              <span className="field-label">Portal Link</span>
-              <input
-                className="field-input"
-                type="text"
-                inputMode="url"
-                value={form.portalLink}
-                placeholder="https://"
-                onChange={(e) => updateField("portalLink", e.target.value)}
-              />
-              {form.portalLink.trim() ? (
-                <a
-                  className="table-link client-profile-portal-link"
-                  href={toWebsiteHref(form.portalLink.trim())}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Open portal link
-                </a>
-              ) : null}
-            </label>
-
             {form.country === "CA" ? (
               <label className="field">
                 <span className="field-label">Canadian Business Number</span>
@@ -1681,6 +2337,158 @@ export function ClientProfilePanel() {
                 />
               </label>
             ) : null}
+          </FormSection>
+
+          <FormSection
+            title="Portal"
+            description="SharePoint site used for document uploads."
+          >
+            {!editingId ? (
+              <label className="field field--checkbox">
+                <span className="field-label">
+                  <input
+                    type="checkbox"
+                    checked={createSharePointSite}
+                    disabled={saving}
+                    onChange={(event) => {
+                      const checked = event.target.checked;
+                      setCreateSharePointSite(checked);
+                      if (!checked) {
+                        setSharePointMemberEmails("");
+                      } else {
+                        setSharePointSitesError(null);
+                      }
+                    }}
+                  />{" "}
+                  Create site on SharePoint
+                </span>
+                <span className="lookup-hint">
+                  {createSharePointSite
+                    ? `On save, creates "${clientSharePointSiteDisplayName(form.legalName || "Client Name")}", year/month folders (e.g. 2026/01.Jan26…12.Dec26), and fills Portal Link.`
+                    : "Leave unchecked to pick an existing SharePoint site below."}
+                </span>
+              </label>
+            ) : null}
+
+            {!editingId && createSharePointSite ? (
+              <label className="field">
+                <span className="field-label">SharePoint members</span>
+                <textarea
+                  className="field-input"
+                  rows={3}
+                  value={sharePointMemberEmails}
+                  disabled={saving}
+                  placeholder="email1@fireflyaccountancy.com, email2@fireflyaccountancy.com"
+                  onChange={(event) =>
+                    setSharePointMemberEmails(event.target.value)
+                  }
+                />
+                <span className="lookup-hint">
+                  Optional. Comma-separated Fire Fly emails added as site
+                  members. You (signed-in user) are already the owner.
+                </span>
+              </label>
+            ) : null}
+
+            <div className="field">
+              <span className="field-label">Portal Link</span>
+              {!editingId && createSharePointSite ? (
+                <input
+                  className="field-input field-input--readonly"
+                  type="text"
+                  readOnly
+                  value={
+                    form.portalLink.trim() ||
+                    `Will create: ${clientSharePointSiteDisplayName(form.legalName || "Client Name")}`
+                  }
+                />
+              ) : (
+                <>
+                  <SearchableSelect
+                    label="Portal Link"
+                    hideLabel
+                    value={form.portalLink}
+                    options={portalLinkOptions}
+                    placeholder={
+                      loadingSharePointSites
+                        ? "Loading SharePoint sites…"
+                        : editingId
+                          ? "Select the existing SharePoint site…"
+                          : "Select an existing site…"
+                    }
+                    allowCreate
+                    disabled={saving || loadingSharePointSites}
+                    onChange={(value) => updateField("portalLink", value)}
+                  />
+                  {editingId ? (
+                    <span className="lookup-hint">
+                      Pick the client’s existing SharePoint site (search by
+                      name), then Save.
+                    </span>
+                  ) : null}
+                  {sharePointSitesError ? (
+                    <p className="form-message error">{sharePointSitesError}</p>
+                  ) : null}
+                </>
+              )}
+              {form.portalLink.trim() ? (
+                <a
+                  className="table-link client-profile-portal-link"
+                  href={toWebsiteHref(form.portalLink.trim())}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Open portal link
+                </a>
+              ) : null}
+            </div>
+          </FormSection>
+
+          <FormSection
+            title="Payroll"
+            description="Payroll provider and whether reports are needed from it."
+          >
+            <SearchableSelect
+              label="Payroll Provider"
+              value={form.payrollProvider}
+              options={payrollProviderOptions}
+              allowCreate
+              placeholder="Search/Select from the list"
+              onChange={(value) => updateField("payrollProvider", value)}
+              onCreateOption={(label) => {
+                void createLookupValueFromProfile(
+                  "payrollProvider",
+                  "payrollProvider",
+                  "Payroll Provider",
+                  label,
+                );
+              }}
+            />
+
+            <fieldset className="field field--radio">
+              <legend className="field-label">
+                Need reports from payroll provider?
+              </legend>
+              <div className="radio-row">
+                {PAYROLL_REPORTS_NEEDED_OPTIONS.map((option) => (
+                  <label key={option} className="radio-option">
+                    <input
+                      type="radio"
+                      name="payrollReportsNeeded"
+                      value={option}
+                      checked={form.payrollReportsNeeded === option}
+                      onChange={() =>
+                        updateField(
+                          "payrollReportsNeeded",
+                          option as PayrollReportsNeeded,
+                        )
+                      }
+                    />
+                    {option}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
 
             <label className="field">
               <span className="field-label">Payroll Account Numbers</span>
@@ -1692,7 +2500,12 @@ export function ClientProfilePanel() {
                 }
               />
             </label>
+          </FormSection>
 
+          <FormSection
+            title="People"
+            description="Owner, day-to-day POC, document-request contacts, and who receives financials."
+          >
             <label className="field">
               <span className="field-label">Owner Name</span>
               <input
@@ -1752,6 +2565,81 @@ export function ClientProfilePanel() {
                 onChange={(e) => updateField("pocPhone", e.target.value)}
               />
             </label>
+
+            <p className="field field--wide client-form-subsection-label">
+              Document request contacts
+            </p>
+
+            <label className="field">
+              <span className="field-label">Document Request Contact</span>
+              <input
+                className="field-input"
+                value={form.documentRequestContact}
+                onChange={(e) =>
+                  updateField("documentRequestContact", e.target.value)
+                }
+              />
+            </label>
+
+            <label className="field">
+              <span className="field-label">Document Request Email</span>
+              <input
+                className="field-input"
+                type="text"
+                inputMode="email"
+                value={form.documentRequestEmail}
+                placeholder="email@example.com, email2@example.com"
+                onChange={(e) =>
+                  updateField("documentRequestEmail", e.target.value)
+                }
+              />
+            </label>
+
+            <label className="field">
+              <span className="field-label">Document Request Phone</span>
+              <input
+                className="field-input"
+                value={form.documentRequestPhone}
+                onChange={(e) =>
+                  updateField("documentRequestPhone", e.target.value)
+                }
+              />
+            </label>
+
+            <p className="field field--wide client-form-subsection-label">
+              Contacts who receive financials
+            </p>
+
+            <label className="field">
+              <span className="field-label">Financials Contact</span>
+              <input
+                className="field-input"
+                value={form.financialsContact}
+                onChange={(e) => updateField("financialsContact", e.target.value)}
+              />
+            </label>
+
+            <label className="field">
+              <span className="field-label">Financials Email</span>
+              <input
+                className="field-input"
+                type="text"
+                inputMode="email"
+                value={form.financialsEmail}
+                placeholder="email@example.com, email2@example.com"
+                onChange={(e) => updateField("financialsEmail", e.target.value)}
+              />
+            </label>
+
+            <label className="field">
+              <span className="field-label">Financials Phone</span>
+              <input
+                className="field-input"
+                value={form.financialsPhone}
+                onChange={(e) => updateField("financialsPhone", e.target.value)}
+              />
+            </label>
+          </FormSection>
           </div>
 
                   <div className="dialog-actions">

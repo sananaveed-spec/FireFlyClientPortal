@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useAccess } from "@/auth/accessContext";
 import { ClientManagementPanel } from "@/components/ClientManagementPanel";
 import { ClientProfilePanel } from "@/components/ClientProfilePanel";
+import { FlexibleClientManagementPanel } from "@/components/FlexibleClientManagementPanel";
 import { HistoryPanel } from "@/components/HistoryPanel";
 import { LookupDataPanel } from "@/components/LookupDataPanel";
 import { ProfilePanel } from "@/components/ProfilePanel";
@@ -54,6 +55,8 @@ export function DashboardShell({ userName }: DashboardShellProps) {
               <ResourceAllocationPanel />
             ) : activeTab === "clientManagement" ? (
               <ClientManagementPanel />
+            ) : activeTab === "flexibleClientManagement" ? (
+              <FlexibleClientManagementPanel />
             ) : activeTab === "lookupData" ? (
               <LookupDataPanel />
             ) : activeTab === "userManagement" ? (

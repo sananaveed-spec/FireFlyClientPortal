@@ -83,6 +83,10 @@ function clientRequestListsPath() {
   return path.join(getDataDir(), "client-request-lists.json");
 }
 
+function flexibleAdjustableSettingsPath() {
+  return path.join(getDataDir(), "flexible-adjustable-settings.json");
+}
+
 async function writeJsonFile(filePath: string, value: unknown) {
   const tempPath = `${filePath}.${process.pid}.tmp`;
   const payload = `${JSON.stringify(value, null, 2)}\n`;
@@ -438,4 +442,26 @@ export async function writeClientRequestListsFile(
 ): Promise<void> {
   await ensureDataDir();
   await writeJsonFile(clientRequestListsPath(), value);
+}
+
+export async function readFlexibleAdjustableSettingsFile(): Promise<unknown> {
+  await ensureDataDir();
+  const filePath = flexibleAdjustableSettingsPath();
+
+  try {
+    const raw = await readFile(filePath, "utf8");
+    return parseJsonFile(raw);
+  } catch (error) {
+    if (isMissingFile(error)) {
+      return { clients: [] };
+    }
+    throw error;
+  }
+}
+
+export async function writeFlexibleAdjustableSettingsFile(
+  value: unknown,
+): Promise<void> {
+  await ensureDataDir();
+  await writeJsonFile(flexibleAdjustableSettingsPath(), value);
 }

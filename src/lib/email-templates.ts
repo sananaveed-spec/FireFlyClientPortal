@@ -51,7 +51,7 @@ const TEMPLATE_META: {
 We are starting the bookkeeping for [Period] and need the statements for the accounts below:
 • [List of bank and credit card accounts, with last 4 digits]
 
-Please upload them to the portal by [Due Date]: [Portal Link]
+Please upload them to the [portal] by [Due Date]
 
 PDF statements downloaded from your online banking are perfect but a CSV is always welcomed. Please send the full statement, including every page, even if some pages have no transactions.
 
@@ -74,7 +74,7 @@ This usually includes:
 • Equipment or vehicle lease statements and any rental agreements that changed this month
 • Statements from any other financial institution, investment or brokerage account held by the business
 
-Please upload them to the portal by [Due Date]: [Portal Link]
+Please upload them to the [portal] by [Due Date]
 
 If you took out a new loan, signed a new lease, or paid off an existing one during the month, please upload the agreement or payoff letter as well.`,
   },
@@ -89,7 +89,7 @@ If you took out a new loan, signed a new lease, or paid off an existing one duri
 
 We are working through your [Period] books and have [Number] transactions we could not identify from the bank and card details alone. They total [Total Amount].
 
-You can see the full list in the portal here: [Portal Link]
+You can see the full list in the portal
 
 For each one, please tell us:
 • What it was for (for example, software subscription, materials for a job, owner personal expense)
@@ -113,7 +113,7 @@ Please reply by [Due Date] so we can close your books on schedule. Anything stil
 We need receipts or invoices for the following transactions from [Period], as they are over [Receipt Threshold]:
 • [List: date, payee, amount]
 
-You can upload them directly against each item in the portal: [Portal Link]. A photo taken on your phone is fine as long as the date, vendor and amount are readable.
+You can upload them directly against each item in the portal. A photo taken on your phone is fine as long as the date, vendor and amount are readable.
 
 Keeping receipts on file for larger purchases makes things much easier if you are ever asked to support an expense.
 
@@ -131,7 +131,7 @@ A quick heads-up that [Month] is wrapping up. To keep your books on track, here 
 • Receipts for purchases over [Receipt Threshold]
 • Any notes on unusual items this month: new loans, large purchases, money put into or taken out of the business
 
-We will send the formal request on [BD1 Date], and the due date will be [Due Date]. If you already have anything ready, you are welcome to upload it now: [Portal Link]`,
+We will send the formal request on [BD1 Date], and the due date will be [Due Date]. If you already have anything ready, you are welcome to upload it to the portal now.`,
   },
   {
     id: "template-6",
@@ -146,7 +146,7 @@ Just a friendly reminder that we are still waiting on the following for [Period]
 
 These were due on [Due Date]. Once we have them we can finish reconciling your accounts and get your financials to you.
 
-You can upload them here: [Portal Link]
+You can upload them to the portal
 
 If anything is difficult to get hold of, let us know and we will help.`,
   },
@@ -163,7 +163,7 @@ We are following up again as the items below for [Period] are still outstanding:
 
 Without these, we are unable to complete your reconciliations, and your financial statements will be delayed. Our delivery date moves back by the number of days the documents are late, so the current expected date for your financials is [Revised Delivery Date].
 
-Please upload what you can here: [Portal Link]. If it is easier, reply to this email with a good time and we will give you a quick call to sort it out together.`,
+Please upload what you can to the portal. If it is easier, reply to this email with a good time and we will give you a quick call to sort it out together.`,
   },
   {
     id: "template-8",
@@ -173,7 +173,7 @@ Please upload what you can here: [Portal Link]. If it is easier, reply to this e
     subject: "Reminder: [Number] open questions on your [Period] books",
     body: `Hi [Contact First Name],
 
-We still have [Number] open questions on your [Period] books, totaling [Total Amount]. You can see and answer them here: [Portal Link]
+We still have [Number] open questions on your [Period] books, totaling [Total Amount]. You can see and answer them in the portal
 
 Most of them should only take a few seconds each. If you are unsure about any item, just say so and we will look into it further.
 
@@ -203,7 +203,7 @@ The connection between your [Bank Name] account ending in [Last 4 Digits] and Qu
 
 To fix it, please log in to QuickBooks, go to Transactions, then Bank transactions, and follow the prompt to reconnect the account. It normally takes a couple of minutes.
 
-If you would rather not reconnect, please upload the [Period] statement to the portal instead: [Portal Link]
+If you would rather not reconnect, please upload the [Period] statement to the portal instead
 
 Let us know if you run into any trouble and we can walk you through it.`,
   },
@@ -214,7 +214,7 @@ Let us know if you run into any trouble and we can walk you through it.`,
     subject: "[Client Name]: Your financial statements for [Period] are ready",
     body: `Hi [Contact First Name],
 
-Your financial statements for [Period] are ready and available in the portal: [Portal Link]
+Your financial statements for [Period] are ready and available in the portal
 
 The package includes:
 • Profit and Loss (month and year to date)
@@ -245,7 +245,7 @@ Agenda:
 • Open questions: [Number] items, listed in the portal
 • Anything you would like to discuss
 
-Your financial statements are in the portal here: [Portal Link]. If you have a chance to look before the call, we can spend more of the time on what matters to you.
+Your financial statements are in the portal. If you have a chance to look before the call, we can spend more of the time on what matters to you.
 
 If the time no longer works, you can reschedule here: [Booking Link]`,
   },
@@ -275,7 +275,7 @@ If we missed anything, just reply to this email. Our next review is planned for 
     subject: "Welcome to [Firm Name]: getting your bookkeeping set up",
     body: `Hi [Contact First Name],
 
-Welcome aboard. We are glad to be working with you. Your portal account is ready, and you can log in here: [Portal Link]
+Welcome aboard. We are glad to be working with you. Your portal account is ready, and you can log in to the portal
 
 To get started, we need the following:
 • Accountant (user) access to your QuickBooks Online company
@@ -312,7 +312,7 @@ As [Fiscal Year] comes to a close, we will be finalizing your books for the full
 • Inventory count at year-end, if applicable
 • Details of any money put into or taken out of the business by the owners
 
-Please upload these to the portal by [Due Date]: [Portal Link]
+Please upload these to the [portal] by [Due Date]
 
 Getting these in early means your final year-end numbers will be ready by [Year-End Delivery Date].`,
   },
