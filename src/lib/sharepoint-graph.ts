@@ -595,20 +595,26 @@ function parseSharePointSiteFromPortalLink(portalLink: string): {
   return { hostname: url.hostname, sitePath: match[1] };
 }
 
+type DriveChildrenPage = {
+  value?: { name?: string; file?: unknown; folder?: unknown }[];
+  "@odata.nextLink"?: string;
+};
+
 async function listDriveChildrenFileNames(
   accessToken: string,
   childrenUrl: string,
 ): Promise<string[]> {
   const names: string[] = [];
-  let url: string | null = childrenUrl;
+  let nextUrl: string | null = childrenUrl;
   let pages = 0;
 
-  while (url && pages < 20) {
+  while (nextUrl && pages < 20) {
     pages += 1;
-    const data = await graphJson<{
-      value?: { name?: string; file?: unknown; folder?: unknown }[];
-      "@odata.nextLink"?: string;
-    }>(accessToken, url);
+    const pageUrl = nextUrl;
+    const data: DriveChildrenPage = await graphJson<DriveChildrenPage>(
+      accessToken,
+      pageUrl,
+    );
 
     for (const item of data.value ?? []) {
       const name = String(item.name ?? "").trim();
@@ -618,7 +624,7 @@ async function listDriveChildrenFileNames(
       names.push(name);
     }
 
-    url = data["@odata.nextLink"]?.trim() || null;
+    nextUrl = data["@odata.nextLink"]?.trim() || null;
   }
 
   return names;
