@@ -420,7 +420,7 @@ const CLIENT_SCHEDULE_ITEMS = [
   { id: "last-1-bd", label: "Last 1 BD" },
 ] as const;
 
-const CLIENT_SCHEDULE_ORDER = new Map(
+const CLIENT_SCHEDULE_ORDER = new Map<string, number>(
   CLIENT_SCHEDULE_ITEMS.map((item, index) => [item.id, index]),
 );
 
