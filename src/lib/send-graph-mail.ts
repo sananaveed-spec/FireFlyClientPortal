@@ -15,6 +15,13 @@ import {
 } from "@/lib/email-signatures";
 import { linkPortalKeywordsHtml } from "@/lib/email-portal-link";
 
+export type GraphMailAttachment = {
+  name: string;
+  contentType: string;
+  /** Base64-encoded file bytes for Microsoft Graph fileAttachment. */
+  contentBytes: string;
+};
+
 export type GraphMailPayload = {
   to: string;
   cc?: string;
@@ -26,6 +33,8 @@ export type GraphMailPayload = {
   /** When set, whole-word "portal" in the body becomes a hyperlink. */
   portalHref?: string | null;
   signature: EmailSignature;
+  /** Optional file attachments (e.g. BD8 question-list Excel). */
+  attachments?: GraphMailAttachment[];
   /**
    * When set (must be in the future), Outlook holds the message until this
    * time via PidTagDeferredSendTime (SystemTime 0x3FEF).
@@ -243,6 +252,19 @@ export async function sendGraphMail(
     ccRecipients: toRecipientList(parseEmailList(payload.cc ?? "")),
     bccRecipients: toRecipientList(parseEmailList(payload.bcc ?? "")),
   };
+
+  const attachments = (payload.attachments ?? []).filter(
+    (item) => item.name.trim() && item.contentBytes.trim(),
+  );
+  if (attachments.length > 0) {
+    message.hasAttachments = true;
+    message.attachments = attachments.map((item) => ({
+      "@odata.type": "#microsoft.graph.fileAttachment",
+      name: item.name.trim(),
+      contentType: item.contentType.trim() || "application/octet-stream",
+      contentBytes: item.contentBytes.trim(),
+    }));
+  }
 
   if (sendAt) {
     message.singleValueExtendedProperties = [

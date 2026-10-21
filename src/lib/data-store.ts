@@ -34,6 +34,11 @@ import {
   type LookupDataStore,
 } from "@/lib/lookup-data";
 import {
+  createDefaultRepeatedTasks,
+  normalizeRepeatedTasks,
+  type RepeatedTasksStore,
+} from "@/lib/repeated-tasks";
+import {
   normalizeResourceClient,
   type ResourceClientEntry,
 } from "@/lib/resource-clients";
@@ -63,6 +68,10 @@ function holidaysPath() {
   return path.join(getDataDir(), "holidays.json");
 }
 
+function repeatedTasksPath() {
+  return path.join(getDataDir(), "repeated-tasks.json");
+}
+
 function emailTemplatesPath() {
   return path.join(getDataDir(), "email-templates.json");
 }
@@ -83,16 +92,59 @@ function clientRequestListsPath() {
   return path.join(getDataDir(), "client-request-lists.json");
 }
 
-function flexibleAdjustableSettingsPath() {
-  return path.join(getDataDir(), "flexible-adjustable-settings.json");
+function clientScheduleSettingsPath() {
+  return path.join(getDataDir(), "client-schedule-settings.json");
+}
+
+function bd8EmailAttachmentsPath() {
+  return path.join(getDataDir(), "bd8-email-attachments.json");
+}
+
+function bd15EmailAttachmentsPath() {
+  return path.join(getDataDir(), "bd15-email-attachments.json");
+}
+
+function bd15EmailStatusPath() {
+  return path.join(getDataDir(), "bd15-email-status.json");
+}
+
+function pakistanHolidayEmailsPath() {
+  return path.join(getDataDir(), "pakistan-holiday-emails.json");
 }
 
 async function writeJsonFile(filePath: string, value: unknown) {
-  const tempPath = `${filePath}.${process.pid}.tmp`;
-  const payload = `${JSON.stringify(value, null, 2)}\n`;
+  const serialized = JSON.stringify(value, null, 2);
+  if (typeof serialized !== "string" || !serialized.trim()) {
+    throw new Error(`Refusing to write empty JSON to ${path.basename(filePath)}.`);
+  }
+  const payload = `${serialized}\n`;
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
   await writeFile(tempPath, payload, "utf8");
+  // Confirm temp is valid before replacing the live file (avoids 0-byte wipes).
+  const verify = await readFile(tempPath, "utf8");
+  JSON.parse(verify);
   await copyFile(tempPath, filePath);
   await unlink(tempPath).catch(() => undefined);
+}
+
+/** Read JSON; treat empty/corrupt as missing so callers can reseeds defaults. */
+async function readJsonFileOrNull(filePath: string): Promise<unknown | null> {
+  try {
+    const raw = await readFile(filePath, "utf8");
+    if (!raw.trim()) {
+      return null;
+    }
+    try {
+      return parseJsonFile(raw);
+    } catch {
+      return null;
+    }
+  } catch (error) {
+    if (isMissingFile(error)) {
+      return null;
+    }
+    throw error;
+  }
 }
 
 function parseFirstJsonValue(text: string): unknown {
@@ -271,6 +323,25 @@ export async function writeHolidays(data: HolidaysStore): Promise<void> {
   await writeJsonFile(holidaysPath(), normalizeHolidays(data));
 }
 
+export async function readRepeatedTasks(): Promise<RepeatedTasksStore> {
+  await ensureDataDir();
+  const filePath = repeatedTasksPath();
+  const parsed = await readJsonFileOrNull(filePath);
+  if (parsed == null) {
+    const defaults = createDefaultRepeatedTasks();
+    await writeRepeatedTasks(defaults);
+    return defaults;
+  }
+  return normalizeRepeatedTasks(parsed);
+}
+
+export async function writeRepeatedTasks(
+  data: RepeatedTasksStore,
+): Promise<void> {
+  await ensureDataDir();
+  await writeJsonFile(repeatedTasksPath(), normalizeRepeatedTasks(data));
+}
+
 export async function readEmailTemplates(): Promise<EmailTemplatesStore> {
   await ensureDataDir();
   const filePath = emailTemplatesPath();
@@ -425,43 +496,130 @@ export async function writePortalUsersFile(users: unknown): Promise<void> {
 export async function readClientRequestListsFile(): Promise<unknown> {
   await ensureDataDir();
   const filePath = clientRequestListsPath();
-
-  try {
-    const raw = await readFile(filePath, "utf8");
-    return parseJsonFile(raw);
-  } catch (error) {
-    if (isMissingFile(error)) {
-      return { lists: [] };
-    }
-    throw error;
+  const parsed = await readJsonFileOrNull(filePath);
+  if (parsed == null) {
+    const empty = { lists: [] };
+    await writeJsonFile(filePath, empty);
+    return empty;
   }
+  return parsed;
 }
 
 export async function writeClientRequestListsFile(
   value: unknown,
 ): Promise<void> {
   await ensureDataDir();
+  // Never persist a non-object / undefined payload (can truncate the file).
+  if (!value || typeof value !== "object") {
+    throw new Error("Invalid client request lists payload.");
+  }
   await writeJsonFile(clientRequestListsPath(), value);
 }
 
-export async function readFlexibleAdjustableSettingsFile(): Promise<unknown> {
+export async function readClientScheduleSettingsFile(): Promise<unknown> {
   await ensureDataDir();
-  const filePath = flexibleAdjustableSettingsPath();
+  const filePath = clientScheduleSettingsPath();
 
   try {
     const raw = await readFile(filePath, "utf8");
     return parseJsonFile(raw);
   } catch (error) {
     if (isMissingFile(error)) {
-      return { clients: [] };
+      return { settings: [] };
     }
     throw error;
   }
 }
 
-export async function writeFlexibleAdjustableSettingsFile(
+export async function writeClientScheduleSettingsFile(
   value: unknown,
 ): Promise<void> {
   await ensureDataDir();
-  await writeJsonFile(flexibleAdjustableSettingsPath(), value);
+  await writeJsonFile(clientScheduleSettingsPath(), value);
+}
+
+export async function readBd8EmailAttachmentsFile(): Promise<unknown> {
+  await ensureDataDir();
+  const filePath = bd8EmailAttachmentsPath();
+
+  try {
+    const raw = await readFile(filePath, "utf8");
+    return parseJsonFile(raw);
+  } catch (error) {
+    if (isMissingFile(error)) {
+      return { attachments: [] };
+    }
+    throw error;
+  }
+}
+
+export async function writeBd8EmailAttachmentsFile(
+  value: unknown,
+): Promise<void> {
+  await ensureDataDir();
+  await writeJsonFile(bd8EmailAttachmentsPath(), value);
+}
+
+export async function readBd15EmailAttachmentsFile(): Promise<unknown> {
+  await ensureDataDir();
+  const filePath = bd15EmailAttachmentsPath();
+
+  try {
+    const raw = await readFile(filePath, "utf8");
+    return parseJsonFile(raw);
+  } catch (error) {
+    if (isMissingFile(error)) {
+      return { attachments: [] };
+    }
+    throw error;
+  }
+}
+
+export async function writeBd15EmailAttachmentsFile(
+  value: unknown,
+): Promise<void> {
+  await ensureDataDir();
+  await writeJsonFile(bd15EmailAttachmentsPath(), value);
+}
+
+export async function readBd15EmailStatusFile(): Promise<unknown> {
+  await ensureDataDir();
+  const filePath = bd15EmailStatusPath();
+
+  try {
+    const raw = await readFile(filePath, "utf8");
+    return parseJsonFile(raw);
+  } catch (error) {
+    if (isMissingFile(error)) {
+      return { statuses: [] };
+    }
+    throw error;
+  }
+}
+
+export async function writeBd15EmailStatusFile(value: unknown): Promise<void> {
+  await ensureDataDir();
+  await writeJsonFile(bd15EmailStatusPath(), value);
+}
+
+export async function readPakistanHolidayEmailsFile(): Promise<unknown> {
+  await ensureDataDir();
+  const filePath = pakistanHolidayEmailsPath();
+  const parsed = await readJsonFileOrNull(filePath);
+  if (parsed == null) {
+    const empty = { entries: [] };
+    await writeJsonFile(filePath, empty);
+    return empty;
+  }
+  return parsed;
+}
+
+export async function writePakistanHolidayEmailsFile(
+  value: unknown,
+): Promise<void> {
+  await ensureDataDir();
+  if (!value || typeof value !== "object") {
+    throw new Error("Invalid Pakistan holiday emails payload.");
+  }
+  await writeJsonFile(pakistanHolidayEmailsPath(), value);
 }

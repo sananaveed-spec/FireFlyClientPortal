@@ -60,20 +60,17 @@ function holidayAppliesToClient(
   return scope.toLowerCase() === state;
 }
 
-/** When true, business-day math skips weekends only (holidays are not deducted). */
-const IGNORE_HOLIDAYS_IN_BUSINESS_DAYS = true;
-
-/** Pakistan holidays + client-country holidays (by state/province when set). */
+/**
+ * Pakistan holidays + client-country holidays (by state/province when set).
+ * Used to detect when a scheduled BD lands on a holiday so it can move to the
+ * next working day. Weekend-only counting is used for the BD ordinal itself.
+ */
 export function collectNonBusinessDates(
   store: HolidaysStore,
   clientCountry: ClientCountry | string | undefined,
   clientState: string,
   year: number,
 ): Set<string> {
-  if (IGNORE_HOLIDAYS_IN_BUSINESS_DAYS) {
-    return new Set();
-  }
-
   const excluded = new Set<string>();
   const clientHolidayCountryId = clientCountryToHolidayId(clientCountry);
 
@@ -116,6 +113,39 @@ export function isBusinessDay(date: Date, excludedDates: Set<string>): boolean {
     return false;
   }
   return !excludedDates.has(toYmd(date));
+}
+
+/**
+ * Next working day strictly after `from` (skips weekends + excluded holidays).
+ * May cross into a later month.
+ */
+export function getNextBusinessDay(
+  from: Date,
+  excludedDates: Set<string>,
+): Date {
+  const date = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  for (let step = 0; step < 366; step += 1) {
+    date.setDate(date.getDate() + 1);
+    if (isBusinessDay(date, excludedDates)) {
+      return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    }
+  }
+  return new Date(from.getFullYear(), from.getMonth(), from.getDate() + 1);
+}
+
+/**
+ * If `date` is a weekend or holiday, advance to the next working day.
+ * Otherwise return a date-only copy of `date`.
+ */
+export function ensureWorkingDay(
+  date: Date,
+  excludedDates: Set<string>,
+): Date {
+  const day = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  if (isBusinessDay(day, excludedDates)) {
+    return day;
+  }
+  return getNextBusinessDay(day, excludedDates);
 }
 
 /** 1-based nth business day within the given month (local calendar). */
@@ -184,11 +214,11 @@ export function scheduleBusinessDayNumber(scheduleId: string): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-/** Parse schedule ids like last-1-bd / last-3-bd into the last-nth ordinal. */
+/** Parse schedule ids like last-1-bd / last-3-bd / last-3-bd-team into the last-nth ordinal. */
 export function scheduleLastBusinessDayNumber(
   scheduleId: string,
 ): number | null {
-  const match = /^last-(\d+)-bd$/i.exec(scheduleId.trim());
+  const match = /^last-(\d+)-bd(?:-team)?$/i.exec(scheduleId.trim());
   if (!match) {
     return null;
   }
@@ -196,6 +226,17 @@ export function scheduleLastBusinessDayNumber(
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+/**
+ * Resolve a schedule slot (bd5, last-2-bd, …) to a calendar date for the
+ * current month.
+ *
+ * Strategy:
+ * 1. Count BD ordinals using weekends only (a holiday on BD3 does not renumber
+ *    BD5/BD8).
+ * 2. If that date is a client/Pakistan holiday, move that schedule only to the
+ *    next working day (skip weekends + holidays). Other BDs stay put.
+ * 3. Recalculated each month from `now`.
+ */
 export function getScheduleBusinessDate(
   scheduleId: string,
   holidays: HolidaysStore,
@@ -205,21 +246,98 @@ export function getScheduleBusinessDate(
 ): Date | null {
   const year = now.getFullYear();
   const monthIndex = now.getMonth();
-  const excluded = collectNonBusinessDates(
+  // Weekend-only count for the BD ordinal (empty holiday set).
+  const weekendOnly = new Set<string>();
+  // Holidays used only when a scheduled BD lands on a holiday.
+  const holidayDates = collectNonBusinessDates(
     holidays,
     clientCountry,
     clientState,
     year,
   );
+  // Also include next year's holidays near month-end spillover.
+  const nextYearHolidays = collectNonBusinessDates(
+    holidays,
+    clientCountry,
+    clientState,
+    year + 1,
+  );
+  const excludedForShift = new Set<string>([
+    ...holidayDates,
+    ...nextYearHolidays,
+  ]);
 
   const lastN = scheduleLastBusinessDayNumber(scheduleId);
+  let date: Date | null = null;
   if (lastN !== null) {
-    return getLastNthBusinessDayOfMonth(year, monthIndex, lastN, excluded);
+    date = getLastNthBusinessDayOfMonth(
+      year,
+      monthIndex,
+      lastN,
+      weekendOnly,
+    );
+  } else {
+    const n = scheduleBusinessDayNumber(scheduleId);
+    if (n === null) {
+      return null;
+    }
+    date = getNthBusinessDayOfMonth(year, monthIndex, n, weekendOnly);
   }
 
-  const n = scheduleBusinessDayNumber(scheduleId);
-  if (n === null) {
+  if (!date) {
     return null;
   }
-  return getNthBusinessDayOfMonth(year, monthIndex, n, excluded);
+
+  // Holiday on this BD → move this schedule to the next working day only.
+  return ensureWorkingDay(date, excludedForShift);
+}
+
+/** True if any Sat/Sun falls strictly between `from` and `to` (exclusive). */
+function hasWeekendBetween(from: Date, to: Date): boolean {
+  const cursor = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  const end = new Date(to.getFullYear(), to.getMonth(), to.getDate());
+  cursor.setDate(cursor.getDate() + 1);
+  while (cursor < end) {
+    if (isWeekend(cursor)) {
+      return true;
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return false;
+}
+
+/**
+ * BD7 email deadline: BD8 by default; if a weekend falls between BD7 and BD8
+ * (e.g. BD7 Fri → BD8 Mon), use BD7 instead.
+ */
+export function getBd7DeadlineDate(
+  holidays: HolidaysStore,
+  clientCountry: ClientCountry | string | undefined,
+  clientState: string,
+  now: Date = new Date(),
+): Date | null {
+  const bd7 = getScheduleBusinessDate(
+    "bd7",
+    holidays,
+    clientCountry,
+    clientState,
+    now,
+  );
+  const bd8 = getScheduleBusinessDate(
+    "bd8",
+    holidays,
+    clientCountry,
+    clientState,
+    now,
+  );
+  if (!bd7) {
+    return bd8;
+  }
+  if (!bd8) {
+    return bd7;
+  }
+  if (hasWeekendBetween(bd7, bd8)) {
+    return bd7;
+  }
+  return bd8;
 }

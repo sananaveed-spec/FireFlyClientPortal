@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { useAccess } from "@/auth/accessContext";
 import { ClientManagementPanel } from "@/components/ClientManagementPanel";
 import { ClientProfilePanel } from "@/components/ClientProfilePanel";
-import { FlexibleClientManagementPanel } from "@/components/FlexibleClientManagementPanel";
 import { HistoryPanel } from "@/components/HistoryPanel";
+import { IgnitionPanel } from "@/components/IgnitionPanel";
 import { LookupDataPanel } from "@/components/LookupDataPanel";
 import { ProfilePanel } from "@/components/ProfilePanel";
 import { ResourceAllocationPanel } from "@/components/ResourceAllocationPanel";
@@ -16,12 +16,33 @@ type DashboardShellProps = {
   userName?: string | null;
 };
 
+function tabFromSearch(): DashboardTab | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const tab = new URLSearchParams(window.location.search).get("tab");
+  if (tab === "ignition") {
+    return "ignition";
+  }
+  return null;
+}
+
 export function DashboardShell({ userName }: DashboardShellProps) {
   const { canManageUsers, canEdit } = useAccess();
   const [activeTab, setActiveTab] = useState<DashboardTab>("clientProfile");
 
   useEffect(() => {
-    if (activeTab === "userManagement" && !canManageUsers) {
+    const fromUrl = tabFromSearch();
+    if (fromUrl === "ignition" && canManageUsers) {
+      setActiveTab("ignition");
+    }
+  }, [canManageUsers]);
+
+  useEffect(() => {
+    if (
+      (activeTab === "userManagement" || activeTab === "ignition") &&
+      !canManageUsers
+    ) {
       setActiveTab("clientProfile");
     }
   }, [activeTab, canManageUsers]);
@@ -55,12 +76,12 @@ export function DashboardShell({ userName }: DashboardShellProps) {
               <ResourceAllocationPanel />
             ) : activeTab === "clientManagement" ? (
               <ClientManagementPanel />
-            ) : activeTab === "flexibleClientManagement" ? (
-              <FlexibleClientManagementPanel />
             ) : activeTab === "lookupData" ? (
               <LookupDataPanel />
             ) : activeTab === "userManagement" ? (
               <UserManagementPanel />
+            ) : activeTab === "ignition" ? (
+              <IgnitionPanel />
             ) : activeTab === "profile" ? (
               <ProfilePanel />
             ) : (

@@ -22,6 +22,14 @@
 # Ignore only temp write files under data/
 /data/*.tmp
 
+# Ignition OAuth tokens (never commit)
+/data/ignition-tokens.json
+
+# BD8 Excel email attachments (base64 payloads)
+/data/bd8-email-attachments.json
+/data/bd15-email-attachments.json
+/data/bd15-email-status.json
+
 # misc
 .DS_Store
 *.pem

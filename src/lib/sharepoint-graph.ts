@@ -4,7 +4,10 @@ import type {
 } from "@azure/msal-browser";
 import { InteractionRequiredAuthError } from "@azure/msal-browser";
 import { sharePointRequest } from "@/auth/authConfig";
-import { sharePointYearMonthFolderNames } from "@/lib/sharepoint-month-folders";
+import {
+  sharePointPeriodFolder,
+  sharePointYearMonthFolderNames,
+} from "@/lib/sharepoint-month-folders";
 
 export type SharePointSiteOption = {
   id: string;
@@ -566,4 +569,127 @@ export async function createClientSharePointSite(
     webUrl,
     memberWarnings,
   };
+}
+
+function parseSharePointSiteFromPortalLink(portalLink: string): {
+  hostname: string;
+  sitePath: string;
+} | null {
+  const trimmed = portalLink.trim();
+  if (!trimmed) {
+    return null;
+  }
+  let url: URL;
+  try {
+    url = new URL(/^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
+  } catch {
+    return null;
+  }
+  if (!/\.sharepoint\.com$/i.test(url.hostname)) {
+    return null;
+  }
+  const match = url.pathname.match(/^(\/sites\/[^/]+)/i);
+  if (!match?.[1]) {
+    return null;
+  }
+  return { hostname: url.hostname, sitePath: match[1] };
+}
+
+async function listDriveChildrenFileNames(
+  accessToken: string,
+  childrenUrl: string,
+): Promise<string[]> {
+  const names: string[] = [];
+  let url: string | null = childrenUrl;
+  let pages = 0;
+
+  while (url && pages < 20) {
+    pages += 1;
+    const data = await graphJson<{
+      value?: { name?: string; file?: unknown; folder?: unknown }[];
+      "@odata.nextLink"?: string;
+    }>(accessToken, url);
+
+    for (const item of data.value ?? []) {
+      const name = String(item.name ?? "").trim();
+      if (!name || item.folder) {
+        continue;
+      }
+      names.push(name);
+    }
+
+    url = data["@odata.nextLink"]?.trim() || null;
+  }
+
+  return names;
+}
+
+/**
+ * List file names in Shared Documents/{year}/{month} for the client's portal
+ * site (same period folder BD1 email links to). Does not create folders.
+ */
+export async function listSharePointMonthFolderFiles(
+  instance: IPublicClientApplication,
+  account: AccountInfo,
+  portalLink: string,
+  forDate: Date = new Date(),
+): Promise<{
+  yearFolder: string;
+  monthFolder: string;
+  folderPath: string;
+  fileNames: string[];
+}> {
+  const site = parseSharePointSiteFromPortalLink(portalLink);
+  if (!site) {
+    throw new Error(
+      "Portal Link must be a SharePoint site URL (e.g. https://….sharepoint.com/sites/…).",
+    );
+  }
+
+  const { yearFolder, monthFolder } = sharePointPeriodFolder(forDate);
+  const folderPath = `Shared Documents/${yearFolder}/${monthFolder}`;
+  const accessToken = await acquireSharePointToken(instance, account);
+
+  const siteLookupPath = `${site.hostname}:${site.sitePath}`;
+  const siteInfo = await graphJson<{ id?: string }>(
+    accessToken,
+    `${GRAPH}/sites/${siteLookupPath}?$select=id`,
+  );
+  const siteId = String(siteInfo.id ?? "").trim();
+  if (!siteId) {
+    throw new Error("Could not resolve the SharePoint site from Portal Link.");
+  }
+
+  const encodedFolder = `${yearFolder}/${monthFolder}`
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+
+  try {
+    const fileNames = await listDriveChildrenFileNames(
+      accessToken,
+      `${GRAPH}/sites/${siteId}/drive/root:/${encodedFolder}:/children?$select=name,file,folder&$top=200`,
+    );
+    return { yearFolder, monthFolder, folderPath, fileNames };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to list folder files.";
+    if (/itemNotFound|not found|404/i.test(message)) {
+      throw new Error(
+        `SharePoint folder not found: ${folderPath}. Create the year/month folders on the client site, then try again.`,
+      );
+    }
+    throw error;
+  }
+}
+
+export function sharePointFileNameMatches(
+  fileNames: string[],
+  needle: string,
+): boolean {
+  const target = needle.trim().toLowerCase();
+  if (!target) {
+    return false;
+  }
+  return fileNames.some((name) => name.toLowerCase().includes(target));
 }

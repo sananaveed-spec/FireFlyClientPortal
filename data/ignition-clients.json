@@ -1,0 +1,1584 @@
+{
+  "syncedAt": "2026-10-16T11:04:08.485Z",
+  "clients": [
+    {
+      "id": "cli_ngan4yknshbqavqa2w5q",
+      "name": "2 JACKED GUYZ, LLC.",
+      "email": "keegan@2jackedguyz.com",
+      "status": "active",
+      "raw": {
+        "slug": "cli_ngan4yknshbqavqa2w5q",
+        "name": "2 JACKED GUYZ, LLC.",
+        "state": "active",
+        "object": "client",
+        "created_at": "2026-02-02T17:26:57Z",
+        "updated_at": "2026-02-02T23:31:02Z",
+        "phone": null,
+        "website": null,
+        "tax_number": "",
+        "company_number": "",
+        "business_structure": "",
+        "notes": "",
+        "external_id": "",
+        "address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "contacts": [
+          {
+            "slug": "con_ngan4yknshbqavqa2w5a",
+            "email": "keegan@2jackedguyz.com",
+            "object": "contact",
+            "name": "Keegan Riley",
+            "phone": "",
+            "mobile": "",
+            "external_id": null,
+            "is_primary": true,
+            "receives_invoice_emails": true
+          }
+        ],
+        "tags": []
+      }
+    },
+    {
+      "id": "cli_ncuif25lb24qapqaoskq",
+      "name": "Acme Corporation",
+      "email": "abdur@fireflyaccountancy.com",
+      "status": "lead",
+      "raw": {
+        "slug": "cli_ncuif25lb24qapqaoskq",
+        "name": "Acme Corporation",
+        "state": "lead",
+        "object": "client",
+        "created_at": "2025-08-22T14:47:07Z",
+        "updated_at": "2025-08-27T15:52:36Z",
+        "phone": "(555) 555-5555",
+        "website": null,
+        "tax_number": null,
+        "company_number": "12345",
+        "business_structure": "Sole Trader",
+        "notes": null,
+        "external_id": null,
+        "address": {
+          "line1": "Underground Launch Hangar\n1407 Graymalkin Lane",
+          "city": "Salem Center",
+          "region": "New York",
+          "postal_code": "10560",
+          "country": "USA"
+        },
+        "postal_address": {
+          "line1": "Underground Launch Hangar\n1407 Graymalkin Lane",
+          "city": "Salem Center",
+          "region": "New York",
+          "postal_code": "10560",
+          "country": "USA"
+        },
+        "contacts": [
+          {
+            "slug": "con_ncuif25lb24qapqaoska",
+            "email": "abdur@fireflyaccountancy.com",
+            "object": "contact",
+            "name": "Calvin Williams",
+            "phone": "(555) 555-5555",
+            "mobile": "0455 555-555",
+            "external_id": null,
+            "is_primary": true,
+            "receives_invoice_emails": true
+          }
+        ],
+        "tags": []
+      }
+    },
+    {
+      "id": "cli_nc42cvsgat5qaaibtfga",
+      "name": "Alfonick LLC",
+      "email": "abdur.rehman@allumiax.com",
+      "status": "active",
+      "raw": {
+        "slug": "cli_nc42cvsgat5qaaibtfga",
+        "name": "Alfonick LLC",
+        "state": "active",
+        "object": "client",
+        "created_at": "2025-09-04T14:25:26Z",
+        "updated_at": "2026-09-07T08:52:07Z",
+        "phone": null,
+        "website": null,
+        "tax_number": null,
+        "company_number": null,
+        "business_structure": null,
+        "notes": null,
+        "external_id": null,
+        "address": {
+          "line1": "",
+          "city": null,
+          "region": null,
+          "postal_code": null,
+          "country": null
+        },
+        "postal_address": {
+          "line1": "",
+          "city": null,
+          "region": null,
+          "postal_code": null,
+          "country": null
+        },
+        "contacts": [
+          {
+            "slug": "con_nc42cvsgat5qaaibtffq",
+            "email": "abdur.rehman@allumiax.com",
+            "object": "contact",
+            "name": "Abdur Rehman",
+            "phone": null,
+            "mobile": null,
+            "external_id": null,
+            "is_primary": true,
+            "receives_invoice_emails": true
+          }
+        ],
+        "tags": []
+      }
+    },
+    {
+      "id": "cli_nefumzbay7caaaiba2oa",
+      "name": "Ali Trail",
+      "email": "",
+      "status": "lead",
+      "raw": {
+        "slug": "cli_nefumzbay7caaaiba2oa",
+        "name": "Ali Trail",
+        "state": "lead",
+        "object": "client",
+        "created_at": "2025-11-05T12:43:16Z",
+        "updated_at": "2025-11-05T12:43:16Z",
+        "phone": null,
+        "website": null,
+        "tax_number": null,
+        "company_number": null,
+        "business_structure": null,
+        "notes": null,
+        "external_id": null,
+        "address": {
+          "line1": "",
+          "city": null,
+          "region": null,
+          "postal_code": null,
+          "country": null
+        },
+        "postal_address": {
+          "line1": "",
+          "city": null,
+          "region": null,
+          "postal_code": null,
+          "country": null
+        },
+        "contacts": [
+          {
+            "slug": "con_nefumzbay7caaaiba2nq",
+            "email": null,
+            "object": "contact",
+            "name": "Ali",
+            "phone": null,
+            "mobile": null,
+            "external_id": null,
+            "is_primary": true,
+            "receives_invoice_emails": false
+          }
+        ],
+        "tags": []
+      }
+    },
+    {
+      "id": "cli_ncnepmldno5aaiqa75pa",
+      "name": "Ali@hiebrockville",
+      "email": "abdur@fireflyaccountancy.com",
+      "status": "inactive",
+      "raw": {
+        "slug": "cli_ncnepmldno5aaiqa75pa",
+        "name": "Ali@hiebrockville",
+        "state": "inactive",
+        "object": "client",
+        "created_at": "2025-08-11T19:42:41Z",
+        "updated_at": "2025-08-31T07:02:30Z",
+        "phone": "(555) 555-5555",
+        "website": null,
+        "tax_number": null,
+        "company_number": "12345",
+        "business_structure": "Sole Trader",
+        "notes": null,
+        "external_id": null,
+        "address": {
+          "line1": "Underground Launch Hangar\n1407 Graymalkin Lane",
+          "city": "Salem Center",
+          "region": "New York",
+          "postal_code": "10560",
+          "country": "USA"
+        },
+        "postal_address": {
+          "line1": "Underground Launch Hangar\n1407 Graymalkin Lane",
+          "city": "Salem Center",
+          "region": "New York",
+          "postal_code": "10560",
+          "country": "USA"
+        },
+        "contacts": [
+          {
+            "slug": "con_ncnepmldno5aaiqa75oq",
+            "email": "abdur@fireflyaccountancy.com",
+            "object": "contact",
+            "name": "Demo Contact",
+            "phone": "(555) 555-5555",
+            "mobile": "0455 555-555",
+            "external_id": null,
+            "is_primary": true,
+            "receives_invoice_emails": true
+          }
+        ],
+        "tags": []
+      }
+    },
+    {
+      "id": "cli_nc25lftgjkaaavaaxbyq",
+      "name": "Allumiax LLC",
+      "email": "abdur.rehman@allumiax.com",
+      "status": "active",
+      "raw": {
+        "slug": "cli_nc25lftgjkaaavaaxbyq",
+        "name": "Allumiax LLC",
+        "state": "active",
+        "object": "client",
+        "created_at": "2025-09-01T17:19:18Z",
+        "updated_at": "2026-09-07T08:51:12Z",
+        "phone": null,
+        "website": null,
+        "tax_number": "",
+        "company_number": "",
+        "business_structure": "",
+        "notes": "",
+        "external_id": null,
+        "address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "contacts": [
+          {
+            "slug": "con_nc25lftgjkaaavaaxbya",
+            "email": "abdur.rehman@allumiax.com",
+            "object": "contact",
+            "name": "Abdur Rehman",
+            "phone": "",
+            "mobile": "",
+            "external_id": null,
+            "is_primary": true,
+            "receives_invoice_emails": true
+          }
+        ],
+        "tags": []
+      }
+    },
+    {
+      "id": "cli_ngbabcfvoylaakyaezoa",
+      "name": "Apex",
+      "email": "greg@apexbti.com",
+      "status": "inactive",
+      "raw": {
+        "slug": "cli_ngbabcfvoylaakyaezoa",
+        "name": "Apex",
+        "state": "inactive",
+        "object": "client",
+        "created_at": "2026-02-03T14:04:56Z",
+        "updated_at": "2026-09-24T17:24:14Z",
+        "phone": null,
+        "website": null,
+        "tax_number": "",
+        "company_number": "",
+        "business_structure": "",
+        "notes": "",
+        "external_id": "",
+        "address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "contacts": [
+          {
+            "slug": "con_ngbabcfvoylaakyaeznq",
+            "email": "greg@apexbti.com",
+            "object": "contact",
+            "name": "Greg",
+            "phone": "",
+            "mobile": "",
+            "external_id": null,
+            "is_primary": true,
+            "receives_invoice_emails": true
+          }
+        ],
+        "tags": []
+      }
+    },
+    {
+      "id": "cli_ndabwhzrygoaapqaze6a",
+      "name": "AUTOMATED INSTALLATION SERVICES",
+      "email": "morris.williams@aismillwrights.com",
+      "status": "inactive",
+      "raw": {
+        "slug": "cli_ndabwhzrygoaapqaze6a",
+        "name": "AUTOMATED INSTALLATION SERVICES",
+        "state": "inactive",
+        "object": "client",
+        "created_at": "2025-09-09T12:18:39Z",
+        "updated_at": "2026-07-27T20:15:52Z",
+        "phone": null,
+        "website": null,
+        "tax_number": "",
+        "company_number": "",
+        "business_structure": "",
+        "notes": "",
+        "external_id": null,
+        "address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "contacts": [
+          {
+            "slug": "con_ndabwhzrygoaapqaze5q",
+            "email": "morris.williams@aismillwrights.com",
+            "object": "contact",
+            "name": "Morris Williams",
+            "phone": "",
+            "mobile": "",
+            "external_id": null,
+            "is_primary": true,
+            "receives_invoice_emails": false
+          }
+        ],
+        "tags": []
+      }
+    },
+    {
+      "id": "cli_ncuh7n7tygpaakabat3q",
+      "name": "Clearview Merchant Ltd",
+      "email": "jasonsommerfeld@clearviewmerchants.com",
+      "status": "active",
+      "raw": {
+        "slug": "cli_ncuh7n7tygpaakabat3q",
+        "name": "Clearview Merchant Ltd",
+        "state": "active",
+        "object": "client",
+        "created_at": "2025-08-22T14:33:27Z",
+        "updated_at": "2026-09-21T19:20:23Z",
+        "phone": null,
+        "website": null,
+        "tax_number": "",
+        "company_number": "",
+        "business_structure": "",
+        "notes": "",
+        "external_id": null,
+        "address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "contacts": [
+          {
+            "slug": "con_ncuh7n7tygpaakabat3a",
+            "email": "jasonsommerfeld@clearviewmerchants.com",
+            "object": "contact",
+            "name": "Jason",
+            "phone": "",
+            "mobile": "15877837385",
+            "external_id": null,
+            "is_primary": true,
+            "receives_invoice_emails": true
+          }
+        ],
+        "tags": []
+      }
+    },
+    {
+      "id": "cli_nc7o26emr37qalya5ilq",
+      "name": "Core One Electric, Inc.",
+      "email": "abdur.rehman@allumiax.com",
+      "status": "active",
+      "raw": {
+        "slug": "cli_nc7o26emr37qalya5ilq",
+        "name": "Core One Electric, Inc.",
+        "state": "active",
+        "object": "client",
+        "created_at": "2025-09-08T14:51:36Z",
+        "updated_at": "2026-09-02T19:51:23Z",
+        "phone": null,
+        "website": null,
+        "tax_number": "",
+        "company_number": "",
+        "business_structure": "",
+        "notes": "",
+        "external_id": null,
+        "address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "contacts": [
+          {
+            "slug": "con_nc7o26emr37qalya5ila",
+            "email": "abdur.rehman@allumiax.com",
+            "object": "contact",
+            "name": "Abdur",
+            "phone": "",
+            "mobile": "",
+            "external_id": null,
+            "is_primary": true,
+            "receives_invoice_emails": true
+          }
+        ],
+        "tags": []
+      }
+    },
+    {
+      "id": "cli_ncuj4ffgkofaavya6i7q",
+      "name": "CRESTVIEW ENVIRONMENTAL SERVICES LTD.",
+      "email": "kaan@crestviewenv.ca",
+      "status": "active",
+      "raw": {
+        "slug": "cli_ncuj4ffgkofaavya6i7q",
+        "name": "CRESTVIEW ENVIRONMENTAL SERVICES LTD.",
+        "state": "active",
+        "object": "client",
+        "created_at": "2025-08-22T16:43:00Z",
+        "updated_at": "2026-10-07T14:07:21Z",
+        "phone": null,
+        "website": null,
+        "tax_number": "",
+        "company_number": "",
+        "business_structure": "",
+        "notes": "",
+        "external_id": null,
+        "address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "contacts": [
+          {
+            "slug": "con_ncuj4ffgkofaavya6i7a",
+            "email": "kaan@crestviewenv.ca",
+            "object": "contact",
+            "name": "Kaan Ozpeynirci",
+            "phone": "",
+            "mobile": "",
+            "external_id": null,
+            "is_primary": true,
+            "receives_invoice_emails": true
+          }
+        ],
+        "tags": []
+      }
+    },
+    {
+      "id": "cli_ndchzvarxxkqajyauz7q",
+      "name": "DM Global Company",
+      "email": "abdur.rehman@allumiax.com",
+      "status": "active",
+      "raw": {
+        "slug": "cli_ndchzvarxxkqajyauz7q",
+        "name": "DM Global Company",
+        "state": "active",
+        "object": "client",
+        "created_at": "2025-09-12T20:04:36Z",
+        "updated_at": "2026-09-07T08:53:06Z",
+        "phone": null,
+        "website": null,
+        "tax_number": "",
+        "company_number": "",
+        "business_structure": "",
+        "notes": "",
+        "external_id": null,
+        "address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "contacts": [
+          {
+            "slug": "con_ndchzvarxxkqajyauz7a",
+            "email": "abdur.rehman@allumiax.com",
+            "object": "contact",
+            "name": "Abdur Rehman",
+            "phone": "",
+            "mobile": "",
+            "external_id": null,
+            "is_primary": true,
+            "receives_invoice_emails": true
+          }
+        ],
+        "tags": []
+      }
+    },
+    {
+      "id": "cli_nc42cvvbtvoqaaib4r4q",
+      "name": "Electrical Power System, Inc.",
+      "email": "abdur@epsfresno.com",
+      "status": "active",
+      "raw": {
+        "slug": "cli_nc42cvvbtvoqaaib4r4q",
+        "name": "Electrical Power System, Inc.",
+        "state": "active",
+        "object": "client",
+        "created_at": "2025-09-04T14:25:26Z",
+        "updated_at": "2026-08-04T19:22:55Z",
+        "phone": null,
+        "website": null,
+        "tax_number": null,
+        "company_number": null,
+        "business_structure": null,
+        "notes": null,
+        "external_id": null,
+        "address": {
+          "line1": null,
+          "city": null,
+          "region": null,
+          "postal_code": null,
+          "country": null
+        },
+        "postal_address": {
+          "line1": null,
+          "city": null,
+          "region": null,
+          "postal_code": null,
+          "country": null
+        },
+        "contacts": [
+          {
+            "slug": "con_nc42cvvbtvoqaaib4r4a",
+            "email": "abdur@epsfresno.com",
+            "object": "contact",
+            "name": "Electrical Power System, Inc.",
+            "phone": null,
+            "mobile": null,
+            "external_id": null,
+            "is_primary": true,
+            "receives_invoice_emails": true
+          }
+        ],
+        "tags": []
+      }
+    },
+    {
+      "id": "cli_ndciilybziuqauya236a",
+      "name": "Electrical Power Systems, Inc",
+      "email": "abdur.rehman@allumiax.com",
+      "status": "lead",
+      "raw": {
+        "slug": "cli_ndciilybziuqauya236a",
+        "name": "Electrical Power Systems, Inc",
+        "state": "lead",
+        "object": "client",
+        "created_at": "2025-09-12T20:35:59Z",
+        "updated_at": "2025-09-12T20:35:59Z",
+        "phone": null,
+        "website": null,
+        "tax_number": "",
+        "company_number": "",
+        "business_structure": "",
+        "notes": "",
+        "external_id": null,
+        "address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "contacts": [
+          {
+            "slug": "con_ndciilybziuqauya235q",
+            "email": "abdur.rehman@allumiax.com",
+            "object": "contact",
+            "name": "Abdur rehman",
+            "phone": "",
+            "mobile": "",
+            "external_id": null,
+            "is_primary": true,
+            "receives_invoice_emails": true
+          }
+        ],
+        "tags": []
+      }
+    },
+    {
+      "id": "cli_nc42cvvbtvoqaaib4sca",
+      "name": "Fanzilla LLC",
+      "email": "m.shaharyar2@gmail.com",
+      "status": "active",
+      "raw": {
+        "slug": "cli_nc42cvvbtvoqaaib4sca",
+        "name": "Fanzilla LLC",
+        "state": "active",
+        "object": "client",
+        "created_at": "2025-09-04T14:25:26Z",
+        "updated_at": "2026-08-10T16:46:14Z",
+        "phone": null,
+        "website": null,
+        "tax_number": null,
+        "company_number": null,
+        "business_structure": null,
+        "notes": null,
+        "external_id": null,
+        "address": {
+          "line1": "",
+          "city": null,
+          "region": null,
+          "postal_code": null,
+          "country": null
+        },
+        "postal_address": {
+          "line1": "",
+          "city": null,
+          "region": null,
+          "postal_code": null,
+          "country": null
+        },
+        "contacts": [
+          {
+            "slug": "con_nc42cvvbtvoqaaib4sbq",
+            "email": "m.shaharyar2@gmail.com",
+            "object": "contact",
+            "name": "Shaharyar",
+            "phone": null,
+            "mobile": null,
+            "external_id": null,
+            "is_primary": true,
+            "receives_invoice_emails": true
+          }
+        ],
+        "tags": []
+      }
+    },
+    {
+      "id": "cli_njrg357aklqaanqak7oa",
+      "name": "GC Mutual",
+      "email": "gcmutual@yahoo.com",
+      "status": "lead",
+      "raw": {
+        "slug": "cli_njrg357aklqaanqak7oa",
+        "name": "GC Mutual",
+        "state": "lead",
+        "object": "client",
+        "created_at": "2026-07-23T19:39:35Z",
+        "updated_at": "2026-07-23T20:14:10Z",
+        "phone": null,
+        "website": null,
+        "tax_number": "",
+        "company_number": "",
+        "business_structure": "",
+        "notes": null,
+        "external_id": "",
+        "address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "contacts": [
+          {
+            "slug": "con_njrg357aklqaanqak7nq",
+            "email": "gcmutual@yahoo.com",
+            "object": "contact",
+            "name": "Jessica Charles",
+            "phone": "",
+            "mobile": "",
+            "external_id": null,
+            "is_primary": true,
+            "receives_invoice_emails": true
+          }
+        ],
+        "tags": []
+      }
+    },
+    {
+      "id": "cli_niwe36cm6i5qawiastoq",
+      "name": "Gregory L Nickel",
+      "email": "greg@apexbti.com",
+      "status": "active",
+      "raw": {
+        "slug": "cli_niwe36cm6i5qawiastoq",
+        "name": "Gregory L Nickel",
+        "state": "active",
+        "object": "client",
+        "created_at": "2026-06-12T18:20:40Z",
+        "updated_at": "2026-09-24T17:25:13Z",
+        "phone": null,
+        "website": null,
+        "tax_number": "",
+        "company_number": "",
+        "business_structure": "",
+        "notes": null,
+        "external_id": "",
+        "address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "contacts": [
+          {
+            "slug": "con_niwe36cm6i5qawiastoa",
+            "email": "greg@apexbti.com",
+            "object": "contact",
+            "name": "Gregory L Nickel",
+            "phone": "",
+            "mobile": "",
+            "external_id": null,
+            "is_primary": true,
+            "receives_invoice_emails": true
+          },
+          {
+            "slug": "con_njvwsphgg5naa3aaxtlq",
+            "email": "mistymoonnickel@gmail.com",
+            "object": "contact",
+            "name": "Misty",
+            "phone": "",
+            "mobile": "",
+            "external_id": null,
+            "is_primary": false,
+            "receives_invoice_emails": false
+          }
+        ],
+        "tags": []
+      }
+    },
+    {
+      "id": "cli_ndkay3dr5khqasqa5asq",
+      "name": "GROVETREE PRESS LTD.",
+      "email": "michael.h@grovetreepress.com",
+      "status": "active",
+      "raw": {
+        "slug": "cli_ndkay3dr5khqasqa5asq",
+        "name": "GROVETREE PRESS LTD.",
+        "state": "active",
+        "object": "client",
+        "created_at": "2025-09-24T15:21:16Z",
+        "updated_at": "2026-04-01T08:15:02Z",
+        "phone": null,
+        "website": null,
+        "tax_number": "",
+        "company_number": "",
+        "business_structure": "",
+        "notes": "",
+        "external_id": null,
+        "address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "contacts": [
+          {
+            "slug": "con_ndkay3dr5khqasqa5asa",
+            "email": "michael.h@grovetreepress.com",
+            "object": "contact",
+            "name": "Michael Heggie",
+            "phone": "",
+            "mobile": "",
+            "external_id": null,
+            "is_primary": true,
+            "receives_invoice_emails": true
+          }
+        ],
+        "tags": []
+      }
+    },
+    {
+      "id": "cli_nklvpcycvvkqavaa6ppa",
+      "name": "Halal Inc",
+      "email": "amar.yusaf@gmail.com",
+      "status": "active",
+      "raw": {
+        "slug": "cli_nklvpcycvvkqavaa6ppa",
+        "name": "Halal Inc",
+        "state": "active",
+        "object": "client",
+        "created_at": "2026-09-01T22:54:03Z",
+        "updated_at": "2026-09-03T16:51:03Z",
+        "phone": null,
+        "website": null,
+        "tax_number": "",
+        "company_number": "",
+        "business_structure": "",
+        "notes": null,
+        "external_id": "",
+        "address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "contacts": [
+          {
+            "slug": "con_nklvpcycvvkqavaa6poq",
+            "email": "amar.yusaf@gmail.com",
+            "object": "contact",
+            "name": "Amar Yusaf",
+            "phone": "",
+            "mobile": "",
+            "external_id": null,
+            "is_primary": true,
+            "receives_invoice_emails": true
+          }
+        ],
+        "tags": []
+      }
+    },
+    {
+      "id": "cli_nf53tfmn6ylqaryakgba",
+      "name": "Helping Hand Orillia",
+      "email": "",
+      "status": "lead",
+      "raw": {
+        "slug": "cli_nf53tfmn6ylqaryakgba",
+        "name": "Helping Hand Orillia",
+        "state": "lead",
+        "object": "client",
+        "created_at": "2026-01-29T19:48:37Z",
+        "updated_at": "2026-01-29T19:48:38Z",
+        "phone": null,
+        "website": null,
+        "tax_number": "",
+        "company_number": "",
+        "business_structure": "",
+        "notes": "",
+        "external_id": "",
+        "address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "contacts": [
+          {
+            "slug": "con_nf53tfmn6ylqaryakgaq",
+            "email": null,
+            "object": "contact",
+            "name": "Doug",
+            "phone": "",
+            "mobile": "",
+            "external_id": null,
+            "is_primary": true,
+            "receives_invoice_emails": false
+          }
+        ],
+        "tags": []
+      }
+    },
+    {
+      "id": "cli_nge7ytbiu2sqavyaolqq",
+      "name": "Icon Process Controls Corp.",
+      "email": "alex@iconprocon.com",
+      "status": "active",
+      "raw": {
+        "slug": "cli_nge7ytbiu2sqavyaolqq",
+        "name": "Icon Process Controls Corp.",
+        "state": "active",
+        "object": "client",
+        "created_at": "2026-02-09T15:25:00Z",
+        "updated_at": "2026-02-16T15:50:06Z",
+        "phone": null,
+        "website": null,
+        "tax_number": "",
+        "company_number": "",
+        "business_structure": "",
+        "notes": "",
+        "external_id": "",
+        "address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "contacts": [
+          {
+            "slug": "con_nge7ytbiu2sqavyaolqa",
+            "email": "alex@iconprocon.com",
+            "object": "contact",
+            "name": "Alex",
+            "phone": "",
+            "mobile": "",
+            "external_id": null,
+            "is_primary": true,
+            "receives_invoice_emails": true
+          }
+        ],
+        "tags": []
+      }
+    },
+    {
+      "id": "cli_ngcxjhqeg4taaoqaks6q",
+      "name": "Icon Process Controls Ltd.",
+      "email": "Alex@iconprocon.com",
+      "status": "active",
+      "raw": {
+        "slug": "cli_ngcxjhqeg4taaoqaks6q",
+        "name": "Icon Process Controls Ltd.",
+        "state": "active",
+        "object": "client",
+        "created_at": "2026-02-06T04:57:02Z",
+        "updated_at": "2026-02-16T04:58:39Z",
+        "phone": null,
+        "website": null,
+        "tax_number": "",
+        "company_number": "",
+        "business_structure": "",
+        "notes": "",
+        "external_id": "",
+        "address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "contacts": [
+          {
+            "slug": "con_ngcxjhqeg4taaoqaks6a",
+            "email": "Alex@iconprocon.com",
+            "object": "contact",
+            "name": "Alex",
+            "phone": "",
+            "mobile": "",
+            "external_id": null,
+            "is_primary": true,
+            "receives_invoice_emails": true
+          }
+        ],
+        "tags": []
+      }
+    },
+    {
+      "id": "cli_ndfmu5r73xrqaiyazcpa",
+      "name": "LASH & CO.",
+      "email": "aliceincalgary@gmail.com",
+      "status": "active",
+      "raw": {
+        "slug": "cli_ndfmu5r73xrqaiyazcpa",
+        "name": "LASH & CO.",
+        "state": "active",
+        "object": "client",
+        "created_at": "2025-09-17T14:49:26Z",
+        "updated_at": "2026-10-15T17:29:11Z",
+        "phone": null,
+        "website": null,
+        "tax_number": "",
+        "company_number": "",
+        "business_structure": "",
+        "notes": "",
+        "external_id": null,
+        "address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "contacts": [
+          {
+            "slug": "con_ndfmu5r73xrqaiyazcoq",
+            "email": "aliceincalgary@gmail.com",
+            "object": "contact",
+            "name": "Alice Wirawan",
+            "phone": "",
+            "mobile": "",
+            "external_id": null,
+            "is_primary": true,
+            "receives_invoice_emails": true
+          }
+        ],
+        "tags": []
+      }
+    },
+    {
+      "id": "cli_nd7uzj2qoiraajyanxya",
+      "name": "Mahida Global LLC",
+      "email": "thaichiliclovis@gmail.com",
+      "status": "active",
+      "raw": {
+        "slug": "cli_nd7uzj2qoiraajyanxya",
+        "name": "Mahida Global LLC",
+        "state": "active",
+        "object": "client",
+        "created_at": "2025-10-27T10:42:47Z",
+        "updated_at": "2026-09-21T17:20:18Z",
+        "phone": null,
+        "website": null,
+        "tax_number": "",
+        "company_number": "",
+        "business_structure": "",
+        "notes": "",
+        "external_id": null,
+        "address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "contacts": [
+          {
+            "slug": "con_nd7uzj2qoiraajyanxxq",
+            "email": "thaichiliclovis@gmail.com",
+            "object": "contact",
+            "name": "Muhammad Shahid",
+            "phone": "",
+            "mobile": "",
+            "external_id": null,
+            "is_primary": true,
+            "receives_invoice_emails": true
+          }
+        ],
+        "tags": []
+      }
+    },
+    {
+      "id": "cli_nc7pelumr37qapqa33tq",
+      "name": "MARK’S PRO SERVICES, LLC",
+      "email": "marksproservicesllc@gmail.com",
+      "status": "inactive",
+      "raw": {
+        "slug": "cli_nc7pelumr37qapqa33tq",
+        "name": "MARK’S PRO SERVICES, LLC",
+        "state": "inactive",
+        "object": "client",
+        "created_at": "2025-09-08T15:11:42Z",
+        "updated_at": "2026-09-21T19:42:05Z",
+        "phone": null,
+        "website": null,
+        "tax_number": "",
+        "company_number": "",
+        "business_structure": "",
+        "notes": "",
+        "external_id": null,
+        "address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "contacts": [
+          {
+            "slug": "con_nc7pelumr37qapqa33ta",
+            "email": "marksproservicesllc@gmail.com",
+            "object": "contact",
+            "name": "Joanne",
+            "phone": "",
+            "mobile": "",
+            "external_id": null,
+            "is_primary": true,
+            "receives_invoice_emails": true
+          }
+        ],
+        "tags": []
+      }
+    },
+    {
+      "id": "cli_nkpmc3n53p7aarqaqp6a",
+      "name": "Olympic automotive",
+      "email": "younus3@gmail.com",
+      "status": "lead",
+      "raw": {
+        "slug": "cli_nkpmc3n53p7aarqaqp6a",
+        "name": "Olympic automotive",
+        "state": "lead",
+        "object": "client",
+        "created_at": "2026-09-07T13:51:41Z",
+        "updated_at": "2026-09-07T13:56:47Z",
+        "phone": null,
+        "website": null,
+        "tax_number": "",
+        "company_number": "",
+        "business_structure": "",
+        "notes": null,
+        "external_id": "",
+        "address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "contacts": [
+          {
+            "slug": "con_nkpmc3n53p7aarqaqp5q",
+            "email": "younus3@gmail.com",
+            "object": "contact",
+            "name": "Mr. Younus",
+            "phone": "",
+            "mobile": "",
+            "external_id": null,
+            "is_primary": true,
+            "receives_invoice_emails": true
+          }
+        ],
+        "tags": []
+      }
+    },
+    {
+      "id": "cli_neccrhgyvx5qavya24lq",
+      "name": "POWER EMP.COM",
+      "email": "cd31069@gmail.com",
+      "status": "active",
+      "raw": {
+        "slug": "cli_neccrhgyvx5qavya24lq",
+        "name": "POWER EMP.COM",
+        "state": "active",
+        "object": "client",
+        "created_at": "2025-10-31T03:10:20Z",
+        "updated_at": "2026-03-26T21:02:11Z",
+        "phone": null,
+        "website": null,
+        "tax_number": "",
+        "company_number": "",
+        "business_structure": "",
+        "notes": "",
+        "external_id": null,
+        "address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "contacts": [
+          {
+            "slug": "con_neccrhgyvx5qavya24la",
+            "email": "cd31069@gmail.com",
+            "object": "contact",
+            "name": "Charles",
+            "phone": "",
+            "mobile": "",
+            "external_id": null,
+            "is_primary": true,
+            "receives_invoice_emails": true
+          }
+        ],
+        "tags": []
+      }
+    },
+    {
+      "id": "cli_nexpjspv6ahaavyaxmoa",
+      "name": "Snugly",
+      "email": "Sherii2012@hotmail.com",
+      "status": "active",
+      "raw": {
+        "slug": "cli_nexpjspv6ahaavyaxmoa",
+        "name": "Snugly",
+        "state": "active",
+        "object": "client",
+        "created_at": "2025-12-02T14:16:41Z",
+        "updated_at": "2026-01-26T20:59:11Z",
+        "phone": null,
+        "website": null,
+        "tax_number": "",
+        "company_number": "",
+        "business_structure": "",
+        "notes": "",
+        "external_id": null,
+        "address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "contacts": [
+          {
+            "slug": "con_nexpjspv6ahaavyaxmnq",
+            "email": "Sherii2012@hotmail.com",
+            "object": "contact",
+            "name": "Shehrish",
+            "phone": "",
+            "mobile": "",
+            "external_id": null,
+            "is_primary": true,
+            "receives_invoice_emails": true
+          }
+        ],
+        "tags": []
+      }
+    },
+    {
+      "id": "cli_nc4du36727eqasiag2da",
+      "name": "The Pantry",
+      "email": "zoe.pantry@gmail.com",
+      "status": "active",
+      "raw": {
+        "slug": "cli_nc4du36727eqasiag2da",
+        "name": "The Pantry",
+        "state": "active",
+        "object": "client",
+        "created_at": "2025-09-03T12:54:07Z",
+        "updated_at": "2026-10-07T21:03:53Z",
+        "phone": null,
+        "website": null,
+        "tax_number": "",
+        "company_number": "",
+        "business_structure": "",
+        "notes": "",
+        "external_id": null,
+        "address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "contacts": [
+          {
+            "slug": "con_nc4du36727eqasiag2cq",
+            "email": "zoe.pantry@gmail.com",
+            "object": "contact",
+            "name": "Zoe Velush Rogers",
+            "phone": "",
+            "mobile": "",
+            "external_id": null,
+            "is_primary": true,
+            "receives_invoice_emails": true
+          }
+        ],
+        "tags": []
+      }
+    },
+    {
+      "id": "cli_nc42cvsgat5qaaibtfkq",
+      "name": "The Town Project",
+      "email": "access.us@accountimize.com",
+      "status": "lead",
+      "raw": {
+        "slug": "cli_nc42cvsgat5qaaibtfkq",
+        "name": "The Town Project",
+        "state": "lead",
+        "object": "client",
+        "created_at": "2025-09-04T14:25:26Z",
+        "updated_at": "2025-09-04T14:25:26Z",
+        "phone": null,
+        "website": null,
+        "tax_number": null,
+        "company_number": null,
+        "business_structure": null,
+        "notes": null,
+        "external_id": null,
+        "address": {
+          "line1": null,
+          "city": null,
+          "region": null,
+          "postal_code": null,
+          "country": null
+        },
+        "postal_address": {
+          "line1": null,
+          "city": null,
+          "region": null,
+          "postal_code": null,
+          "country": null
+        },
+        "contacts": [
+          {
+            "slug": "con_nc42cvsgat5qaaibtfka",
+            "email": "access.us@accountimize.com",
+            "object": "contact",
+            "name": "The Town Project",
+            "phone": null,
+            "mobile": null,
+            "external_id": null,
+            "is_primary": true,
+            "receives_invoice_emails": true
+          }
+        ],
+        "tags": []
+      }
+    },
+    {
+      "id": "cli_ncul6pkws2atphya5k5a",
+      "name": "THE TOWN PROJECT",
+      "email": "sherry@thetownproject.org",
+      "status": "inactive",
+      "raw": {
+        "slug": "cli_ncul6pkws2atphya5k5a",
+        "name": "THE TOWN PROJECT",
+        "state": "inactive",
+        "object": "client",
+        "created_at": "2025-08-22T19:04:29Z",
+        "updated_at": "2026-08-31T07:01:43Z",
+        "phone": null,
+        "website": null,
+        "tax_number": "",
+        "company_number": "",
+        "business_structure": "",
+        "notes": "",
+        "external_id": null,
+        "address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "contacts": [
+          {
+            "slug": "con_ncul6pkws2atphya5k4q",
+            "email": "sherry@thetownproject.org",
+            "object": "contact",
+            "name": "Dr. Sherry",
+            "phone": "",
+            "mobile": "",
+            "external_id": null,
+            "is_primary": true,
+            "receives_invoice_emails": true
+          }
+        ],
+        "tags": []
+      }
+    },
+    {
+      "id": "cli_nkcerv5zxqxaakybamya",
+      "name": "The Town Project Global",
+      "email": "sherry@ttpglobal.net",
+      "status": "active",
+      "raw": {
+        "slug": "cli_nkcerv5zxqxaakybamya",
+        "name": "The Town Project Global",
+        "state": "active",
+        "object": "client",
+        "created_at": "2026-08-18T11:58:15Z",
+        "updated_at": "2026-09-14T18:36:13Z",
+        "phone": null,
+        "website": null,
+        "tax_number": "",
+        "company_number": "",
+        "business_structure": "",
+        "notes": null,
+        "external_id": "",
+        "address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "postal_address": {
+          "line1": "",
+          "city": "",
+          "region": "",
+          "postal_code": "",
+          "country": ""
+        },
+        "contacts": [
+          {
+            "slug": "con_nkcerv5zxqxaakybamxq",
+            "email": "sherry@ttpglobal.net",
+            "object": "contact",
+            "name": "Dr. Sherry Congrave Wilson",
+            "phone": "",
+            "mobile": "",
+            "external_id": null,
+            "is_primary": true,
+            "receives_invoice_emails": true
+          }
+        ],
+        "tags": []
+      }
+    }
+  ]
+}

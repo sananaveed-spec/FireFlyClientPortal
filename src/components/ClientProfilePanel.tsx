@@ -12,12 +12,14 @@ import {
 import { createPortal } from "react-dom";
 import { useAccess } from "@/auth/accessContext";
 import {
+  BD1_TEMPLATE_OPTIONS,
   createEmptyClientProfileForm,
   createEmptyFinancialAccount,
   FINANCIAL_ACCOUNT_SOURCE_OPTIONS,
   FINANCIAL_ACCOUNT_TYPE_OPTIONS,
   formatFinancialAccountsList,
   generateUniqueId,
+  normalizeBd1Template,
   normalizeClientProfile,
   normalizeFinancialAccounts,
   CLIENT_MEETING_FREQUENCY_OPTIONS,
@@ -32,6 +34,7 @@ import {
   PAYROLL_REPORTS_NEEDED_OPTIONS,
   reportingCurrencyForCountry,
   YES_NO_OPTIONS,
+  type Bd1TemplateId,
   type ClientCountry,
   type ClientMeetingFrequency,
   type ClientProfileEntry,
@@ -347,6 +350,9 @@ function renderProfileCell(
       </a>
     );
   }
+  if (key === "financialAccounts") {
+    return <span className="financial-accounts-cell">{text}</span>;
+  }
   return text;
 }
 
@@ -533,6 +539,7 @@ export function ClientProfilePanel() {
       reportingCurrency:
         profile.reportingCurrency ||
         reportingCurrencyForCountry(profile.country),
+      bd1Template: normalizeBd1Template(profile.bd1Template || "template-1"),
       serviceFrequency: profile.serviceFrequency || "",
       reportingTier: profile.reportingTier || "",
       paymentType: profile.paymentType || "",
@@ -1432,6 +1439,7 @@ export function ClientProfilePanel() {
       entityType: form.entityType.trim(),
       fiscalYearEnd: normalizeYearEnd(form.fiscalYearEnd),
       reportingCurrency: reportingCurrencyForCountry(form.country),
+      bd1Template: normalizeBd1Template(form.bd1Template),
       serviceFrequency: normalizeServiceFrequency(form.serviceFrequency),
       reportingTier: normalizeReportingTier(form.reportingTier),
       paymentType: normalizePaymentType(form.paymentType),
@@ -2016,6 +2024,30 @@ export function ClientProfilePanel() {
             title="Engagement"
             description="How often you work with them, reporting expectations, and plan type."
           >
+            <fieldset className="field field--radio">
+              <legend className="field-label">BD1 Template</legend>
+              <div className="radio-row">
+                {BD1_TEMPLATE_OPTIONS.map((option) => (
+                  <label key={option.id} className="radio-option">
+                    <input
+                      type="radio"
+                      name="bd1Template"
+                      value={option.id}
+                      checked={form.bd1Template === option.id}
+                      onChange={() =>
+                        updateField("bd1Template", option.id as Bd1TemplateId)
+                      }
+                    />
+                    {option.label}
+                  </label>
+                ))}
+              </div>
+              <p className="lookup-hint">
+                Template 1 uses Bank and Credit Card Statements Request.
+                Template 2 uses Bank, Credit Card And Other Statements Request.
+              </p>
+            </fieldset>
+
             <SearchableSelect
               label="Service Frequency"
               value={form.serviceFrequency}

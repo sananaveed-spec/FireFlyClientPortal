@@ -341,12 +341,13 @@ export function formatFinancialAccountLabel(account: FinancialAccount): string {
 export function formatFinancialAccountsList(
   accounts: FinancialAccount[],
 ): string {
-  return accounts.map(formatFinancialAccountLabel).join("; ");
+  return accounts.map(formatFinancialAccountLabel).join("\n");
 }
 
 /**
  * Parse CSV/text back into accounts.
- * Accepts: "Bank: Chase ···1234 (Bank feed); Credit card: Amex ···5678 (Needs statement)"
+ * Accepts one account per line, or semicolon-separated (legacy):
+ * "Bank: Chase ···1234 (Bank feed)\nCredit card: Amex ···5678 (Needs statement)"
  */
 export function parseFinancialAccountsFromText(
   value: string,
@@ -355,7 +356,10 @@ export function parseFinancialAccountsFromText(
   if (!trimmed || trimmed === "—") {
     return [];
   }
-  const parts = trimmed.split(/\s*;\s*/).filter(Boolean);
+  const parts = trimmed
+    .split(/\s*(?:;|\r?\n)\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
   const accounts: FinancialAccount[] = [];
   for (const part of parts) {
     const match = part.match(
@@ -383,6 +387,29 @@ export function parseFinancialAccountsFromText(
   return accounts;
 }
 
+export type Bd1TemplateId = "template-1" | "template-2";
+
+export const BD1_TEMPLATE_OPTIONS: {
+  id: Bd1TemplateId;
+  label: string;
+}[] = [
+  { id: "template-1", label: "Template 1" },
+  { id: "template-2", label: "Template 2" },
+];
+
+export function normalizeBd1Template(value: string): Bd1TemplateId {
+  return value.trim().toLowerCase() === "template-2"
+    ? "template-2"
+    : "template-1";
+}
+
+/** Maps Client Profile BD1 Template to the BD1 request-type menu id. */
+export function bd1TemplateToRequestTypeId(
+  template: Bd1TemplateId,
+): "bank-credit-card" | "other-statements" {
+  return template === "template-2" ? "other-statements" : "bank-credit-card";
+}
+
 export type ClientProfileEntry = {
   id: string;
   uniqueId: string;
@@ -396,6 +423,8 @@ export type ClientProfileEntry = {
   fiscalYearEnd: string;
   country: ClientCountry;
   reportingCurrency: string;
+  /** Which BD1 request package this client uses. Default Template 1. */
+  bd1Template: Bd1TemplateId;
   serviceFrequency: string;
   reportingTier: string;
   paymentType: string;
@@ -571,6 +600,7 @@ export function createEmptyClientProfileForm(
     fiscalYearEnd: "",
     country,
     reportingCurrency: reportingCurrencyForCountry(country),
+    bd1Template: "template-1",
     serviceFrequency: "",
     reportingTier: "",
     paymentType: "",
@@ -633,6 +663,7 @@ export function normalizeClientProfile(
     fiscalYearEnd: normalizeYearEnd(String(value.fiscalYearEnd ?? "")),
     country,
     reportingCurrency: reportingCurrencyForCountry(country),
+    bd1Template: normalizeBd1Template(String(value.bd1Template ?? "")),
     serviceFrequency: normalizeServiceFrequency(
       String(value.serviceFrequency ?? ""),
     ),

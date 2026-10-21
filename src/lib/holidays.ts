@@ -5,6 +5,8 @@ export type HolidayCountryId = "pakistan" | "unitedStates" | "canada";
 /** Federal / nationwide scope for US states or Canadian provinces. */
 export const HOLIDAY_STATE_ALL = "All";
 
+export type HolidayOrigin = "auto" | "manual";
+
 export type HolidayEntry = {
   id: string;
   name: string;
@@ -15,6 +17,11 @@ export type HolidayEntry = {
    * Omitted / unused for other countries.
    */
   state?: string;
+  /**
+   * auto = system year-shift / rollover placeholder.
+   * manual = person created or edited the date (lunar verified).
+   */
+  origin?: HolidayOrigin;
 };
 
 export type HolidayCountry = {
@@ -87,16 +94,23 @@ export function createHolidayEntry(
   date: string,
   state?: string,
   countryId: HolidayCountryId = "unitedStates",
+  origin: HolidayOrigin = "manual",
 ): HolidayEntry {
   const entry: HolidayEntry = {
     id: makeId("holiday"),
     name: name.trim(),
     date: normalizeHolidayDate(date),
+    origin,
   };
   if (state !== undefined) {
     entry.state = normalizeHolidayState(state, countryId);
   }
   return entry;
+}
+
+/** True only when a person saved an edit/create (origin explicitly "manual"). */
+export function isHolidayManuallySet(holiday: HolidayEntry): boolean {
+  return holiday.origin === "manual";
 }
 
 /** Accept YYYY-MM-DD or DD-MM-YYYY; store YYYY-MM-DD. */
@@ -202,6 +216,7 @@ function seedHolidays(
       id: `seed-${prefix}-${index + 1}-${entry.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
       name: entry.name,
       date: entry.date,
+      // No origin until someone edits in Holidays (then "manual") or rollover sets "auto".
     };
     if (holidayUsesRegion(countryId)) {
       holiday.state = HOLIDAY_STATE_ALL;
@@ -268,6 +283,9 @@ export function normalizeHolidays(value: unknown): HolidaysStore {
               name,
               date,
             };
+            if (holiday.origin === "auto" || holiday.origin === "manual") {
+              entry.origin = holiday.origin;
+            }
             if (holidayUsesRegion(countryId)) {
               entry.state = normalizeHolidayState(holiday.state, countryId);
             }

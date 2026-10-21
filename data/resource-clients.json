@@ -1,5 +1,27 @@
 [
   {
+    "id": "1792056572924-ckt14x",
+    "bookkeepingCategory": "ACC1",
+    "clientName": "Test6",
+    "industry": "",
+    "status": "Onboading",
+    "supervisor": "Sana",
+    "bookkeeperAccountant": [],
+    "bookkeeping": [],
+    "payroll": "",
+    "payrollAndSalesTaxes": [],
+    "deliverables": [],
+    "yearlyCompliance": [],
+    "meetingRequirements": "",
+    "meetingFrequency": "",
+    "bookkeepingDeadline": "",
+    "payrollDeadline": "",
+    "payrollTaxesDeadlines": "",
+    "deliverablesTimelines": "",
+    "yearlyComplianceTimelines": "",
+    "createdAt": "2026-10-15T09:29:32.924Z"
+  },
+  {
     "id": "1791531789814-vfjh5v",
     "bookkeepingCategory": "ACC1",
     "clientName": "2 Jacked Guyz",
@@ -32,7 +54,7 @@
     "clientName": "Lash & Co",
     "industry": "Parlour",
     "status": "Onboading",
-    "supervisor": "Sana",
+    "supervisor": "Abdul",
     "bookkeeperAccountant": [
       "Ali",
       "Khizer"

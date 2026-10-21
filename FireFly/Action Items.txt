@@ -1,16 +1,8 @@
-Done
-- Which one USA, which one CA, so only that compliance year appear 
-- Which one USA, which one CA, hide/show fields SSN, FEIN, Business Account Number
-- Renamed CT Tax Registration No to Provincial Sales Tax Numbers in the Client Profile table and form.
-- BD1 to BD7 logic is implemented for both BD1 template categories
+1 - Profit & Loss Account (Mandatory) excel/pdf .... profit loss
+2 - Balance Sheet (Mandatory) excel/pdf ...... balance sheet
+Excel/CSV is 99.9%. Rarely use PDF
+Government holidays to be sent to the whole team and client atleast 15 days before the holiday
 
--------------------------------------------------------------
+Delete BD20
 
-
-3 timezone, reporting currency, 1
-- Access Level
-BD holiday inbetween
-
-
-
-
+-1Business Day -3, -2, -1(Notification to be sent to team members via email to complete the bank and credit cards categorized process and prepare client month end tasks) .... single user owner.... overall team ko ye reminder jaye ga.... 

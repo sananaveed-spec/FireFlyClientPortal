@@ -8,21 +8,20 @@ export type DashboardTab =
   | "clientProfile"
   | "resourceAllocation"
   | "clientManagement"
-  | "flexibleClientManagement"
   | "lookupData"
   | "history"
   | "userManagement"
+  | "ignition"
   | "profile";
 
 const NAV_ITEMS: { id: DashboardTab; label: string; adminOnly?: boolean }[] = [
   { id: "clientProfile", label: "Client Profile" },
   { id: "resourceAllocation", label: "Resource Allocation" },
   { id: "clientManagement", label: "Client Management" },
-  // Hidden for now — keep tab id/panel wiring so it can be re-enabled later.
-  // { id: "flexibleClientManagement", label: "Flexible Client Management" },
   { id: "lookupData", label: "Lookup Data" },
   { id: "history", label: "History" },
   { id: "userManagement", label: "User Management", adminOnly: true },
+  { id: "ignition", label: "Ignition", adminOnly: true },
 ];
 
 type SidebarProps = {

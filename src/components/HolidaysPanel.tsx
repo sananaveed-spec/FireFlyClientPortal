@@ -3,12 +3,20 @@
 import { useMsal } from "@azure/msal-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
+import { mailSendRequest } from "@/auth/authConfig";
 import { useAccess } from "@/auth/accessContext";
+import { getAccountEmail } from "@/auth/organization";
 import { SearchableSelect } from "@/components/SearchableSelect";
+import {
+  createEmptyEmailSignature,
+  normalizeEmailSignature,
+  type EmailSignature,
+} from "@/lib/email-signatures";
 import {
   getActorFromAccount,
   logPortalAction,
 } from "@/lib/history-client";
+import { isLunarHolidayName } from "@/lib/holiday-rules";
 import {
   createHolidayEntry,
   formatHolidayDate,
@@ -18,13 +26,23 @@ import {
   HOLIDAY_COUNTRIES,
   HOLIDAY_STATE_ALL,
   holidayUsesRegion,
+  isHolidayManuallySet,
   normalizeHolidayDate,
   normalizeHolidayState,
   type HolidayCountryId,
   type HolidayEntry,
   type HolidaysStore,
 } from "@/lib/holidays";
+import {
+  buildPakistanHolidayEmailPreview,
+  isPakistanHolidayEmailSender,
+  PAKISTAN_HOLIDAY_EMAIL_SENDER,
+  pakistanHolidayEmailSendersLabel,
+  type PakistanHolidayEmailPlan,
+  type PakistanHolidayEmailPreviewRow,
+} from "@/lib/pakistan-holiday-emails";
 import { portalFetch } from "@/lib/portal-api";
+import { sendGraphMail } from "@/lib/send-graph-mail";
 
 type EditorState = {
   mode: "add" | "edit";
@@ -50,9 +68,11 @@ async function persistHolidays(data: HolidaysStore) {
 }
 
 export function HolidaysPanel() {
-  const { accounts } = useMsal();
-  const { canEdit } = useAccess();
+  const { instance, accounts } = useMsal();
+  const { canEdit, email: portalEmail } = useAccess();
   const actor = getActorFromAccount(accounts[0]);
+  const canSendPakistanHolidayEmails =
+    canEdit && isPakistanHolidayEmailSender(portalEmail || "");
   const [store, setStore] = useState<HolidaysStore>({ countries: [] });
   const [activeCountryId, setActiveCountryId] =
     useState<HolidayCountryId>("pakistan");
@@ -61,13 +81,46 @@ export function HolidaysPanel() {
   const [mounted, setMounted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const [lunarNoticeDismissed, setLunarNoticeDismissed] = useState(false);
+  const [emailStatusByHolidayId, setEmailStatusByHolidayId] = useState<
+    Record<string, "Scheduled" | "Sent" | "—">
+  >({});
+  const [clientEmailStatusByHolidayId, setClientEmailStatusByHolidayId] =
+    useState<Record<string, "Scheduled" | "Sent" | "—">>({});
+  const [upcomingHolidayEmails, setUpcomingHolidayEmails] = useState<
+    PakistanHolidayEmailPreviewRow[]
+  >([]);
+  const [emailSignature, setEmailSignature] = useState<EmailSignature>(
+    createEmptyEmailSignature,
+  );
+  const [schedulingHolidayEmails, setSchedulingHolidayEmails] = useState(false);
 
   const showRegionColumn = holidayUsesRegion(activeCountryId);
+  const showEmailStatusColumn = activeCountryId === "pakistan";
   const regionLabel = getHolidayRegionLabel(activeCountryId);
   const regionOptions = useMemo(
     () => getHolidayRegionOptions(activeCountryId),
     [activeCountryId],
   );
+  const currentYear = new Date().getFullYear();
+  const pakistanHolidays = useMemo(
+    () =>
+      store.countries.find((country) => country.id === "pakistan")?.holidays ??
+      [],
+    [store.countries],
+  );
+  /** Local preview so viewers (e.g. sana@epsfresno.com) always see upcoming sends. */
+  const localUpcomingHolidayEmails = useMemo(
+    () => buildPakistanHolidayEmailPreview(pakistanHolidays, { entries: [] }),
+    [pakistanHolidays],
+  );
+  const displayUpcomingHolidayEmails =
+    upcomingHolidayEmails.length > 0
+      ? upcomingHolidayEmails
+      : showEmailStatusColumn
+        ? localUpcomingHolidayEmails
+        : [];
 
   useEffect(() => {
     setMounted(true);
@@ -78,16 +131,43 @@ export function HolidaysPanel() {
 
     async function load() {
       try {
-        const response = await fetch("/api/holidays", { cache: "no-store" });
-        const data = (await response.json()) as HolidaysStore & {
+        const [holidaysRes, statusRes, signatureRes] = await Promise.all([
+          fetch("/api/holidays", { cache: "no-store" }),
+          portalFetch("/api/pakistan-holiday-emails", { cache: "no-store" }),
+          portalFetch("/api/email-signature", { cache: "no-store" }),
+        ]);
+        const data = (await holidaysRes.json()) as HolidaysStore & {
           error?: string;
         };
-        if (!response.ok) {
+        if (!holidaysRes.ok) {
           throw new Error(data.error || "Failed to load holidays.");
         }
         if (!cancelled) {
           setStore({ countries: data.countries ?? [] });
           setError(null);
+        }
+        if (statusRes.ok && !cancelled) {
+          const statusData = (await statusRes.json()) as {
+            statusByHolidayId?: Record<string, "Scheduled" | "Sent" | "—">;
+            clientStatusByHolidayId?: Record<
+              string,
+              "Scheduled" | "Sent" | "—"
+            >;
+            upcoming?: PakistanHolidayEmailPreviewRow[];
+          };
+          setEmailStatusByHolidayId(statusData.statusByHolidayId ?? {});
+          setClientEmailStatusByHolidayId(
+            statusData.clientStatusByHolidayId ?? {},
+          );
+          setUpcomingHolidayEmails(statusData.upcoming ?? []);
+        }
+        if (signatureRes.ok && !cancelled) {
+          const signatureData = (await signatureRes.json()) as {
+            signature?: EmailSignature;
+          };
+          setEmailSignature(
+            normalizeEmailSignature(signatureData.signature),
+          );
         }
       } catch (loadError) {
         if (!cancelled) {
@@ -117,6 +197,265 @@ export function HolidaysPanel() {
       null,
     [store.countries, activeCountryId],
   );
+
+  /** Lunar rows still on auto year-shift (not yet manually edited). */
+  const pendingLunarHolidaysThisYear = useMemo(() => {
+    if (!activeCountry) {
+      return [];
+    }
+    return activeCountry.holidays.filter(
+      (holiday) =>
+        isLunarHolidayName(holiday.name) &&
+        holiday.date.startsWith(`${currentYear}-`) &&
+        !isHolidayManuallySet(holiday),
+    );
+  }, [activeCountry, currentYear]);
+
+  useEffect(() => {
+    setLunarNoticeDismissed(false);
+  }, [activeCountryId]);
+
+  async function markPakistanHolidayEmail(
+    plan: PakistanHolidayEmailPlan,
+    status: "scheduled" | "sent",
+  ) {
+    const response = await portalFetch("/api/pakistan-holiday-emails", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "mark",
+        audience: plan.audience,
+        groupKey: plan.groupKey,
+        holidayDate: plan.holidayDate,
+        holidayDates: plan.holidayDates,
+        holidayIds: plan.holidayIds,
+        holidayName: plan.holidayName,
+        status,
+        scheduledFor: plan.sendAt ?? "",
+        sentAt: status === "sent" ? new Date().toISOString() : "",
+      }),
+    });
+    const data = (await response.json()) as {
+      statusByHolidayId?: Record<string, "Scheduled" | "Sent" | "—">;
+      clientStatusByHolidayId?: Record<string, "Scheduled" | "Sent" | "—">;
+      upcoming?: PakistanHolidayEmailPreviewRow[];
+      error?: string;
+    };
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to save holiday email status.");
+    }
+    setEmailStatusByHolidayId((prev) => ({
+      ...prev,
+      ...(data.statusByHolidayId ?? {}),
+    }));
+    setClientEmailStatusByHolidayId((prev) => ({
+      ...prev,
+      ...(data.clientStatusByHolidayId ?? {}),
+    }));
+    if (data.upcoming) {
+      setUpcomingHolidayEmails(data.upcoming);
+    }
+  }
+
+  async function ensurePakistanHolidayEmails() {
+    if (!canSendPakistanHolidayEmails || schedulingHolidayEmails) {
+      return;
+    }
+    setSchedulingHolidayEmails(true);
+    setInfo(null);
+    try {
+      const response = await portalFetch("/api/pakistan-holiday-emails", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "ensure" }),
+      });
+      const data = (await response.json()) as {
+        statusByHolidayId?: Record<string, "Scheduled" | "Sent" | "—">;
+        clientStatusByHolidayId?: Record<string, "Scheduled" | "Sent" | "—">;
+        upcoming?: PakistanHolidayEmailPreviewRow[];
+        teamRecipients?: string[];
+        clientRecipients?: string[];
+        teamPlans?: PakistanHolidayEmailPlan[];
+        clientPlans?: PakistanHolidayEmailPlan[];
+        message?: string;
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to prepare holiday emails.");
+      }
+      setEmailStatusByHolidayId((prev) => ({
+        ...prev,
+        ...(data.statusByHolidayId ?? {}),
+      }));
+      setClientEmailStatusByHolidayId((prev) => ({
+        ...prev,
+        ...(data.clientStatusByHolidayId ?? {}),
+      }));
+      if (data.upcoming) {
+        setUpcomingHolidayEmails(data.upcoming);
+      }
+
+      const teamPlans = data.teamPlans ?? [];
+      const clientPlans = data.clientPlans ?? [];
+      const teamRecipients = (data.teamRecipients ?? []).filter(Boolean);
+      const hasTeamWork = teamPlans.length > 0 && teamRecipients.length > 0;
+      const hasClientWork = clientPlans.some(
+        (plan) => (plan.recipients?.length ?? 0) > 0,
+      );
+      if (!hasTeamWork && !hasClientWork) {
+        if (data.message) {
+          setInfo(data.message);
+        }
+        return;
+      }
+
+      let account =
+        instance.getActiveAccount() ?? instance.getAllAccounts()[0] ?? null;
+      if (!account) {
+        const result = await instance.loginPopup({
+          ...mailSendRequest,
+          prompt: "select_account",
+        });
+        account = result.account;
+        if (account) {
+          instance.setActiveAccount(account);
+        }
+      }
+      if (!account) {
+        throw new Error(
+          "Sign in with a Fire Fly Microsoft account to schedule holiday emails.",
+        );
+      }
+      const mailAccountEmail = getAccountEmail(account);
+      if (!isPakistanHolidayEmailSender(mailAccountEmail)) {
+        throw new Error(
+          `Sign in as ${pakistanHolidayEmailSendersLabel()} to schedule holiday emails. Other users can view holidays only.`,
+        );
+      }
+
+      let signature = emailSignature;
+      if (!signature.email && !signature.name) {
+        const signatureRes = await portalFetch("/api/email-signature", {
+          cache: "no-store",
+        });
+        if (signatureRes.ok) {
+          const signatureData = (await signatureRes.json()) as {
+            signature?: EmailSignature;
+          };
+          signature = normalizeEmailSignature(signatureData.signature);
+          setEmailSignature(signature);
+        }
+      }
+
+      const summaryParts: string[] = [];
+
+      // Graph requires a To address; put the sender there and everyone else in
+      // BCC so recipients never see each other's email addresses.
+      const senderTo =
+        mailAccountEmail || PAKISTAN_HOLIDAY_EMAIL_SENDER;
+
+      async function sendPlans(
+        label: string,
+        plans: PakistanHolidayEmailPlan[],
+        fallbackRecipients: string[],
+      ) {
+        let scheduled = 0;
+        let sent = 0;
+        const markedKeys = new Set<string>();
+        for (const plan of plans) {
+          const recipients =
+            plan.recipients && plan.recipients.length > 0
+              ? plan.recipients
+              : fallbackRecipients;
+          if (recipients.length === 0) {
+            continue;
+          }
+          await sendGraphMail(instance, account!, {
+            to: senderTo,
+            bcc: recipients.join(", "),
+            subject: plan.subject,
+            bodyText: plan.body,
+            highlights: [plan.holidayName],
+            signature,
+            sendAt: plan.sendAt ? new Date(plan.sendAt) : undefined,
+          });
+          const markKey = `${plan.audience}:${plan.groupKey}`;
+          if (!markedKeys.has(markKey)) {
+            markedKeys.add(markKey);
+            await markPakistanHolidayEmail(plan, plan.markAs);
+          }
+          if (plan.markAs === "sent") {
+            sent += 1;
+          } else {
+            scheduled += 1;
+          }
+        }
+        const parts: string[] = [];
+        if (scheduled > 0) {
+          parts.push(`${scheduled} scheduled`);
+        }
+        if (sent > 0) {
+          parts.push(`${sent} sent`);
+        }
+        if (parts.length > 0) {
+          summaryParts.push(`${label}: ${parts.join(", ")}`);
+        }
+      }
+
+      if (hasTeamWork) {
+        await sendPlans("Team", teamPlans, teamRecipients);
+      }
+      if (hasClientWork) {
+        await sendPlans("Client", clientPlans, []);
+      }
+
+      const refreshRes = await portalFetch("/api/pakistan-holiday-emails", {
+        cache: "no-store",
+      });
+      if (refreshRes.ok) {
+        const refreshed = (await refreshRes.json()) as {
+          statusByHolidayId?: Record<string, "Scheduled" | "Sent" | "—">;
+          clientStatusByHolidayId?: Record<
+            string,
+            "Scheduled" | "Sent" | "—"
+          >;
+          upcoming?: PakistanHolidayEmailPreviewRow[];
+        };
+        setEmailStatusByHolidayId(refreshed.statusByHolidayId ?? {});
+        setClientEmailStatusByHolidayId(
+          refreshed.clientStatusByHolidayId ?? {},
+        );
+        setUpcomingHolidayEmails(refreshed.upcoming ?? []);
+      }
+
+      setInfo(
+        summaryParts.length > 0
+          ? `Holiday emails — ${summaryParts.join("; ")}.`
+          : data.message || null,
+      );
+    } catch (ensureError) {
+      setError(
+        ensureError instanceof Error
+          ? ensureError.message
+          : "Failed to schedule Pakistan holiday emails.",
+      );
+    } finally {
+      setSchedulingHolidayEmails(false);
+    }
+  }
+
+  useEffect(() => {
+    if (
+      !ready ||
+      !canSendPakistanHolidayEmails ||
+      activeCountryId !== "pakistan"
+    ) {
+      return;
+    }
+    void ensurePakistanHolidayEmails();
+    // Run when Ayesha opens Pakistan holidays.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional one-shot per country visit
+  }, [ready, canSendPakistanHolidayEmails, activeCountryId]);
 
   async function saveStore(next: HolidaysStore) {
     setSaving(true);
@@ -298,6 +637,7 @@ export function HolidaysPanel() {
               ...holiday,
               name,
               date,
+              origin: "manual" as const,
               ...(state !== undefined ? { state } : {}),
             }
           : holiday,
@@ -353,9 +693,11 @@ export function HolidaysPanel() {
                   <div>
                     <h3 className="section-title">Holidays</h3>
                     <p className="lookup-hint">
-                      {showRegionColumn
-                        ? `Federal holidays use ${regionLabel} = All. Choose a specific ${regionLabel.toLowerCase()} for local holidays.`
-                        : `Add company holidays with a name and date for ${activeCountry.name}.`}
+                      {showEmailStatusColumn
+                        ? `Team (Template 16): last weekday before · 9:00 AM Pakistan. Clients (Template 17): 15 calendar days before (weekday-adjusted) · 9:00 AM client time zone. Upcoming schedule is visible to all portal users. Send/schedule: ${pakistanHolidayEmailSendersLabel()}.`
+                        : showRegionColumn
+                          ? `Federal holidays use ${regionLabel} = All. Choose a specific ${regionLabel.toLowerCase()} for local holidays.`
+                          : `Add company holidays with a name and date for ${activeCountry.name}.`}
                     </p>
                   </div>
                   {canEdit ? (
@@ -373,6 +715,101 @@ export function HolidaysPanel() {
                 {error && !editor ? (
                   <p className="form-message error">{error}</p>
                 ) : null}
+                {info && !editor ? (
+                  <p className="form-message success">{info}</p>
+                ) : null}
+                {showEmailStatusColumn && schedulingHolidayEmails ? (
+                  <p className="lookup-hint">
+                    Scheduling team and client holiday emails…
+                  </p>
+                ) : null}
+
+                {showEmailStatusColumn &&
+                displayUpcomingHolidayEmails.length > 0 ? (
+                  <div className="holiday-email-preview">
+                    <h4 className="holiday-email-preview__title">
+                      Upcoming holiday emails
+                    </h4>
+                    <p className="lookup-hint holiday-email-preview__hint">
+                      Visible to all portal users. Team: last weekday before ·
+                      Clients: 15 calendar days before (weekday-adjusted).
+                      Status shows Scheduled after{" "}
+                      {pakistanHolidayEmailSendersLabel()} schedules the send.
+                    </p>
+                    <div className="table-wrap">
+                      <table className="projects-table holiday-email-preview__table">
+                        <thead>
+                          <tr>
+                            <th>Holiday</th>
+                            <th>Dates</th>
+                            <th>Team send</th>
+                            <th>Team</th>
+                            <th>Client send</th>
+                            <th>Client</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {displayUpcomingHolidayEmails.map((row) => (
+                            <tr key={row.groupKey}>
+                              <td>{row.holidayName}</td>
+                              <td>{row.holidayDateLabel}</td>
+                              <td>{row.teamSendLabel}</td>
+                              <td>
+                                <span
+                                  className={
+                                    row.teamStatus === "Sent"
+                                      ? "pakistan-holiday-email-status pakistan-holiday-email-status--sent"
+                                      : row.teamStatus === "Scheduled"
+                                        ? "pakistan-holiday-email-status pakistan-holiday-email-status--scheduled"
+                                        : "pakistan-holiday-email-status"
+                                  }
+                                >
+                                  {row.teamStatus}
+                                </span>
+                              </td>
+                              <td>{row.clientSendLabel}</td>
+                              <td>
+                                <span
+                                  className={
+                                    row.clientStatus === "Sent"
+                                      ? "pakistan-holiday-email-status pakistan-holiday-email-status--sent"
+                                      : row.clientStatus === "Scheduled"
+                                        ? "pakistan-holiday-email-status pakistan-holiday-email-status--scheduled"
+                                        : "pakistan-holiday-email-status"
+                                  }
+                                >
+                                  {row.clientStatus}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : null}
+
+                {pendingLunarHolidaysThisYear.length > 0 &&
+                !lunarNoticeDismissed ? (
+                  <div
+                    className="inline-notice inline-notice--warning"
+                    role="status"
+                  >
+                    <p className="inline-notice__text">
+                      <strong>Lunar holiday:</strong> These dates need to be
+                      set manually (Eid, Ashura, etc.). Edit each row below —
+                      the year-shift from last year is only a placeholder.
+                    </p>
+                    <button
+                      type="button"
+                      className="inline-notice__close"
+                      aria-label="Dismiss lunar holidays notice"
+                      onClick={() => setLunarNoticeDismissed(true)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ) : null}
 
                 {activeCountry.holidays.length === 0 ? (
                   <p className="table-empty">
@@ -388,13 +825,46 @@ export function HolidaysPanel() {
                           <th>Date (DD-MM-YYYY)</th>
                           <th>Day</th>
                           {showRegionColumn ? <th>{regionLabel}</th> : null}
+                          {showEmailStatusColumn ? (
+                            <>
+                              <th>Team Email</th>
+                              <th>Client Email</th>
+                            </>
+                          ) : null}
                           {canEdit ? <th>Action</th> : null}
                         </tr>
                       </thead>
                       <tbody>
-                        {activeCountry.holidays.map((holiday, index) => (
-                          <tr key={holiday.id}>
-                            <td>{holiday.name}</td>
+                        {activeCountry.holidays.map((holiday, index) => {
+                          const isLunar = isLunarHolidayName(holiday.name);
+                          const lunarManual =
+                            isLunar && isHolidayManuallySet(holiday);
+                          const lunarPending = isLunar && !lunarManual;
+                          return (
+                          <tr
+                            key={holiday.id}
+                            className={
+                              lunarPending
+                                ? "holiday-row--lunar"
+                                : lunarManual
+                                  ? "holiday-row--lunar-manual"
+                                  : undefined
+                            }
+                          >
+                            <td>
+                              {holiday.name}
+                              {isLunar ? (
+                                <span
+                                  className={
+                                    lunarManual
+                                      ? "holidays-lunar-tag holidays-lunar-tag--manual"
+                                      : "holidays-lunar-tag"
+                                  }
+                                >
+                                  Lunar
+                                </span>
+                              ) : null}
+                            </td>
                             <td>{formatHolidayDate(holiday.date)}</td>
                             <td>{getHolidayWeekday(holiday.date)}</td>
                             {showRegionColumn ? (
@@ -425,6 +895,44 @@ export function HolidaysPanel() {
                                   )
                                 )}
                               </td>
+                            ) : null}
+                            {showEmailStatusColumn ? (
+                              <>
+                                <td>
+                                  <span
+                                    className={
+                                      emailStatusByHolidayId[holiday.id] ===
+                                      "Sent"
+                                        ? "pakistan-holiday-email-status pakistan-holiday-email-status--sent"
+                                        : emailStatusByHolidayId[holiday.id] ===
+                                            "Scheduled"
+                                          ? "pakistan-holiday-email-status pakistan-holiday-email-status--scheduled"
+                                          : "pakistan-holiday-email-status"
+                                    }
+                                  >
+                                    {emailStatusByHolidayId[holiday.id] ?? "—"}
+                                  </span>
+                                </td>
+                                <td>
+                                  <span
+                                    className={
+                                      clientEmailStatusByHolidayId[
+                                        holiday.id
+                                      ] === "Sent"
+                                        ? "pakistan-holiday-email-status pakistan-holiday-email-status--sent"
+                                        : clientEmailStatusByHolidayId[
+                                              holiday.id
+                                            ] === "Scheduled"
+                                          ? "pakistan-holiday-email-status pakistan-holiday-email-status--scheduled"
+                                          : "pakistan-holiday-email-status"
+                                    }
+                                  >
+                                    {clientEmailStatusByHolidayId[
+                                      holiday.id
+                                    ] ?? "—"}
+                                  </span>
+                                </td>
+                              </>
                             ) : null}
                             {canEdit ? (
                               <td>
@@ -477,7 +985,8 @@ export function HolidaysPanel() {
                               </td>
                             ) : null}
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

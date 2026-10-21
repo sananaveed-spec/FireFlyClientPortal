@@ -1,0 +1,32 @@
+{
+  "entries": [
+    {
+      "groupKey": "2026:quaid-e-azam-day",
+      "audience": "team",
+      "holidayDate": "2026-12-25",
+      "holidayDates": [
+        "2026-12-25"
+      ],
+      "holidayIds": [],
+      "holidayName": "Quaid-e-Azam Day",
+      "status": "scheduled",
+      "scheduledFor": "2026-12-24T04:00:00.000Z",
+      "sentAt": ""
+    },
+    {
+      "groupKey": "2026:quaid-e-azam-day",
+      "audience": "client",
+      "holidayDate": "2026-12-25",
+      "holidayDates": [
+        "2026-12-25"
+      ],
+      "holidayIds": [
+        "seed-14-quaid-e-azam-day"
+      ],
+      "holidayName": "Quaid-e-Azam Day",
+      "status": "scheduled",
+      "scheduledFor": "2026-12-10T17:00:00.000Z",
+      "sentAt": ""
+    }
+  ]
+}

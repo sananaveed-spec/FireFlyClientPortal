@@ -38,6 +38,165 @@ export function currentMonthKey(date: Date = new Date()): string {
   return `${year}-${month}`;
 }
 
+/** Mid-month Date for a YYYY-MM key (stable for month-scoped action items). */
+export function parseMonthKeyToClock(month: string): Date | null {
+  if (!/^\d{4}-\d{2}$/.test(month.trim())) {
+    return null;
+  }
+  const [year, mon] = month.trim().split("-").map(Number);
+  if (!year || !mon || mon < 1 || mon > 12) {
+    return null;
+  }
+  return new Date(year, mon - 1, 15, 12, 0, 0, 0);
+}
+
+/** Request bullets that belong to a calendar month (BD1 / BD8 lists). */
+export function requestItemsForMonth(
+  items: RequestBulletItem[],
+  monthKey: string,
+): RequestBulletItem[] {
+  return items.filter((item) => item.createdMonth === monthKey);
+}
+
+/**
+ * Pin legacy bullets (no createdMonth) to the prior tracked month so a demo
+ * or rollover cannot re-tag them as belonging to the new month's BD1/BD8 form.
+ */
+function pinLegacyRequestMonths(list: ClientRequestList): ClientRequestList {
+  if (!list.lastPromotedMonth) {
+    return list;
+  }
+  let changed = false;
+  const requestItems = list.requestItems.map((item) => {
+    if (item.createdMonth) {
+      return item;
+    }
+    changed = true;
+    return { ...item, createdMonth: list.lastPromotedMonth };
+  });
+  return changed ? { ...list, requestItems } : list;
+}
+
+/**
+ * Month of the user's latest request-list edits (max YYYY-MM that has bullets).
+ * Month switches always project from this list — not an older month.
+ */
+function latestEditedRequestMonth(items: RequestBulletItem[]): string | null {
+  const months = [
+    ...new Set(
+      items
+        .map((item) => item.createdMonth)
+        .filter((month): month is string => Boolean(month)),
+    ),
+  ].sort();
+  return months.length > 0 ? (months[months.length - 1] ?? null) : null;
+}
+
+function requestLabelFingerprint(items: RequestBulletItem[]): string {
+  return items
+    .map((item) => item.label.trim().toLowerCase())
+    .filter(Boolean)
+    .join("\n");
+}
+
+/**
+ * Ensure `monthKey` shows the last list the user edited (any prior month).
+ * Example: Oct=2, Nov=3 → Dec gets Nov's 3 (not Oct's 2).
+ */
+function copyRequestBulletsToMonth(
+  list: ClientRequestList,
+  monthKey: string,
+): ClientRequestList {
+  const sourceMonth = latestEditedRequestMonth(list.requestItems);
+  if (!sourceMonth || sourceMonth === monthKey) {
+    return list;
+  }
+  const sourceItems = list.requestItems.filter(
+    (item) => item.createdMonth === sourceMonth,
+  );
+  if (sourceItems.length === 0) {
+    return list;
+  }
+  const targetItems = list.requestItems.filter(
+    (item) => item.createdMonth === monthKey,
+  );
+  if (
+    targetItems.length > 0 &&
+    requestLabelFingerprint(targetItems) ===
+      requestLabelFingerprint(sourceItems)
+  ) {
+    return list;
+  }
+
+  const targetIds = new Set(targetItems.map((item) => item.id));
+  const clones = sourceItems.map((item) => ({
+    id: makeItemId("req"),
+    label: item.label,
+    createdMonth: monthKey,
+  }));
+
+  return {
+    ...list,
+    requestItems: [
+      ...list.requestItems.filter((item) => item.createdMonth !== monthKey),
+      ...clones,
+    ],
+    // Drop Open rows that belonged to the replaced target-month bullets.
+    actionItems: list.actionItems.filter(
+      (action) =>
+        !(
+          action.monthKey === monthKey &&
+          action.status === "action" &&
+          targetIds.has(action.sourceRequestId)
+        ),
+    ),
+  };
+}
+
+/**
+ * Drop Open rows for `monthKey` that still point at another month's request
+ * bullet (legacy promote), and collapse duplicate Open labels for the month.
+ */
+function cleanupMonthOpenActions(
+  list: ClientRequestList,
+  monthKey: string,
+): ClientRequestList {
+  const requestById = new Map(
+    list.requestItems.map((item) => [item.id, item] as const),
+  );
+  const kept: ActionWorkflowItem[] = [];
+  const openLabels = new Set<string>();
+
+  for (const action of list.actionItems) {
+    if (action.monthKey !== monthKey) {
+      kept.push(action);
+      continue;
+    }
+    if (action.status !== "action") {
+      kept.push(action);
+      continue;
+    }
+    const source = requestById.get(action.sourceRequestId);
+    if (source && source.createdMonth && source.createdMonth !== monthKey) {
+      // Stale Open row from prior-month source — Nov copy owns this work now.
+      continue;
+    }
+    const labelKey = action.label.trim().toLowerCase();
+    if (labelKey && openLabels.has(labelKey)) {
+      continue;
+    }
+    if (labelKey) {
+      openLabels.add(labelKey);
+    }
+    kept.push(action);
+  }
+
+  if (kept.length === list.actionItems.length) {
+    return list;
+  }
+  return { ...list, actionItems: kept };
+}
+
 export function createEmptyRequestListsStore(): ClientRequestListsStore {
   return { lists: [] };
 }
@@ -199,7 +358,8 @@ export function getClientActionItems(
       continue;
     }
     for (const item of list.actionItems) {
-      const key = `${item.sourceRequestId || item.id}::${item.monthKey}`;
+      const labelKey = item.label.trim().toLowerCase() || item.id;
+      const key = `${labelKey}::${item.monthKey}`;
       const existing = byKey.get(key);
       if (!existing) {
         byKey.set(key, item);
@@ -230,44 +390,26 @@ export function findListContainingActionItem(
 }
 
 /**
- * Request bullets created in the current month also appear on Action Items
- * immediately (without waiting for the next month).
- * Legacy bullets (no createdMonth) that already sit under this month's
- * lastPromotedMonth are treated as same-month creates.
+ * Request bullets created in the active month also appear on Action Items
+ * immediately. Prior-month bullets are never re-tagged or re-opened.
  */
 export function syncSameMonthCreationsToActionItems(
   list: ClientRequestList,
   now: Date = new Date(),
 ): ClientRequestList {
   const monthKey = currentMonthKey(now);
-  let changed = false;
-
-  const requestItems = list.requestItems.map((item) => {
-    if (item.createdMonth) {
-      return item;
-    }
-    // Backfill: items present while this month is already tracked were
-    // created this month before createdMonth existed.
-    if (list.lastPromotedMonth === monthKey) {
-      changed = true;
-      return { ...item, createdMonth: monthKey };
-    }
-    return item;
-  });
-
-  const missing = requestItems.filter(
+  const missing = list.requestItems.filter(
     (item) =>
       item.createdMonth === monthKey &&
       !hasActionForRequestMonth(list.actionItems, item.id, monthKey),
   );
 
-  if (!changed && missing.length === 0) {
+  if (missing.length === 0) {
     return list;
   }
 
   return {
     ...list,
-    requestItems,
     actionItems: [
       ...list.actionItems,
       ...missing.map((item) => createActionFromRequest(item, monthKey)),
@@ -275,36 +417,53 @@ export function syncSameMonthCreationsToActionItems(
   };
 }
 
-/** Copy Request List bullets into Action Items when a new month starts. */
+/**
+ * Advance the tracked month: project the user's latest BD1/BD8 list edits
+ * onto this month, then open matching Action rows (BD5 / BD9).
+ */
 export function promoteRequestListForNewMonth(
   list: ClientRequestList,
   now: Date = new Date(),
 ): ClientRequestList {
   const monthKey = currentMonthKey(now);
-  if (list.lastPromotedMonth === monthKey) {
-    return syncSameMonthCreationsToActionItems(list, now);
-  }
-  // First time: start tracking this month; same-month creates still sync.
-  if (!list.lastPromotedMonth) {
-    return syncSameMonthCreationsToActionItems(
-      { ...list, lastPromotedMonth: monthKey },
-      now,
+  let next = pinLegacyRequestMonths(list);
+  next = copyRequestBulletsToMonth(next, monthKey);
+
+  if (next.lastPromotedMonth === monthKey) {
+    return cleanupMonthOpenActions(
+      syncSameMonthCreationsToActionItems(next, now),
+      monthKey,
     );
   }
 
-  const promoted: ActionWorkflowItem[] = list.requestItems
-    .filter(
-      (item) => !hasActionForRequestMonth(list.actionItems, item.id, monthKey),
-    )
-    .map((item) => createActionFromRequest(item, monthKey));
-
-  return syncSameMonthCreationsToActionItems(
-    {
-      ...list,
+  // First time: start tracking this month; same-month creates still sync.
+  if (!next.lastPromotedMonth) {
+    const seeded = {
+      ...next,
+      requestItems: next.requestItems.map((item) =>
+        item.createdMonth ? item : { ...item, createdMonth: monthKey },
+      ),
       lastPromotedMonth: monthKey,
-      actionItems: [...list.actionItems, ...promoted],
-    },
-    now,
+    };
+    return cleanupMonthOpenActions(
+      syncSameMonthCreationsToActionItems(seeded, now),
+      monthKey,
+    );
+  }
+
+  // Never move lastPromotedMonth backwards (demo month can jump around).
+  const nextLast =
+    next.lastPromotedMonth > monthKey ? next.lastPromotedMonth : monthKey;
+
+  return cleanupMonthOpenActions(
+    syncSameMonthCreationsToActionItems(
+      {
+        ...next,
+        lastPromotedMonth: nextLast,
+      },
+      now,
+    ),
+    monthKey,
   );
 }
 
@@ -326,12 +485,13 @@ export function promoteAllListsForNewMonth(
 export function upsertClientRequestList(
   store: ClientRequestListsStore,
   nextList: ClientRequestList,
+  now: Date = new Date(),
 ): ClientRequestListsStore {
   const normalized = normalizeClientRequestList(nextList);
   if (!normalized) {
     return store;
   }
-  const synced = syncSameMonthCreationsToActionItems(normalized);
+  const synced = syncSameMonthCreationsToActionItems(normalized, now);
   const without = store.lists.filter(
     (list) =>
       !(
@@ -418,6 +578,26 @@ export function completeActionItem(
     ...list,
     actionItems: list.actionItems.map((item) =>
       item.id === actionItemId && item.status === "action"
+        ? {
+            ...item,
+            status,
+            completedAt: new Date().toISOString(),
+          }
+        : item,
+    ),
+  };
+}
+
+/** Set Completed/Late even if the item was already resolved (e.g. SharePoint re-check). */
+export function setActionItemStatus(
+  list: ClientRequestList,
+  actionItemId: string,
+  status: "completed" | "late",
+): ClientRequestList {
+  return {
+    ...list,
+    actionItems: list.actionItems.map((item) =>
+      item.id === actionItemId
         ? {
             ...item,
             status,

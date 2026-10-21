@@ -1,0 +1,312 @@
+{
+  "tasks": [
+    {
+      "id": "roll-holidays-new-year",
+      "name": "Roll Holidays to Current Year",
+      "description": "Copies prior-year holidays into the current year (automatic on Lookup open). Floating holidays are auto-set; lunar holidays must be set manually in Holidays.",
+      "schedule": "yearly-on-jan-1",
+      "status": "done",
+      "lastPerformedAt": "2026-10-20T10:55:24.463Z",
+      "nextPerformAt": "2027-01-01T08:00:00.000Z",
+      "lastTargetYear": 2026,
+      "lastTargetMonth": null,
+      "bdSlots": [],
+      "demoMonth": null,
+      "checklist": [
+        {
+          "id": "chk-1792493724463-6xc2y6",
+          "label": "Pakistan: already has 2026",
+          "done": true,
+          "performedAt": "2026-10-20T10:55:24.463Z",
+          "detail": "Dates already exist for this year — recomputed floating rules.",
+          "requiresHumanCheck": false,
+          "manual": false,
+          "checkedBy": null,
+          "checkedAt": null
+        },
+        {
+          "id": "chk-1792493724464-r6qk9r",
+          "label": "United States: already has 2026",
+          "done": true,
+          "performedAt": "2026-10-20T10:55:24.463Z",
+          "detail": "Dates already exist for this year — recomputed floating rules.",
+          "requiresHumanCheck": false,
+          "manual": false,
+          "checkedBy": null,
+          "checkedAt": null
+        },
+        {
+          "id": "chk-1792493724464-socb1t",
+          "label": "Canada: already has 2026",
+          "done": true,
+          "performedAt": "2026-10-20T10:55:24.463Z",
+          "detail": "Dates already exist for this year — recomputed floating rules.",
+          "requiresHumanCheck": false,
+          "manual": false,
+          "checkedBy": null,
+          "checkedAt": null
+        },
+        {
+          "id": "chk-1792493724464-r497z9",
+          "label": "Floating holidays: auto-set by system",
+          "done": true,
+          "performedAt": "2026-10-20T10:55:24.463Z",
+          "detail": "United States: Birthday of Martin Luther King, Jr. → 2026-01-19; United States: Washington's Birthday → 2026-02-16; United States: Memorial Day → 2026-05-25; United States: Labor Day → 2026-09-07; United States: Columbus Day → 2026-10-12; United States: Thanksgiving Day → 2026-11-26; Canada: Good Friday → 2026-04-03; Canada: Victoria Day → 2026-05-18; Canada: Labour Day → 2026-09-07; Canada: Thanksgiving Day → 2026-10-12",
+          "requiresHumanCheck": false,
+          "manual": false,
+          "checkedBy": null,
+          "checkedAt": null
+        },
+        {
+          "id": "chk-1792493724464-05kpr9",
+          "label": "Lunar holidays",
+          "done": false,
+          "performedAt": "2026-10-20T10:55:24.463Z",
+          "detail": "",
+          "requiresHumanCheck": false,
+          "manual": true,
+          "checkedBy": null,
+          "checkedAt": null
+        }
+      ],
+      "lastError": null
+    },
+    {
+      "id": "roll-client-management-month",
+      "name": "Roll Client Management to Current Month",
+      "description": "On the 1st of each month (automatic on Lookup open), refreshes Standard Client Management business days, default templates, and due-date rules for the current month. Use Demo month to preview any month.",
+      "schedule": "monthly-on-1st",
+      "status": "done",
+      "lastPerformedAt": "2026-10-21T04:56:04.992Z",
+      "nextPerformAt": "2026-11-01T07:00:00.000Z",
+      "lastTargetYear": null,
+      "lastTargetMonth": "2026-10",
+      "bdSlots": [
+        {
+          "id": "bd1",
+          "label": "BD1",
+          "businessDateLabel": "1 Oct 2026, Thursday",
+          "deadlineRule": "BD4",
+          "defaultTemplate": "Template 1 or Template 2 (by client BD1 Template)",
+          "refreshedAt": "2026-10-21T04:56:04.992Z"
+        },
+        {
+          "id": "bd5",
+          "label": "BD5",
+          "businessDateLabel": "7 Oct 2026, Wednesday",
+          "deadlineRule": "—",
+          "defaultTemplate": "Review / follow-up action items",
+          "refreshedAt": "2026-10-21T04:56:04.992Z"
+        },
+        {
+          "id": "bd7",
+          "label": "BD7",
+          "businessDateLabel": "9 Oct 2026, Friday",
+          "deadlineRule": "BD8 (or BD7 if weekend between)",
+          "defaultTemplate": "Late items reminder (BD1 lists)",
+          "refreshedAt": "2026-10-21T04:56:04.992Z"
+        },
+        {
+          "id": "bd8",
+          "label": "BD8",
+          "businessDateLabel": "12 Oct 2026, Monday",
+          "deadlineRule": "BD8",
+          "defaultTemplate": "Template 3 — Questions list",
+          "refreshedAt": "2026-10-21T04:56:04.992Z"
+        },
+        {
+          "id": "bd9",
+          "label": "BD9",
+          "businessDateLabel": "13 Oct 2026, Tuesday",
+          "deadlineRule": "BD9",
+          "defaultTemplate": "Template 8",
+          "refreshedAt": "2026-10-21T04:56:04.992Z"
+        },
+        {
+          "id": "bd10",
+          "label": "BD10",
+          "businessDateLabel": "14 Oct 2026, Wednesday",
+          "deadlineRule": "BD10",
+          "defaultTemplate": "Template 7",
+          "refreshedAt": "2026-10-21T04:56:04.992Z"
+        },
+        {
+          "id": "bd15",
+          "label": "BD15",
+          "businessDateLabel": "21 Oct 2026, Wednesday",
+          "deadlineRule": "—",
+          "defaultTemplate": "Template 11 — Monthly package",
+          "refreshedAt": "2026-10-21T04:56:04.992Z"
+        },
+        {
+          "id": "bd18",
+          "label": "BD18",
+          "businessDateLabel": "26 Oct 2026, Monday",
+          "deadlineRule": "—",
+          "defaultTemplate": "Template 11 — Status check",
+          "refreshedAt": "2026-10-21T04:56:04.992Z"
+        },
+        {
+          "id": "last-3-bd",
+          "label": "Last 3 BD",
+          "businessDateLabel": "28 Oct 2026, Wednesday",
+          "deadlineRule": "—",
+          "defaultTemplate": "Client: Template 5 · Team: Template 18",
+          "refreshedAt": "2026-10-21T04:56:04.992Z"
+        },
+        {
+          "id": "last-2-bd",
+          "label": "Last 2 BD",
+          "businessDateLabel": "29 Oct 2026, Thursday",
+          "deadlineRule": "—",
+          "defaultTemplate": "Client: Template 12 · Team: Template 18",
+          "refreshedAt": "2026-10-21T04:56:04.992Z"
+        },
+        {
+          "id": "last-1-bd",
+          "label": "Last 1 BD",
+          "businessDateLabel": "30 Oct 2026, Friday",
+          "deadlineRule": "—",
+          "defaultTemplate": "Client: End-of-month follow-up · Team: Template 18",
+          "refreshedAt": "2026-10-21T04:56:04.992Z"
+        }
+      ],
+      "demoMonth": null,
+      "checklist": [
+        {
+          "id": "chk-1792558565247-e6aamx",
+          "label": "Month 2026-10 refreshed",
+          "done": true,
+          "performedAt": "2026-10-21T04:56:04.992Z",
+          "detail": "Business day dates, default templates, and due-date rules updated for Standard Client Management.",
+          "requiresHumanCheck": false,
+          "manual": false,
+          "checkedBy": null,
+          "checkedAt": null
+        },
+        {
+          "id": "chk-1792558565247-51hp68",
+          "label": "BD1: dates & due rules",
+          "done": true,
+          "performedAt": "2026-10-21T04:56:04.992Z",
+          "detail": "Date: 1 Oct 2026, Thursday. Deadline: BD4. Template: Template 1 or Template 2 (by client BD1 Template).",
+          "requiresHumanCheck": false,
+          "manual": false,
+          "checkedBy": null,
+          "checkedAt": null
+        },
+        {
+          "id": "chk-1792558565247-plxjlo",
+          "label": "BD5: dates & due rules",
+          "done": true,
+          "performedAt": "2026-10-21T04:56:04.992Z",
+          "detail": "Date: 7 Oct 2026, Wednesday. Deadline: —. Template: Review / follow-up action items.",
+          "requiresHumanCheck": false,
+          "manual": false,
+          "checkedBy": null,
+          "checkedAt": null
+        },
+        {
+          "id": "chk-1792558565247-i4tmgs",
+          "label": "BD7: dates & due rules",
+          "done": true,
+          "performedAt": "2026-10-21T04:56:04.992Z",
+          "detail": "Date: 9 Oct 2026, Friday. Deadline: BD8 (or BD7 if weekend between). Template: Late items reminder (BD1 lists).",
+          "requiresHumanCheck": false,
+          "manual": false,
+          "checkedBy": null,
+          "checkedAt": null
+        },
+        {
+          "id": "chk-1792558565247-p2pvmt",
+          "label": "BD8: dates & due rules",
+          "done": true,
+          "performedAt": "2026-10-21T04:56:04.992Z",
+          "detail": "Date: 12 Oct 2026, Monday. Deadline: BD8. Template: Template 3 — Questions list.",
+          "requiresHumanCheck": false,
+          "manual": false,
+          "checkedBy": null,
+          "checkedAt": null
+        },
+        {
+          "id": "chk-1792558565247-f2ab58",
+          "label": "BD9: dates & due rules",
+          "done": true,
+          "performedAt": "2026-10-21T04:56:04.992Z",
+          "detail": "Date: 13 Oct 2026, Tuesday. Deadline: BD9. Template: Template 8.",
+          "requiresHumanCheck": false,
+          "manual": false,
+          "checkedBy": null,
+          "checkedAt": null
+        },
+        {
+          "id": "chk-1792558565247-mgre8s",
+          "label": "BD10: dates & due rules",
+          "done": true,
+          "performedAt": "2026-10-21T04:56:04.992Z",
+          "detail": "Date: 14 Oct 2026, Wednesday. Deadline: BD10. Template: Template 7.",
+          "requiresHumanCheck": false,
+          "manual": false,
+          "checkedBy": null,
+          "checkedAt": null
+        },
+        {
+          "id": "chk-1792558565247-6vkon1",
+          "label": "BD15: dates & due rules",
+          "done": true,
+          "performedAt": "2026-10-21T04:56:04.992Z",
+          "detail": "Date: 21 Oct 2026, Wednesday. Deadline: —. Template: Template 11 — Monthly package.",
+          "requiresHumanCheck": false,
+          "manual": false,
+          "checkedBy": null,
+          "checkedAt": null
+        },
+        {
+          "id": "chk-1792558565247-oqon50",
+          "label": "BD18: dates & due rules",
+          "done": true,
+          "performedAt": "2026-10-21T04:56:04.992Z",
+          "detail": "Date: 26 Oct 2026, Monday. Deadline: —. Template: Template 11 — Status check.",
+          "requiresHumanCheck": false,
+          "manual": false,
+          "checkedBy": null,
+          "checkedAt": null
+        },
+        {
+          "id": "chk-1792558565247-bzrkrm",
+          "label": "Last 3 BD: dates & due rules",
+          "done": true,
+          "performedAt": "2026-10-21T04:56:04.992Z",
+          "detail": "Date: 28 Oct 2026, Wednesday. Deadline: —. Template: Client: Template 5 · Team: Template 18.",
+          "requiresHumanCheck": false,
+          "manual": false,
+          "checkedBy": null,
+          "checkedAt": null
+        },
+        {
+          "id": "chk-1792558565247-1o3559",
+          "label": "Last 2 BD: dates & due rules",
+          "done": true,
+          "performedAt": "2026-10-21T04:56:04.992Z",
+          "detail": "Date: 29 Oct 2026, Thursday. Deadline: —. Template: Client: Template 12 · Team: Template 18.",
+          "requiresHumanCheck": false,
+          "manual": false,
+          "checkedBy": null,
+          "checkedAt": null
+        },
+        {
+          "id": "chk-1792558565247-jkdps3",
+          "label": "Last 1 BD: dates & due rules",
+          "done": true,
+          "performedAt": "2026-10-21T04:56:04.992Z",
+          "detail": "Date: 30 Oct 2026, Friday. Deadline: —. Template: Client: End-of-month follow-up · Team: Template 18.",
+          "requiresHumanCheck": false,
+          "manual": false,
+          "checkedBy": null,
+          "checkedAt": null
+        }
+      ],
+      "lastError": null
+    }
+  ]
+}

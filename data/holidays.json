@@ -17,17 +17,20 @@
         {
           "id": "seed-3-eid-ul-fitr-day-1",
           "name": "Eid-ul-Fitr - Day 1",
-          "date": "2026-03-21"
+          "date": "2026-03-21",
+          "origin": "manual"
         },
         {
           "id": "seed-4-eid-ul-fitr-day-2",
           "name": "Eid-ul-Fitr - Day 2",
-          "date": "2026-03-22"
+          "date": "2026-03-22",
+          "origin": "manual"
         },
         {
           "id": "seed-5-eid-ul-fitr-day-3",
           "name": "Eid-ul-Fitr - Day 3",
-          "date": "2026-03-23"
+          "date": "2026-03-23",
+          "origin": "manual"
         },
         {
           "id": "seed-6-labour-day",
@@ -36,28 +39,33 @@
         },
         {
           "id": "seed-7-day-of-arafa",
-          "name": "Day of Arafa",
-          "date": "2026-05-26"
+          "name": "Day of Arafa - Day 1",
+          "date": "2026-05-26",
+          "origin": "manual"
         },
         {
           "id": "seed-8-eid-ul-adha-day-1",
-          "name": "Eid ul-Adha - Day 1",
-          "date": "2026-05-27"
+          "name": "Eid ul-Adha - Day 2",
+          "date": "2026-05-27",
+          "origin": "manual"
         },
         {
           "id": "seed-9-eid-ul-adha-day-2",
-          "name": "Eid ul-Adha - Day 2",
-          "date": "2026-05-28"
+          "name": "Eid ul-Adha - Day 3",
+          "date": "2026-05-28",
+          "origin": "manual"
         },
         {
           "id": "seed-10-ashura-9th-moharram",
           "name": "Ashura - 9th Moharram",
-          "date": "2026-06-24"
+          "date": "2026-06-24",
+          "origin": "manual"
         },
         {
           "id": "seed-11-ashura-10th-moharram",
           "name": "Ashura - 10th Moharram",
-          "date": "2026-06-25"
+          "date": "2026-06-25",
+          "origin": "manual"
         },
         {
           "id": "seed-12-independence-day",
@@ -67,7 +75,8 @@
         {
           "id": "seed-13-12th-of-rabi-ul-awal",
           "name": "12th of Rabi-ul-Awal",
-          "date": "2026-08-25"
+          "date": "2026-08-25",
+          "origin": "manual"
         },
         {
           "id": "seed-14-quaid-e-azam-day",

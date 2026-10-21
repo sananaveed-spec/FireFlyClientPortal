@@ -1,0 +1,20 @@
+{
+  "settings": [
+    {
+      "clientId": "1792056572924-ckt14x",
+      "activeScheduleIds": [
+        "bd1",
+        "bd5",
+        "bd7",
+        "bd8",
+        "bd9",
+        "bd10",
+        "bd15",
+        "bd18",
+        "last-3-bd",
+        "last-2-bd",
+        "last-1-bd"
+      ]
+    }
+  ]
+}

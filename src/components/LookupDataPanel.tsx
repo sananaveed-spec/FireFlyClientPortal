@@ -10,6 +10,7 @@ import {
 } from "@/lib/history-client";
 import { EmailTemplatesPanel } from "@/components/EmailTemplatesPanel";
 import { HolidaysPanel } from "@/components/HolidaysPanel";
+import { RepeatedTasksPanel } from "@/components/RepeatedTasksPanel";
 import {
   createLookupItem,
   type LookupDataStore,
@@ -18,7 +19,11 @@ import {
 } from "@/lib/lookup-data";
 import { portalFetch } from "@/lib/portal-api";
 
-type LookupSection = "dropdown" | "holidays" | "emailTemplates";
+type LookupSection =
+  | "dropdown"
+  | "holidays"
+  | "emailTemplates"
+  | "repeatedTasks";
 
 type EditorState = {
   mode: "add" | "edit";
@@ -59,6 +64,17 @@ export function LookupDataPanel() {
 
   useEffect(() => {
     setMounted(true);
+  }, []);
+
+  // Auto-run due repeated tasks (e.g. holiday year rollover) when Lookup opens.
+  useEffect(() => {
+    void portalFetch("/api/repeated-tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "ensure" }),
+    }).catch(() => {
+      // Non-blocking: Repeated Tasks tab surfaces errors if needed.
+    });
   }, []);
 
   useEffect(() => {
@@ -300,6 +316,19 @@ export function LookupDataPanel() {
         <button
           type="button"
           role="tab"
+          aria-selected={section === "repeatedTasks"}
+          className={
+            section === "repeatedTasks"
+              ? "lookup-section-tab active"
+              : "lookup-section-tab"
+          }
+          onClick={() => setSection("repeatedTasks")}
+        >
+          Repeated Tasks
+        </button>
+        <button
+          type="button"
+          role="tab"
           aria-selected={section === "dropdown"}
           className={
             section === "dropdown"
@@ -314,6 +343,8 @@ export function LookupDataPanel() {
 
       {section === "holidays" ? (
         <HolidaysPanel />
+      ) : section === "repeatedTasks" ? (
+        <RepeatedTasksPanel onOpenHolidays={() => setSection("holidays")} />
       ) : section === "emailTemplates" ? (
         <EmailTemplatesPanel />
       ) : (

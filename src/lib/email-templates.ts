@@ -15,7 +15,10 @@ export type EmailTemplateId =
   | "template-12"
   | "template-13"
   | "template-14"
-  | "template-15";
+  | "template-15"
+  | "template-16"
+  | "template-17"
+  | "template-18";
 
 export type EmailTemplate = {
   id: string;
@@ -27,6 +30,11 @@ export type EmailTemplate = {
   body: string;
   /** Selected Bookkeeping services lookup values. */
   bookkeepingServices: string[];
+  /**
+   * Starred templates appear in the main sidebar list.
+   * Unstarred are hidden under an expandable section.
+   */
+  starred: boolean;
 };
 
 export type EmailTemplatesStore = {
@@ -89,7 +97,9 @@ If you took out a new loan, signed a new lease, or paid off an existing one duri
 
 We are working through your [Period] books and have [Number] transactions we could not identify from the bank and card details alone. They total [Total Amount].
 
-You can see the full list in the portal
+You can see the full list in the portal:
+
+[Question List]
 
 For each one, please tell us:
 • What it was for (for example, software subscription, materials for a job, owner personal expense)
@@ -173,7 +183,9 @@ Please upload what you can to the portal. If it is easier, reply to this email w
     subject: "Reminder: [Number] open questions on your [Period] books",
     body: `Hi [Contact First Name],
 
-We still have [Number] open questions on your [Period] books, totaling [Total Amount]. You can see and answer them in the portal
+We still have [Number] open questions on your [Period] books, totaling [Total Amount]. You can see and answer them in the portal:
+
+[Question List]
 
 Most of them should only take a few seconds each. If you are unsure about any item, just say so and we will look into it further.
 
@@ -316,6 +328,57 @@ Please upload these to the [portal] by [Due Date]
 
 Getting these in early means your final year-end numbers will be ready by [Year-End Delivery Date].`,
   },
+  {
+    id: "template-16",
+    title: "Pakistan Holiday Notice",
+    whenSent:
+      "Last weekday before each Pakistan holiday series (9:00 AM Pakistan time; skips Sat/Sun). Multi-day holidays like Eid Day 1–3 share one email. Sent to the whole team in User Management from ayesha@fireflyaccountancy.com or sana@epsfresno.com.",
+    subject: "Reminder: Upcoming Pakistan holiday — [Holiday Name]",
+    body: `Hi team,
+
+This is a reminder of an upcoming Pakistan holiday:
+
+• [Holiday Name] — [Holiday Date]
+
+Please plan your work accordingly.
+
+Thank you.`,
+  },
+  {
+    id: "template-17",
+    title: "Pakistan Holiday Notice (Clients)",
+    whenSent:
+      "15 calendar days before each Pakistan holiday series (weekends count), then shifted to the previous weekday if that date is Sat/Sun (9:00 AM in each client's time zone). Multi-day holidays share one email. Sent to all Client Profile emails from ayesha@fireflyaccountancy.com or sana@epsfresno.com.",
+    subject: "Notice: Upcoming Pakistan holiday — [Holiday Name]",
+    body: `Hi,
+
+This is a notice that our Pakistan office will be closed for an upcoming holiday:
+
+• [Holiday Name] — [Holiday Date]
+
+Please plan any document requests or replies accordingly. We will respond as soon as we return.
+
+Thank you.`,
+  },
+  {
+    id: "template-18",
+    title: "End-of-Month Team Reminder",
+    whenSent:
+      "Last 3 / Last 2 / Last 1 BD in Client Management → Team button. One template for all three sidebar days.",
+    subject: "Team reminder: [Last BD Label] — complete pending work",
+    body: `Hi team,
+
+This is a reminder that we are in the [Last BD Label].
+
+Please complete all pending Client Management work before month-end:
+• Outstanding document requests and late items
+• Open questions and follow-ups
+• Reviews, packages, and status checks still in progress
+
+Finish what you can today so nothing carries into next month unnecessarily.
+
+Thank you.`,
+  },
 ];
 
 const SEED_TEMPLATE_IDS = TEMPLATE_META.map((item) => item.id);
@@ -323,6 +386,28 @@ const SEED_TEMPLATE_IDS = TEMPLATE_META.map((item) => item.id);
 function templateNumber(id: string): number {
   const match = id.match(/^template-(\d+)$/);
   return match ? Number(match[1]) : 0;
+}
+
+/** Number from sidebar label, e.g. "Template 11 (Client)" → 11. */
+export function emailTemplateLabelNumber(template: EmailTemplate): number {
+  const fromLabel = template.label.trim().match(/^Template\s+(\d+)\b/i);
+  if (fromLabel) {
+    return Number(fromLabel[1]);
+  }
+  const fromId = templateNumber(template.id);
+  return fromId > 0 ? fromId : Number.MAX_SAFE_INTEGER;
+}
+
+/** Sort templates 1, 2, 3 … 10, 11 by their label number. */
+export function compareEmailTemplatesByLabelNumber(
+  a: EmailTemplate,
+  b: EmailTemplate,
+): number {
+  const diff = emailTemplateLabelNumber(a) - emailTemplateLabelNumber(b);
+  if (diff !== 0) {
+    return diff;
+  }
+  return a.label.localeCompare(b.label, undefined, { sensitivity: "base" });
 }
 
 function isSeedTemplateId(id: string): id is EmailTemplateId {
@@ -368,7 +453,7 @@ function normalizeBookkeepingServices(value: unknown): string[] {
 }
 
 export function createEmailTemplate(
-  input: Omit<EmailTemplate, "id">,
+  input: Omit<EmailTemplate, "id"> & { starred?: boolean },
 ): EmailTemplate {
   return {
     id: makeTemplateId(),
@@ -380,6 +465,7 @@ export function createEmailTemplate(
     bookkeepingServices: normalizeBookkeepingServices(
       input.bookkeepingServices,
     ),
+    starred: input.starred !== false,
   };
 }
 
@@ -397,6 +483,13 @@ function normalizeOneTemplate(
     raw.bookkeepingServices !== undefined
       ? normalizeBookkeepingServices(raw.bookkeepingServices)
       : (fallback?.bookkeepingServices ?? []);
+  // Missing starred → keep visible (starred) so existing templates stay in the list.
+  const starred =
+    raw.starred === false
+      ? false
+      : raw.starred === true
+        ? true
+        : (fallback?.starred ?? true);
   return {
     id,
     label: String(
@@ -409,10 +502,11 @@ function normalizeOneTemplate(
       String(raw.body ?? fallback?.body ?? ""),
     ),
     bookkeepingServices,
+    starred,
   };
 }
 
-/** Current calendar month and year, e.g. "October 2026". */
+/** Calendar month and year for a date, e.g. "October 2026". */
 export function formatCurrentPeriod(date: Date = new Date()): string {
   return date.toLocaleDateString("en-US", {
     month: "long",
@@ -420,13 +514,31 @@ export function formatCurrentPeriod(date: Date = new Date()): string {
   });
 }
 
-/** Replace [Period] with the current month and year (always current period). */
+/** Month name only, e.g. "October". */
+export function formatPeriodMonth(date: Date = new Date()): string {
+  return date.toLocaleDateString("en-US", { month: "long" });
+}
+
+/** Year only, e.g. "2026". */
+export function formatPeriodYear(date: Date = new Date()): string {
+  return String(date.getFullYear());
+}
+
+/**
+ * Replace [Period] / [Month] / [Year] using the given date
+ * (Client Management active / demo month when provided).
+ */
 export function applyPeriodPlaceholder(
   text: string,
   date: Date = new Date(),
 ): string {
   const period = formatCurrentPeriod(date);
-  return text.replace(/\[Period\]/gi, period);
+  const month = formatPeriodMonth(date);
+  const year = formatPeriodYear(date);
+  return text
+    .replace(/\[Period\]/gi, period)
+    .replace(/\[Month\]/gi, month)
+    .replace(/\[Year\]/gi, year);
 }
 
 /** Subject and body only (header fields shown separately). */
@@ -450,6 +562,7 @@ export function createDefaultEmailTemplates(): EmailTemplatesStore {
         subject: item.subject,
         body: stripLegacySignatureClosing(item.body),
         bookkeepingServices: [],
+        starred: true,
       };
     }),
   };

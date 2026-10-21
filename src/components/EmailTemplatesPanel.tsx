@@ -6,6 +6,7 @@ import {
   useMemo,
   useState,
   type FormEvent,
+  type MouseEvent,
   type ReactNode,
 } from "react";
 import { useAccess } from "@/auth/accessContext";
@@ -26,6 +27,7 @@ import {
   type EmailSignature,
 } from "@/lib/email-signatures";
 import {
+  compareEmailTemplatesByLabelNumber,
   createEmailTemplate,
   suggestNextTemplateLabel,
   type EmailTemplate,
@@ -190,10 +192,27 @@ export function EmailTemplatesPanel() {
   const [ready, setReady] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [unstarredExpanded, setUnstarredExpanded] = useState(false);
 
   const bookkeepingOptions = useMemo(
     () => getLookupOptions(lookups, "bookkeeping"),
     [lookups],
+  );
+  const starredTemplates = useMemo(
+    () =>
+      store.templates
+        .filter((template) => template.starred !== false)
+        .slice()
+        .sort(compareEmailTemplatesByLabelNumber),
+    [store.templates],
+  );
+  const unstarredTemplates = useMemo(
+    () =>
+      store.templates
+        .filter((template) => template.starred === false)
+        .slice()
+        .sort(compareEmailTemplatesByLabelNumber),
+    [store.templates],
   );
 
   useEffect(() => {
@@ -229,8 +248,11 @@ export function EmailTemplatesPanel() {
           if (signatureRes.ok && signatureData.signature) {
             setSignature(signatureData.signature);
           }
-          if (templates[0]?.id) {
-            setActiveId(templates[0].id);
+          const firstStarred =
+            templates.find((template) => template.starred !== false) ??
+            templates[0];
+          if (firstStarred?.id) {
+            setActiveId(firstStarred.id);
           }
           setError(null);
         }
@@ -318,6 +340,57 @@ export function EmailTemplatesPanel() {
     setActiveId(id);
     setMode("view");
     setError(null);
+  }
+
+  async function toggleTemplateStar(
+    template: EmailTemplate,
+    event: MouseEvent,
+  ) {
+    event.stopPropagation();
+    if (!canEdit || saving) {
+      return;
+    }
+    const nextStarred = template.starred === false;
+    const nextTemplates = store.templates.map((entry) =>
+      entry.id === template.id ? { ...entry, starred: nextStarred } : entry,
+    );
+    setSaving(true);
+    setError(null);
+    try {
+      const saved = await persistEmailTemplates({ templates: nextTemplates });
+      setStore({ templates: saved.templates ?? [] });
+      if (!nextStarred && activeId === template.id) {
+        const nextActive =
+          saved.templates?.find((entry) => entry.starred !== false) ??
+          saved.templates?.[0];
+        if (nextActive?.id) {
+          setActiveId(nextActive.id);
+          setMode("view");
+        }
+      }
+      void logPortalAction({
+        actor,
+        project: "Email Templates",
+        entityType: "lookupData",
+        entityLabel: `${template.label} / ${template.title}`,
+        action: "updated",
+        summary: nextStarred
+          ? `Email template starred: ${template.title}`
+          : `Email template unstarred: ${template.title}`,
+        details: `Label: ${template.label}\nStarred: ${nextStarred ? "Yes" : "No"}`,
+        comment: nextStarred
+          ? "Template moved to starred list."
+          : "Template hidden under unstarred.",
+      });
+    } catch (starError) {
+      setError(
+        starError instanceof Error
+          ? starError.message
+          : "Failed to update template star.",
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
   function openAddTemplate() {
@@ -414,7 +487,7 @@ export function EmailTemplatesPanel() {
     };
 
     if (mode === "add") {
-      const created = createEmailTemplate(payload);
+      const created = createEmailTemplate({ ...payload, starred: true });
       void saveStore({ templates: [...store.templates, created] });
       setActiveId(created.id);
       void logPortalAction({
@@ -478,20 +551,132 @@ export function EmailTemplatesPanel() {
                 <span>Add New Template</span>
               </button>
             ) : null}
-            {store.templates.map((template) => (
-              <button
-                key={template.id}
-                type="button"
-                className={
-                  mode !== "add" && activeTemplate?.id === template.id
-                    ? "lookup-field-link active"
-                    : "lookup-field-link"
-                }
-                onClick={() => selectTemplate(template.id)}
-              >
-                <span>{template.label}</span>
-              </button>
-            ))}
+
+            <div className="email-template-sidebar-pane">
+              <p className="email-template-sidebar-hint">
+                Only starred templates show here. Unstar to hide.
+              </p>
+              {starredTemplates.length === 0 ? (
+                <p className="schedule-section-empty">
+                  No starred templates. Expand Unstarred below and click ☆.
+                </p>
+              ) : (
+                starredTemplates.map((template) => {
+                  const isActive =
+                    mode !== "add" && activeTemplate?.id === template.id;
+                  return (
+                    <div
+                      key={template.id}
+                      className={
+                        isActive
+                          ? "email-template-sidebar-row email-template-sidebar-row--active"
+                          : "email-template-sidebar-row"
+                      }
+                    >
+                      {canEdit ? (
+                        <button
+                          type="button"
+                          className="schedule-star schedule-star--filled"
+                          aria-label={`Unstar ${template.label}`}
+                          title="Unstar — hide from main list"
+                          disabled={saving}
+                          onClick={(event) =>
+                            void toggleTemplateStar(template, event)
+                          }
+                        >
+                          ★
+                        </button>
+                      ) : (
+                        <span
+                          className="schedule-star schedule-star--filled"
+                          aria-hidden="true"
+                        >
+                          ★
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        className={
+                          isActive
+                            ? "lookup-field-link active email-template-sidebar-link"
+                            : "lookup-field-link email-template-sidebar-link"
+                        }
+                        onClick={() => selectTemplate(template.id)}
+                      >
+                        <span>{template.label}</span>
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="schedule-inactive-block email-template-unstarred-block">
+              {unstarredTemplates.length === 0 ? (
+                <p className="schedule-inactive-toggle-label">Unstarred · none</p>
+              ) : (
+                <button
+                  type="button"
+                  className="schedule-inactive-toggle"
+                  aria-expanded={unstarredExpanded}
+                  onClick={() => setUnstarredExpanded((open) => !open)}
+                >
+                  <span>Unstarred · {unstarredTemplates.length}</span>
+                  <span aria-hidden="true">
+                    {unstarredExpanded ? "▾" : "▸"}
+                  </span>
+                </button>
+              )}
+
+              {unstarredExpanded && unstarredTemplates.length > 0 ? (
+                <div className="email-template-sidebar-pane email-template-sidebar-pane--unstarred">
+                  {unstarredTemplates.map((template) => {
+                    const isActive =
+                      mode !== "add" && activeTemplate?.id === template.id;
+                    return (
+                      <div
+                        key={template.id}
+                        className={
+                          isActive
+                            ? "email-template-sidebar-row email-template-sidebar-row--active"
+                            : "email-template-sidebar-row"
+                        }
+                      >
+                        {canEdit ? (
+                          <button
+                            type="button"
+                            className="schedule-star"
+                            aria-label={`Star ${template.label}`}
+                            title="Star — show in main list"
+                            disabled={saving}
+                            onClick={(event) =>
+                              void toggleTemplateStar(template, event)
+                            }
+                          >
+                            ☆
+                          </button>
+                        ) : (
+                          <span className="schedule-star" aria-hidden="true">
+                            ☆
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          className={
+                            isActive
+                              ? "lookup-field-link active email-template-sidebar-link"
+                              : "lookup-field-link email-template-sidebar-link"
+                          }
+                          onClick={() => selectTemplate(template.id)}
+                        >
+                          <span>{template.label}</span>
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
           </aside>
 
           <div className="lookup-items email-template-panel">

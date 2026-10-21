@@ -5,38 +5,71 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
+  type ChangeEvent,
+  type MouseEvent,
   type ReactNode,
 } from "react";
-import { mailSendRequest } from "@/auth/authConfig";
+import { mailSendRequest, sharePointRequest } from "@/auth/authConfig";
 import { useAccess } from "@/auth/accessContext";
 import { getAccountEmail } from "@/auth/organization";
 import {
   formatBusinessDayLabel,
+  getBd7DeadlineDate,
   getScheduleBusinessDate,
 } from "@/lib/business-days";
+import {
+  CLIENT_MANAGEMENT_DEMO_MONTH_EVENT,
+  getClientManagementNow,
+  ROLL_CLIENT_MANAGEMENT_MONTH_ID,
+  type RepeatedTasksStore,
+} from "@/lib/repeated-tasks";
 import {
   ASSIGNMENT_ROLE_LABELS,
   getClientsAssignedToUser,
   staffNameAliases,
   type AssignedClient,
 } from "@/lib/client-management";
-import type { ClientProfileEntry } from "@/lib/client-profiles";
+import {
+  BD1_TEMPLATE_OPTIONS,
+  bd1TemplateToRequestTypeId,
+  normalizeBd1Template,
+  normalizeClientProfile,
+  type Bd1TemplateId,
+  type ClientProfileEntry,
+} from "@/lib/client-profiles";
 import {
   addRequestBulletToList,
   completeActionItem,
   createEmptyRequestListsStore,
+  currentMonthKey,
   findListContainingActionItem,
   getClientActionItems,
   getClientRequestList,
   normalizeClientRequestListsStore,
   removeRequestBullet,
   reopenActionItem,
+  requestItemsForMonth,
+  setActionItemStatus,
   updateRequestBulletLabel,
+  upsertClientRequestList,
   type ActionWorkflowItem,
   type ClientRequestList,
   type ClientRequestListsStore,
 } from "@/lib/client-request-lists";
+import {
+  listSharePointMonthFolderFiles,
+  sharePointFileNameMatches,
+} from "@/lib/sharepoint-graph";
+import {
+  createEmptyScheduleSettingsStore,
+  getActiveScheduleIds,
+  isScheduleActiveForClient,
+  normalizeClientScheduleSettingsStore,
+  toggleClientScheduleActive,
+  type ClientScheduleSettingsStore,
+} from "@/lib/client-schedule-settings";
 import {
   createEmptyEmailSignature,
   DEFAULT_SIGNATURE_WEBSITE,
@@ -70,26 +103,153 @@ import { portalFetch } from "@/lib/portal-api";
 import type { PortalUser } from "@/lib/portal-users";
 import type { ResourceClientEntry } from "@/lib/resource-clients";
 import {
-  parseDateTimeLocalValue,
   sendGraphMail,
-  toDateTimeLocalValue,
+  type GraphMailAttachment,
 } from "@/lib/send-graph-mail";
+import {
+  CLIENT_TIME_ZONE_REQUIRED_MESSAGE,
+  getClientNineAmSchedule,
+  parseDateTimeLocalInTimeZone,
+  resolveClientTimeZone,
+  USER_TIME_ZONE,
+} from "@/lib/time-zones";
 
-/** Default Outlook send time: schedule business day at 8:00 local, or tomorrow 8:00 if past. */
-function defaultScheduleSendAt(
-  scheduleDate: Date | null,
-  now: Date = new Date(),
-): string {
-  const candidate = new Date(scheduleDate ?? now);
-  candidate.setHours(8, 0, 0, 0);
-  if (candidate.getTime() <= now.getTime() + 60_000) {
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(8, 0, 0, 0);
-    return toDateTimeLocalValue(tomorrow);
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(
+      ...bytes.subarray(offset, offset + chunkSize),
+    );
   }
-  return toDateTimeLocalValue(candidate);
+  return btoa(binary);
 }
+
+function mimeTypeForExcelFile(file: File): string {
+  if (file.type.trim()) {
+    return file.type.trim();
+  }
+  const lower = file.name.toLowerCase();
+  if (lower.endsWith(".csv")) {
+    return "text/csv";
+  }
+  if (lower.endsWith(".xls")) {
+    return "application/vnd.ms-excel";
+  }
+  return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+}
+
+function mimeTypeForPdfFile(file: File): string {
+  if (file.type.trim()) {
+    return file.type.trim();
+  }
+  return "application/pdf";
+}
+
+function mimeTypeForBd15File(file: File): string {
+  const lower = file.name.toLowerCase();
+  if (lower.endsWith(".pdf") || file.type === "application/pdf") {
+    return mimeTypeForPdfFile(file);
+  }
+  return mimeTypeForExcelFile(file);
+}
+
+type Bd15StoredAttachment = GraphMailAttachment & {
+  id: string;
+  savedAt: string;
+};
+
+type Bd15ApiAttachment = {
+  id?: string;
+  name?: string;
+  contentType?: string;
+  contentBytes?: string;
+  savedAt?: string;
+};
+
+function mapBd15ApiAttachments(
+  attachments: Bd15ApiAttachment[] | undefined,
+): Bd15StoredAttachment[] {
+  if (!Array.isArray(attachments)) {
+    return [];
+  }
+  return attachments
+    .filter(
+      (item) =>
+        typeof item.id === "string" &&
+        item.id &&
+        typeof item.name === "string" &&
+        item.name &&
+        typeof item.contentBytes === "string" &&
+        item.contentBytes,
+    )
+    .map((item) => ({
+      id: item.id as string,
+      name: item.name as string,
+      contentType: item.contentType || "application/pdf",
+      contentBytes: item.contentBytes as string,
+      savedAt:
+        typeof item.savedAt === "string" && item.savedAt.trim()
+          ? item.savedAt.trim()
+          : "",
+    }));
+}
+
+/**
+ * Required BD15/BD18 attachments:
+ * - Profit Loss: file name contains both "profit" and "loss" (any order/combo).
+ * - Balance Sheet: file name contains the phrase "balance sheet" (one keyword).
+ * Matching is always case-insensitive.
+ */
+const BD15_REQUIRED_REPORTS = [
+  "Profit & Loss Account",
+  "Balance Sheet",
+] as const;
+
+function normalizeBd15ReportKey(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/\.[^.]+$/, "")
+    .replace(/[/_\\-]+/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function bd15FileMatchesReport(
+  fileName: string,
+  requiredLabel: string,
+): boolean {
+  const fileKey = normalizeBd15ReportKey(fileName);
+  if (!fileKey) {
+    return false;
+  }
+  const reqKey = normalizeBd15ReportKey(requiredLabel);
+  // Balance Sheet = one phrase keyword (case-insensitive).
+  if (reqKey === "balance sheet") {
+    return fileKey.includes("balance sheet");
+  }
+  // Profit & Loss Account = file name contains both "profit" and "loss".
+  if (reqKey.includes("profit") && reqKey.includes("loss")) {
+    return fileKey.includes("profit") && fileKey.includes("loss");
+  }
+  const requiredWords = reqKey.split(" ").filter(Boolean);
+  if (requiredWords.length === 0) {
+    return false;
+  }
+  return requiredWords.every((word) => fileKey.includes(word));
+}
+
+function getMissingBd15Reports(
+  attachments: ReadonlyArray<{ name: string }>,
+): string[] {
+  return BD15_REQUIRED_REPORTS.filter(
+    (required) =>
+      !attachments.some((file) => bd15FileMatchesReport(file.name, required)),
+  );
+}
+
 
 /** Bold auto-filled values (client name, period, etc.) inside subject/body. */
 function renderAutofilledText(
@@ -229,6 +389,7 @@ const CLIENT_INFO_FIELDS: { key: string; label: string }[] = [
   { key: "operatingName", label: "Operating Name" },
   { key: "industry", label: "Industry" },
   { key: "entityType", label: "Entity Type" },
+  { key: "bd1Template", label: "BD1 Template" },
   { key: "serviceFrequency", label: "Service Frequency" },
   { key: "reportingTier", label: "Reporting Tier" },
   { key: "paymentType", label: "Payment Type" },
@@ -244,20 +405,51 @@ const CLIENT_INFO_FIELDS: { key: string; label: string }[] = [
   { key: "portalLink", label: "Portal Link" },
 ];
 
+/** Sidebar order: BD1→…→BD18, then end-of-month by date (Last 3 → Last 2 → Last 1), Client above Team. */
 const CLIENT_SCHEDULE_ITEMS = [
   { id: "bd1", label: "BD1" },
   { id: "bd5", label: "BD5" },
   { id: "bd7", label: "BD7" },
   { id: "bd8", label: "BD8" },
-  { id: "questions-plus-3-bd", label: "Questions + 3 BD" },
+  { id: "bd9", label: "BD9" },
   { id: "bd10", label: "BD10" },
   { id: "bd15", label: "BD15" },
   { id: "bd18", label: "BD18" },
-  { id: "bd20", label: "BD20" },
-  { id: "last-3-bd", label: "Last 3 BD of month" },
-  { id: "last-2-bd", label: "Last 2 BD of month" },
-  { id: "last-1-bd", label: "Last 1 BD of month" },
+  { id: "last-3-bd", label: "Last 3 BD" },
+  { id: "last-2-bd", label: "Last 2 BD" },
+  { id: "last-1-bd", label: "Last 1 BD" },
 ] as const;
+
+const CLIENT_SCHEDULE_ORDER = new Map(
+  CLIENT_SCHEDULE_ITEMS.map((item, index) => [item.id, index]),
+);
+
+type LastBdAudience = "client" | "team";
+
+function isLastBdSchedule(scheduleId: string): boolean {
+  return /^last-\d+-bd$/i.test(scheduleId.trim());
+}
+
+function lastBdOrdinal(scheduleId: string): number | null {
+  const match = /^last-(\d+)-bd$/i.exec(scheduleId.trim());
+  if (!match) {
+    return null;
+  }
+  const n = Number(match[1]);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function lastBdLabel(scheduleId: string): string {
+  const n = lastBdOrdinal(scheduleId);
+  if (!n) {
+    return "[Last BD Label]";
+  }
+  return n === 1
+    ? "Last 1 business day of the month"
+    : `Last ${n} business days of the month`;
+}
+
+const ALL_SCHEDULE_IDS = CLIENT_SCHEDULE_ITEMS.map((item) => item.id);
 
 const BD1_SUB_MENUS = [
   {
@@ -267,11 +459,35 @@ const BD1_SUB_MENUS = [
   {
     id: "other-statements",
     label:
-      "Other Statements Request (Loans, Other Institutions, Leases)",
+      "Bank, Credit Card And Other Statements Request (Loans, Other Institutions, Leases)",
   },
 ] as const;
 
 type Bd1SubMenuId = (typeof BD1_SUB_MENUS)[number]["id"];
+
+type SharePointStatementKind = "bank" | "credit-card";
+
+function classifySharePointActionItem(
+  label: string,
+): SharePointStatementKind | null {
+  const normalized = label.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  if (
+    normalized.includes("credit card statement") ||
+    (normalized.includes("credit card") && normalized.includes("statement"))
+  ) {
+    return "credit-card";
+  }
+  if (
+    normalized.includes("bank statement") ||
+    (normalized.includes("bank") && normalized.includes("statement"))
+  ) {
+    return "bank";
+  }
+  return null;
+}
 
 function requestTypeScheduleId(
   scheduleId: string,
@@ -302,19 +518,24 @@ function requestTypeScheduleIds(subMenuId: Bd1SubMenuId): string[] {
     : ["bd1", "bd5"];
 }
 
-function getActionItemsForRequestType(
+/** BD8 Question List + BD9/BD10 review share the same action items. */
+const BD8_QUESTION_SCHEDULE_IDS = ["bd8", "bd9", "bd10"] as const;
+
+function getActionItemsForSchedules(
   store: ClientRequestListsStore,
   clientId: string,
-  subMenuId: Bd1SubMenuId,
+  scheduleIds: readonly string[],
 ): ActionWorkflowItem[] {
-  const allowed = new Set(requestTypeScheduleIds(subMenuId));
+  const allowed = new Set(scheduleIds);
+  // Dedupe by label + month so Oct-source and Nov-copy Open rows don't both show.
   const byKey = new Map<string, ActionWorkflowItem>();
   for (const list of store.lists) {
     if (list.clientId !== clientId || !allowed.has(list.scheduleId)) {
       continue;
     }
     for (const item of list.actionItems) {
-      const key = `${item.sourceRequestId || item.id}::${item.monthKey}`;
+      const labelKey = item.label.trim().toLowerCase() || item.id;
+      const key = `${labelKey}::${item.monthKey}`;
       const existing = byKey.get(key);
       if (!existing) {
         byKey.set(key, item);
@@ -328,18 +549,36 @@ function getActionItemsForRequestType(
   return Array.from(byKey.values());
 }
 
+function getActionItemsForRequestType(
+  store: ClientRequestListsStore,
+  clientId: string,
+  subMenuId: Bd1SubMenuId,
+): ActionWorkflowItem[] {
+  return getActionItemsForSchedules(
+    store,
+    clientId,
+    requestTypeScheduleIds(subMenuId),
+  );
+}
+
 function bd1EmailTemplateId(subMenuId: Bd1SubMenuId): string {
   return subMenuId === "other-statements" ? "template-2" : "template-1";
+}
+
+function findEmailTemplateById(
+  store: EmailTemplatesStore,
+  templateId: string,
+): EmailTemplate | null {
+  return (
+    store.templates.find((template) => template.id === templateId) ?? null
+  );
 }
 
 function findBd1EmailTemplate(
   store: EmailTemplatesStore,
   subMenuId: Bd1SubMenuId,
 ): EmailTemplate | null {
-  const templateId = bd1EmailTemplateId(subMenuId);
-  return (
-    store.templates.find((template) => template.id === templateId) ?? null
-  );
+  return findEmailTemplateById(store, bd1EmailTemplateId(subMenuId));
 }
 
 function toPortalHref(value: string): string {
@@ -409,6 +648,13 @@ function clientInfoValue(
       return profile?.industry?.trim() || resource.industry?.trim() || "—";
     case "entityType":
       return profile?.entityType?.trim() || "—";
+    case "bd1Template": {
+      const template = normalizeBd1Template(profile?.bd1Template ?? "");
+      return (
+        BD1_TEMPLATE_OPTIONS.find((option) => option.id === template)?.label ??
+        "Template 1"
+      );
+    }
     case "serviceFrequency":
       return profile?.serviceFrequency?.trim() || "—";
     case "reportingTier":
@@ -474,7 +720,7 @@ function buildClientInfoRows(selected: AssignedClient) {
 
 export function ClientManagementPanel() {
   const { instance, accounts } = useMsal();
-  const { email } = useAccess();
+  const { email, canEdit } = useAccess();
   const msalAccount = accounts[0] ?? null;
   const msalName = msalAccount?.name ?? "";
   const emailFrom =
@@ -482,14 +728,21 @@ export function ClientManagementPanel() {
 
   const [resources, setResources] = useState<ResourceClientEntry[]>([]);
   const [profiles, setProfiles] = useState<ClientProfileEntry[]>([]);
+  const [portalUsers, setPortalUsers] = useState<PortalUser[]>([]);
   const [portalName, setPortalName] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedScheduleId, setSelectedScheduleId] = useState<string>(
     CLIENT_SCHEDULE_ITEMS[0].id,
   );
+  const [lastBdAudience, setLastBdAudience] =
+    useState<LastBdAudience>("client");
   const [requestLists, setRequestLists] = useState<ClientRequestListsStore>(
     createEmptyRequestListsStore(),
   );
+  const [scheduleSettings, setScheduleSettings] =
+    useState<ClientScheduleSettingsStore>(createEmptyScheduleSettingsStore);
+  const [inactiveExpanded, setInactiveExpanded] = useState(false);
+  const [savingScheduleSettings, setSavingScheduleSettings] = useState(false);
   const [holidays, setHolidays] = useState<HolidaysStore>(createDefaultHolidays);
   const [emailTemplates, setEmailTemplates] = useState<EmailTemplatesStore>(
     createDefaultEmailTemplates,
@@ -497,7 +750,7 @@ export function ClientManagementPanel() {
   const [emailSignature, setEmailSignature] = useState<EmailSignature>(
     createEmptyEmailSignature,
   );
-  const [workflowTab, setWorkflowTab] = useState<WorkflowTab>("action");
+  const [workflowTab, setWorkflowTab] = useState<WorkflowTab>("request");
   const [requestTypeId, setRequestTypeId] =
     useState<Bd1SubMenuId>("bank-credit-card");
   const [draftRequestLabel, setDraftRequestLabel] = useState("");
@@ -506,6 +759,27 @@ export function ClientManagementPanel() {
   >(null);
   const [editRequestLabel, setEditRequestLabel] = useState("");
   const [savingRequestList, setSavingRequestList] = useState(false);
+  const [questionListAttachment, setQuestionListAttachment] =
+    useState<GraphMailAttachment | null>(null);
+  const [uploadingQuestionList, setUploadingQuestionList] = useState(false);
+  const questionListFileRef = useRef<HTMLInputElement | null>(null);
+  const [bd15Attachments, setBd15Attachments] = useState<
+    Bd15StoredAttachment[]
+  >([]);
+  const [uploadingBd15Files, setUploadingBd15Files] = useState(false);
+  const bd15FileRef = useRef<HTMLInputElement | null>(null);
+  const [bd15EmailStatus, setBd15EmailStatus] = useState<{
+    emailSent: boolean;
+    emailSentAt: string;
+    comments: Array<{ id: string; text: string; createdAt: string }>;
+  }>({ emailSent: false, emailSentAt: "", comments: [] });
+  const [bd18CommentDraft, setBd18CommentDraft] = useState("");
+  const [savingBd18Comment, setSavingBd18Comment] = useState(false);
+  const [savingBd1Template, setSavingBd1Template] = useState(false);
+  const [checkingSharePoint, setCheckingSharePoint] = useState(false);
+  const [sharePointCheckMessage, setSharePointCheckMessage] = useState<
+    string | null
+  >(null);
   const [emailTo, setEmailTo] = useState("");
   const [emailCc, setEmailCc] = useState("");
   const [emailBcc, setEmailBcc] = useState("");
@@ -525,16 +799,113 @@ export function ClientManagementPanel() {
   const [emailSendError, setEmailSendError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Calendar clock for BD dates — may follow Repeated Tasks demo month. */
+  const [scheduleNow, setScheduleNow] = useState(() => new Date());
+  const [demoMonthLabel, setDemoMonthLabel] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    function applyDemoMonth(demoMonth: string | null | undefined) {
+      const clock = getClientManagementNow(demoMonth);
+      const nextKey = currentMonthKey(clock);
+      setScheduleNow((prev) =>
+        currentMonthKey(prev) === nextKey ? prev : clock,
+      );
+      if (demoMonth && /^\d{4}-\d{2}$/.test(demoMonth)) {
+        const [year, mon] = demoMonth.split("-").map(Number);
+        setDemoMonthLabel(
+          new Date(year, mon - 1, 1).toLocaleString("en-US", {
+            month: "long",
+            year: "numeric",
+          }),
+        );
+      } else {
+        setDemoMonthLabel(null);
+      }
+    }
+
+    async function loadDemoMonth() {
+      try {
+        const response = await portalFetch("/api/repeated-tasks", {
+          cache: "no-store",
+        });
+        if (!response.ok || cancelled) {
+          return;
+        }
+        const data = (await response.json()) as RepeatedTasksStore;
+        const task = data.tasks?.find(
+          (item) => item.id === ROLL_CLIENT_MANAGEMENT_MONTH_ID,
+        );
+        if (!cancelled) {
+          applyDemoMonth(task?.demoMonth ?? null);
+        }
+      } catch {
+        // Keep real calendar if repeated-tasks is unavailable.
+      }
+    }
+
+    void loadDemoMonth();
+    const onDemoMonth = () => {
+      void loadDemoMonth();
+    };
+    window.addEventListener(CLIENT_MANAGEMENT_DEMO_MONTH_EVENT, onDemoMonth);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(
+        CLIENT_MANAGEMENT_DEMO_MONTH_EVENT,
+        onDemoMonth,
+      );
+    };
+  }, []);
 
   const showBd1TypeContent = selectedScheduleId === "bd1";
   const showBd5Content = selectedScheduleId === "bd5";
   const showBd7Content = selectedScheduleId === "bd7";
-  const showBd1LikeWorkflow = showBd1TypeContent || showBd7Content;
+  const showBd8Content = selectedScheduleId === "bd8";
+  const showBd15Content = selectedScheduleId === "bd15";
+  /** BD18 is the status check for BD15 books-closed email/files. */
+  const showBd18Content = selectedScheduleId === "bd18";
+  /** Last 3 / 2 / 1 BD sidebar days: Client | Team email only. */
+  const showLastBdSchedule = isLastBdSchedule(selectedScheduleId);
+  /** Last 3 BD → Client: Template 5. */
+  const showLast3BdContent =
+    selectedScheduleId === "last-3-bd" && lastBdAudience === "client";
+  /** Last 2 BD → Client: Template 12. */
+  const showLast2BdContent =
+    selectedScheduleId === "last-2-bd" && lastBdAudience === "client";
+  /** Last 1 BD → Client: end-of-month follow-up (no numbered template yet). */
+  const showLast1BdClientContent =
+    selectedScheduleId === "last-1-bd" && lastBdAudience === "client";
+  /** Last N BD → Team: Template 18 to portal users. */
+  const showLastBdTeamContent =
+    showLastBdSchedule && lastBdAudience === "team";
+  const showEndOfMonthEmailOnly = showLastBdSchedule;
+  /** BD9/BD10 review BD8 questions (Completed/Late) + reminder email. */
+  const showBd9Content = selectedScheduleId === "bd9";
+  const showBd10Content = selectedScheduleId === "bd10";
+  const showBd9LikeContent = showBd9Content || showBd10Content;
+  const showReviewActionTable = showBd5Content || showBd9LikeContent;
+  /** BD1/BD8/BD15/BD18 share Request/Attachments + Email (no Action Items tab). */
+  const showBd1LikeRequestList =
+    showBd1TypeContent ||
+    showBd8Content ||
+    showBd15Content ||
+    showBd18Content;
+  /** BD15 and BD18 share the same Template 11 email + attachments. */
+  const showBd15Email = showBd15Content || showBd18Content;
+  const showBd1LikeWorkflow =
+    showBd1TypeContent ||
+    showBd7Content ||
+    showBd8Content ||
+    showBd9LikeContent ||
+    showBd15Email ||
+    showEndOfMonthEmailOnly;
   const showRequestTypeChooser =
     selectedScheduleId === "bd1" ||
     selectedScheduleId === "bd5" ||
     selectedScheduleId === "bd7";
-  const showRequestListTab = showBd1TypeContent;
+  const showRequestListTab = showBd1LikeRequestList;
   const activeRequestType =
     BD1_SUB_MENUS.find((item) => item.id === requestTypeId) ??
     BD1_SUB_MENUS[0];
@@ -545,13 +916,206 @@ export function ClientManagementPanel() {
   useEffect(() => {
     setEditingRequestItemId(null);
     setEditRequestLabel("");
+    setSharePointCheckMessage(null);
   }, [selectedId, selectedScheduleId, workflowTab, requestTypeId]);
+
+  // Load saved BD8 Excel attachment for this client + current month.
+  // Prior-month files are pruned server-side once when the month changes.
+  useEffect(() => {
+    if (!selectedId || selectedScheduleId !== "bd8") {
+      setQuestionListAttachment(null);
+      if (questionListFileRef.current) {
+        questionListFileRef.current.value = "";
+      }
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await portalFetch(
+          `/api/bd8-email-attachments?clientId=${encodeURIComponent(selectedId)}&monthKey=${encodeURIComponent(currentMonthKey(scheduleNow))}`,
+          { cache: "no-store" },
+        );
+        const data = (await response.json()) as {
+          attachment?: GraphMailAttachment & {
+            clientId?: string;
+            monthKey?: string;
+          } | null;
+          error?: string;
+        };
+        if (cancelled) {
+          return;
+        }
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to load Excel attachment.");
+        }
+        const saved = data.attachment;
+        if (
+          saved &&
+          typeof saved.name === "string" &&
+          typeof saved.contentBytes === "string" &&
+          saved.name &&
+          saved.contentBytes
+        ) {
+          setQuestionListAttachment({
+            name: saved.name,
+            contentType: saved.contentType || "application/octet-stream",
+            contentBytes: saved.contentBytes,
+          });
+        } else {
+          setQuestionListAttachment(null);
+          if (questionListFileRef.current) {
+            questionListFileRef.current.value = "";
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          setQuestionListAttachment(null);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId, selectedScheduleId, scheduleNow]);
+
+  // Load saved BD15 PDF attachments for this client + current month.
+  // Also load on BD18 so status can show attached / not attached.
+  useEffect(() => {
+    if (
+      !selectedId ||
+      (selectedScheduleId !== "bd15" && selectedScheduleId !== "bd18")
+    ) {
+      setBd15Attachments([]);
+      if (bd15FileRef.current) {
+        bd15FileRef.current.value = "";
+      }
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await portalFetch(
+          `/api/bd15-email-attachments?clientId=${encodeURIComponent(selectedId)}&monthKey=${encodeURIComponent(currentMonthKey(scheduleNow))}`,
+          { cache: "no-store" },
+        );
+        const data = (await response.json()) as {
+          attachments?: Bd15ApiAttachment[];
+          error?: string;
+        };
+        if (cancelled) {
+          return;
+        }
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to load PDF attachments.");
+        }
+        setBd15Attachments(mapBd15ApiAttachments(data.attachments));
+      } catch {
+        if (!cancelled) {
+          setBd15Attachments([]);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId, selectedScheduleId, scheduleNow]);
+
+  // Load BD15 email-sent status + comments (used by BD18 status check).
+  useEffect(() => {
+    if (
+      !selectedId ||
+      (selectedScheduleId !== "bd15" && selectedScheduleId !== "bd18")
+    ) {
+      setBd15EmailStatus({
+        emailSent: false,
+        emailSentAt: "",
+        comments: [],
+      });
+      setBd18CommentDraft("");
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await portalFetch(
+          `/api/bd15-email-status?clientId=${encodeURIComponent(selectedId)}&monthKey=${encodeURIComponent(currentMonthKey(scheduleNow))}`,
+          { cache: "no-store" },
+        );
+        const data = (await response.json()) as {
+          status?: {
+            emailSent?: boolean;
+            emailSentAt?: string;
+            comments?: Array<{
+              id?: string;
+              text?: string;
+              createdAt?: string;
+            }>;
+          };
+          error?: string;
+        };
+        if (cancelled) {
+          return;
+        }
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to load BD15 email status.");
+        }
+        const status = data.status;
+        setBd15EmailStatus({
+          emailSent: Boolean(status?.emailSent),
+          emailSentAt:
+            typeof status?.emailSentAt === "string" ? status.emailSentAt : "",
+          comments: Array.isArray(status?.comments)
+            ? status.comments
+                .filter(
+                  (item) =>
+                    typeof item.id === "string" &&
+                    item.id &&
+                    typeof item.text === "string" &&
+                    item.text.trim(),
+                )
+                .map((item) => ({
+                  id: item.id as string,
+                  text: (item.text as string).trim(),
+                  createdAt:
+                    typeof item.createdAt === "string" ? item.createdAt : "",
+                }))
+            : [],
+        });
+      } catch {
+        if (!cancelled) {
+          setBd15EmailStatus({
+            emailSent: false,
+            emailSentAt: "",
+            comments: [],
+          });
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId, selectedScheduleId, scheduleNow]);
 
   useEffect(() => {
     if (!showRequestListTab && workflowTab === "request") {
-      setWorkflowTab("action");
+      setWorkflowTab(showBd7Content ? "action" : showBd1LikeWorkflow ? "email" : "action");
     }
-  }, [showRequestListTab, workflowTab]);
+  }, [showRequestListTab, showBd7Content, showBd1LikeWorkflow, workflowTab]);
+
+  useEffect(() => {
+    // BD1/BD8/BD15/BD18 no longer show Action Items — keep users on
+    // Request/Attachments / Email.
+    if (showBd1LikeRequestList && workflowTab === "action") {
+      setWorkflowTab("request");
+    }
+  }, [showBd1LikeRequestList, workflowTab]);
 
   useEffect(() => {
     if (workflowTab === "email" && !showBd1LikeWorkflow) {
@@ -561,9 +1125,26 @@ export function ClientManagementPanel() {
 
   useEffect(() => {
     if (showBd1LikeWorkflow && workflowTab === "completed") {
-      setWorkflowTab("action");
+      setWorkflowTab(
+        showBd1LikeRequestList
+          ? "request"
+          : showEndOfMonthEmailOnly
+            ? "email"
+            : "action",
+      );
     }
-  }, [showBd1LikeWorkflow, workflowTab]);
+  }, [
+    showBd1LikeWorkflow,
+    showBd1LikeRequestList,
+    showEndOfMonthEmailOnly,
+    workflowTab,
+  ]);
+
+  useEffect(() => {
+    if (showEndOfMonthEmailOnly && workflowTab !== "email") {
+      setWorkflowTab("email");
+    }
+  }, [showEndOfMonthEmailOnly, workflowTab]);
 
   useEffect(() => {
     if (showRequestTypeChooser) {
@@ -572,11 +1153,22 @@ export function ClientManagementPanel() {
     setRequestTypeId("bank-credit-card");
   }, [showRequestTypeChooser, selectedScheduleId]);
 
+  // BD5 is status-only (no tabs). BD9/BD10 have Question List Status + Email.
   useEffect(() => {
-    if (showBd5Content && workflowTab === "completed") {
+    if (showBd5Content && workflowTab !== "action") {
       setWorkflowTab("action");
     }
   }, [showBd5Content, workflowTab]);
+
+  useEffect(() => {
+    if (
+      showBd9LikeContent &&
+      workflowTab !== "action" &&
+      workflowTab !== "email"
+    ) {
+      setWorkflowTab("action");
+    }
+  }, [showBd9LikeContent, workflowTab]);
 
   const load = useCallback(async () => {
     setError(null);
@@ -586,6 +1178,7 @@ export function ClientManagementPanel() {
         profilesRes,
         usersRes,
         requestListsRes,
+        scheduleSettingsRes,
         holidaysRes,
         emailTemplatesRes,
         signatureRes,
@@ -594,6 +1187,7 @@ export function ClientManagementPanel() {
         fetch("/api/client-profiles", { cache: "no-store" }),
         fetch("/api/portal-users", { cache: "no-store" }),
         fetch("/api/client-request-lists", { cache: "no-store" }),
+        fetch("/api/client-schedule-settings", { cache: "no-store" }),
         fetch("/api/holidays", { cache: "no-store" }),
         fetch("/api/email-templates", { cache: "no-store" }),
         portalFetch("/api/email-signature", { cache: "no-store" }),
@@ -602,6 +1196,7 @@ export function ClientManagementPanel() {
       const profilesData = (await profilesRes.json()) as ProfilesResponse;
       const usersData = (await usersRes.json()) as UsersResponse;
       const requestListsData = await requestListsRes.json();
+      const scheduleSettingsData = await scheduleSettingsRes.json();
       const holidaysData = await holidaysRes.json();
       const emailTemplatesData = await emailTemplatesRes.json();
       const signatureData = (await signatureRes.json()) as {
@@ -629,11 +1224,17 @@ export function ClientManagementPanel() {
 
       setResources(nextResources);
       setProfiles(nextProfiles);
+      setPortalUsers(Array.isArray(usersData.users) ? usersData.users : []);
       setPortalName(matchedUser?.name?.trim() || "");
-      setRequestLists(
-        requestListsRes.ok
-          ? normalizeClientRequestListsStore(requestListsData)
-          : createEmptyRequestListsStore(),
+      // Keep existing in-memory lists if the API fails — do not wipe UI to
+      // empty (that previously got saved over a corrupt/empty data file).
+      if (requestListsRes.ok) {
+        setRequestLists(normalizeClientRequestListsStore(requestListsData));
+      }
+      setScheduleSettings(
+        scheduleSettingsRes.ok
+          ? normalizeClientScheduleSettingsStore(scheduleSettingsData)
+          : createEmptyScheduleSettingsStore(),
       );
       setHolidays(
         holidaysRes.ok
@@ -669,6 +1270,35 @@ export function ClientManagementPanel() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // When demo/real month changes, reload lists and clear in-progress form edits.
+  const scheduleMonthKeyForLists = currentMonthKey(scheduleNow);
+  useEffect(() => {
+    let cancelled = false;
+    setDraftRequestLabel("");
+    setEditingRequestItemId(null);
+    setEditRequestLabel("");
+    void (async () => {
+      try {
+        const response = await fetch(
+          `/api/client-request-lists?monthKey=${encodeURIComponent(scheduleMonthKeyForLists)}`,
+          { cache: "no-store" },
+        );
+        if (!response.ok || cancelled) {
+          return;
+        }
+        const data = await response.json();
+        if (!cancelled) {
+          setRequestLists(normalizeClientRequestListsStore(data));
+        }
+      } catch {
+        // Keep existing lists if reload fails.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [scheduleMonthKeyForLists]);
 
   const aliases = useMemo(
     () => staffNameAliases(portalName, msalName),
@@ -706,26 +1336,143 @@ export function ClientManagementPanel() {
   const selectedPointOfContact =
     selected?.profile?.pointOfContact?.trim() || "";
   const selectedPortalLink = selected?.profile?.portalLink?.trim() || "";
+  const selectedBd1Template = normalizeBd1Template(
+    selected?.profile?.bd1Template ?? "template-1",
+  );
+  const activeScheduleIdSet = useMemo(() => {
+    if (!selectedClientId) {
+      return new Set<string>();
+    }
+    return new Set(
+      getActiveScheduleIds(
+        scheduleSettings,
+        selectedClientId,
+        ALL_SCHEDULE_IDS,
+      ),
+    );
+  }, [scheduleSettings, selectedClientId]);
+  const sortScheduleItemsByMonthDate = useCallback(
+    <T extends { id: string }>(items: readonly T[]): T[] => {
+      const country = selected?.profile?.country;
+      const state = selected?.profile?.state ?? "";
+      return [...items].sort((a, b) => {
+        const dateA = getScheduleBusinessDate(
+          a.id,
+          holidays,
+          country,
+          state,
+          scheduleNow,
+        );
+        const dateB = getScheduleBusinessDate(
+          b.id,
+          holidays,
+          country,
+          state,
+          scheduleNow,
+        );
+        const timeA = dateA?.getTime() ?? Number.MAX_SAFE_INTEGER;
+        const timeB = dateB?.getTime() ?? Number.MAX_SAFE_INTEGER;
+        if (timeA !== timeB) {
+          return timeA - timeB;
+        }
+        return (
+          (CLIENT_SCHEDULE_ORDER.get(a.id) ?? 0) -
+          (CLIENT_SCHEDULE_ORDER.get(b.id) ?? 0)
+        );
+      });
+    },
+    [selected?.profile?.country, selected?.profile?.state, holidays, scheduleNow],
+  );
+
+  const activeScheduleItems = useMemo(
+    () =>
+      sortScheduleItemsByMonthDate(
+        CLIENT_SCHEDULE_ITEMS.filter((item) =>
+          activeScheduleIdSet.has(item.id),
+        ),
+      ),
+    [activeScheduleIdSet, sortScheduleItemsByMonthDate],
+  );
+  const inactiveScheduleItems = useMemo(
+    () =>
+      sortScheduleItemsByMonthDate(
+        CLIENT_SCHEDULE_ITEMS.filter(
+          (item) => !activeScheduleIdSet.has(item.id),
+        ),
+      ),
+    [activeScheduleIdSet, sortScheduleItemsByMonthDate],
+  );
+  const isSelectedScheduleActive = Boolean(
+    selectedClientId &&
+      isScheduleActiveForClient(
+        scheduleSettings,
+        selectedClientId,
+        selectedScheduleId,
+        ALL_SCHEDULE_IDS,
+      ),
+  );
+
+  // When switching clients, land on an Active business day if the current one is not.
+  useEffect(() => {
+    if (!selectedClientId) {
+      return;
+    }
+    const activeIds = getActiveScheduleIds(
+      scheduleSettings,
+      selectedClientId,
+      ALL_SCHEDULE_IDS,
+    );
+    setSelectedScheduleId((current) =>
+      activeIds.includes(current)
+        ? current
+        : (activeIds[0] ?? CLIENT_SCHEDULE_ITEMS[0].id),
+    );
+    setInactiveExpanded(false);
+    // Only re-run when the selected client changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
+  }, [selectedClientId]);
+
+  // BD1/BD5/BD7 request type follows the client's BD1 Template (default Template 1).
+  useEffect(() => {
+    if (!showRequestTypeChooser) {
+      return;
+    }
+    setRequestTypeId(bd1TemplateToRequestTypeId(selectedBd1Template));
+  }, [showRequestTypeChooser, selectedBd1Template, selectedClientId]);
 
   const defaultEmailDeadline = useMemo(() => {
     if (
       !selectedClientId ||
-      (selectedScheduleId !== "bd1" && selectedScheduleId !== "bd7")
+      (selectedScheduleId !== "bd1" &&
+        selectedScheduleId !== "bd7" &&
+        selectedScheduleId !== "bd8" &&
+        selectedScheduleId !== "bd9" &&
+        selectedScheduleId !== "bd10")
     ) {
       return "";
     }
-    const bd4Date = getScheduleBusinessDate(
-      "bd4",
-      holidays,
-      selected?.profile?.country,
-      selected?.profile?.state ?? "",
-    );
-    if (!bd4Date) {
+    // BD1 → BD4; BD7 → BD8 (or BD7 if weekend between); BD8/9/10 → same day.
+    const dueDate =
+      selectedScheduleId === "bd7"
+        ? getBd7DeadlineDate(
+            holidays,
+            selected?.profile?.country,
+            selected?.profile?.state ?? "",
+            scheduleNow,
+          )
+        : getScheduleBusinessDate(
+            selectedScheduleId === "bd1" ? "bd4" : selectedScheduleId,
+            holidays,
+            selected?.profile?.country,
+            selected?.profile?.state ?? "",
+            scheduleNow,
+          );
+    if (!dueDate) {
       return "";
     }
-    const year = bd4Date.getFullYear();
-    const month = String(bd4Date.getMonth() + 1).padStart(2, "0");
-    const day = String(bd4Date.getDate()).padStart(2, "0");
+    const year = dueDate.getFullYear();
+    const month = String(dueDate.getMonth() + 1).padStart(2, "0");
+    const day = String(dueDate.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
   }, [
     selectedClientId,
@@ -733,6 +1480,7 @@ export function ClientManagementPanel() {
     selected?.profile?.country,
     selected?.profile?.state,
     holidays,
+    scheduleNow,
   ]);
 
   const effectiveEmailDeadline = emailDeadline || defaultEmailDeadline;
@@ -746,46 +1494,176 @@ export function ClientManagementPanel() {
   }, [effectiveEmailDeadline]);
 
   useEffect(() => {
+    // Migrate legacy Last N BD (Team) sidebar ids into the merged slot + Team toggle.
+    const legacyTeam = /^last-(\d+)-bd-team$/i.exec(selectedScheduleId.trim());
+    if (legacyTeam) {
+      setSelectedScheduleId(`last-${legacyTeam[1]}-bd`);
+      setLastBdAudience("team");
+      return;
+    }
+  }, [selectedScheduleId]);
+
+  useEffect(() => {
     if (
       !selectedClientId ||
-      (selectedScheduleId !== "bd1" && selectedScheduleId !== "bd7")
+      (selectedScheduleId !== "bd1" &&
+        selectedScheduleId !== "bd7" &&
+        selectedScheduleId !== "bd8" &&
+        selectedScheduleId !== "bd9" &&
+        selectedScheduleId !== "bd10" &&
+        selectedScheduleId !== "bd15" &&
+        selectedScheduleId !== "bd18" &&
+        !showLast3BdContent &&
+        !showLast2BdContent &&
+        !showLast1BdClientContent &&
+        !showLastBdTeamContent)
     ) {
       return;
     }
-    const template = findBd1EmailTemplate(emailTemplates, requestTypeId);
+    if (showLast1BdClientContent) {
+      setEmailSubject("");
+      setEmailBody("");
+      setEmailPortalHref("");
+      setEmailAutofillHighlights([]);
+      return;
+    }
+    const template = showLast3BdContent
+      ? findEmailTemplateById(emailTemplates, "template-5")
+      : showLast2BdContent
+        ? findEmailTemplateById(emailTemplates, "template-12")
+        : showLastBdTeamContent
+          ? findEmailTemplateById(emailTemplates, "template-18")
+          : selectedScheduleId === "bd15" || selectedScheduleId === "bd18"
+            ? findEmailTemplateById(emailTemplates, "template-11")
+            : selectedScheduleId === "bd10"
+              ? findEmailTemplateById(emailTemplates, "template-7")
+              : selectedScheduleId === "bd9"
+                ? findEmailTemplateById(emailTemplates, "template-8")
+                : selectedScheduleId === "bd8"
+                  ? findEmailTemplateById(emailTemplates, "template-3")
+                  : findBd1EmailTemplate(emailTemplates, requestTypeId);
     const clientName =
       selectedOperatingName.replace(/[.:]+$/g, "").trim() ||
       selectedOperatingName.trim() ||
       "[Client Name]";
     const contactName = selectedPointOfContact || "[Contact First Name]";
     const portalLink = selectedPortalLink || "[Portal Link]";
-    const periodDate = new Date();
+    const periodDate = scheduleNow;
     const period = formatCurrentPeriod(periodDate);
     const periodPortalHref = resolvePortalHref(portalLink, periodDate);
-    const dueDate = emailDeadlineLabel;
+    // Template 5 (Last 3 BD): formal request is next month's BD1 / due BD4.
+    const nextMonthAnchor = new Date(
+      scheduleNow.getFullYear(),
+      scheduleNow.getMonth() + 1,
+      15,
+    );
+    const nextBd1Date = getScheduleBusinessDate(
+      "bd1",
+      holidays,
+      selected?.profile?.country,
+      selected?.profile?.state ?? "",
+      nextMonthAnchor,
+    );
+    const nextBd4Date = getScheduleBusinessDate(
+      "bd4",
+      holidays,
+      selected?.profile?.country,
+      selected?.profile?.state ?? "",
+      nextMonthAnchor,
+    );
+    const bd1DateLabel = nextBd1Date
+      ? formatBusinessDayLabel(nextBd1Date)
+      : "[BD1 Date]";
+    const dueDate = showLast3BdContent
+      ? nextBd4Date
+        ? formatBusinessDayLabel(nextBd4Date)
+        : emailDeadlineLabel || "[Due Date]"
+      : emailDeadlineLabel;
+    const emailMonthKey = currentMonthKey(periodDate);
     const typeActionItems = getActionItemsForRequestType(
       requestLists,
       selectedClientId,
       requestTypeId,
+    ).filter((item) => item.monthKey === emailMonthKey);
+    const bd8QuestionActionItems = getActionItemsForSchedules(
+      requestLists,
+      selectedClientId,
+      BD8_QUESTION_SCHEDULE_IDS,
+    ).filter((item) => item.monthKey === emailMonthKey);
+    const requestListScheduleId =
+      selectedScheduleId === "bd8"
+        ? "bd8"
+        : requestTypeScheduleId("bd1", requestTypeId);
+    const requestListItems = requestItemsForMonth(
+      getClientRequestList(
+        requestLists,
+        selectedClientId,
+        requestListScheduleId,
+      ).requestItems,
+      emailMonthKey,
     );
-    const emailListItems =
-      selectedScheduleId === "bd7"
+    const last3BdStatementItems = showLast3BdContent
+      ? [
+          ...requestItemsForMonth(
+            getClientRequestList(requestLists, selectedClientId, "bd1")
+              .requestItems,
+            emailMonthKey,
+          ),
+          ...requestItemsForMonth(
+            getClientRequestList(
+              requestLists,
+              selectedClientId,
+              "bd1-other-statements",
+            ).requestItems,
+            emailMonthKey,
+          ),
+        ]
+      : [];
+    // BD1/BD8 email uses Request List Template bullets directly.
+    // BD7 email still uses items marked Late on BD5.
+    // BD9 reminder uses open + late BD8 questions; BD10 uses only Late from BD9.
+    // Last 3 BD Client (Template 5) uses BD1 request-list bullets as the statements list.
+    const emailListItems = showLast3BdContent
+      ? last3BdStatementItems
+      : selectedScheduleId === "bd7"
         ? typeActionItems.filter((item) => item.status === "late")
-        : getClientRequestList(
-            requestLists,
-            selectedClientId,
-            requestTypeScheduleId("bd1", requestTypeId),
-          ).actionItems.filter((item) => item.status === "action");
+        : selectedScheduleId === "bd10"
+          ? bd8QuestionActionItems.filter((item) => item.status === "late")
+          : selectedScheduleId === "bd9"
+            ? bd8QuestionActionItems.filter(
+                (item) =>
+                  item.status === "action" || item.status === "late",
+              )
+            : requestListItems;
     const bankListPlaceholder =
       "• [List of bank and credit card accounts, with last 4 digits]";
     const otherListPlaceholder =
       "• [List of loan, line of credit, lease, investment or other accounts]";
+    const outstandingListPlaceholder = "• [List of outstanding items only]";
+    const statementsListPlaceholder =
+      "• [List of statements and reports for this client]";
     const actionListText =
       emailListItems.length > 0
         ? emailListItems.map((item) => `• ${item.label}`).join("\n")
-        : requestTypeId === "other-statements"
-          ? otherListPlaceholder
-          : bankListPlaceholder;
+        : showLast3BdContent
+          ? statementsListPlaceholder
+          : selectedScheduleId === "bd9" || selectedScheduleId === "bd10"
+            ? outstandingListPlaceholder
+            : requestTypeId === "other-statements"
+              ? otherListPlaceholder
+              : bankListPlaceholder;
+    const openQuestionCount = showLast2BdContent
+      ? bd8QuestionActionItems.filter(
+          (item) =>
+            item.status === "action" || item.status === "late",
+        ).length
+      : emailListItems.length;
+    const questionCount =
+      openQuestionCount > 0 ? String(openQuestionCount) : "[Number]";
+    const questionListText =
+      emailListItems.length > 0
+        ? emailListItems.map((item) => `• ${item.label}`).join("\n")
+        : "• [Question List]";
 
     function fillPlaceholders(text: string) {
       return applyPeriodPlaceholder(
@@ -795,6 +1673,21 @@ export function ClientManagementPanel() {
             .replace(/\[Contact First Name\]/gi, contactName)
             .replace(/\[Due Date\]/gi, dueDate)
             .replace(/\[Deadline\]/gi, dueDate)
+            .replace(/\[BD1 Date\]/gi, bd1DateLabel)
+            .replace(
+              /\[Last BD Label\]/gi,
+              lastBdLabel(selectedScheduleId),
+            )
+            .replace(/\[Number\]/gi, questionCount)
+            .replace(/(?:•\s*)?\[Question List\]/gi, questionListText)
+            .replace(
+              /(?:•\s*)?\[List of statements and reports for this client\]/gi,
+              actionListText,
+            )
+            .replace(
+              /(?:•\s*)?\[List of outstanding items only\]/gi,
+              actionListText,
+            )
             .replace(
               /(?:•\s*)?\[List of bank and credit card accounts, with last 4 digits\]/gi,
               actionListText,
@@ -806,18 +1699,54 @@ export function ClientManagementPanel() {
           portalLink,
           periodDate,
         ),
+        periodDate,
       );
     }
 
     const subject = fillPlaceholders(template?.subject?.trim() || "");
-    const body = fillPlaceholders(
+    let body = fillPlaceholders(
       stripLegacySignatureClosing(template?.body ?? "").trimEnd(),
     );
+    // BD8/BD9/BD10: ensure the question list bullets appear in the email body
+    // (same idea as Template 7's outstanding-items list on BD10).
+    const isQuestionEmailDay =
+      selectedScheduleId === "bd8" ||
+      selectedScheduleId === "bd9" ||
+      selectedScheduleId === "bd10";
+    if (
+      isQuestionEmailDay &&
+      emailListItems.length > 0 &&
+      !emailListItems.every((item) => body.includes(item.label))
+    ) {
+      const withList = body
+        .replace(
+          /You can see the full list in the portal(?:\s+here)?:?\s*(?:\[Portal Link\])?\s*(?:\[Question List\])?/i,
+          `You can see the full list in the portal:\n\n${questionListText}\n\n`,
+        )
+        .replace(
+          /You can see and answer them(?:\s+here)?:?\s*(?:\[Portal Link\])?\s*(?:\[Question List\])?/i,
+          `You can see and answer them here:\n\n${questionListText}\n\n`,
+        )
+        .replace(
+          /(?:•\s*)?\[List of outstanding items only\]/i,
+          questionListText,
+        )
+        .replace(/(?:•\s*)?\[Question List\]/i, questionListText);
+      if (withList !== body) {
+        body = withList;
+      } else {
+        body = `${body.trimEnd()}\n\n${questionListText}`;
+      }
+    }
+    const lastBdLabelText = lastBdLabel(selectedScheduleId);
     const highlights = [
       clientName,
       contactName,
       period,
       dueDate,
+      bd1DateLabel !== "[BD1 Date]" ? bd1DateLabel : "",
+      lastBdLabelText !== "[Last BD Label]" ? lastBdLabelText : "",
+      questionCount !== "[Number]" ? questionCount : "",
       ...emailListItems.map((item) => item.label),
     ].filter(
       (value) =>
@@ -826,7 +1755,8 @@ export function ClientManagementPanel() {
         value !== "[Contact First Name]" &&
         value !== "[Due Date]" &&
         value !== "[Deadline]" &&
-        value !== "[Portal Link]",
+        value !== "[Portal Link]" &&
+        value !== "[Number]",
     );
 
     setEmailSubject(subject);
@@ -836,6 +1766,10 @@ export function ClientManagementPanel() {
   }, [
     selectedClientId,
     selectedScheduleId,
+    showLast3BdContent,
+    showLast2BdContent,
+    showLast1BdClientContent,
+    showLastBdTeamContent,
     requestTypeId,
     selectedOperatingName,
     selectedPointOfContact,
@@ -843,24 +1777,60 @@ export function ClientManagementPanel() {
     emailDeadlineLabel,
     requestLists,
     emailTemplates,
+    scheduleNow,
+    holidays,
+    selected?.profile?.country,
+    selected?.profile?.state,
   ]);
 
   useEffect(() => {
     if (
       !selectedClientId ||
-      (selectedScheduleId !== "bd1" && selectedScheduleId !== "bd7")
+      (selectedScheduleId !== "bd1" &&
+        selectedScheduleId !== "bd7" &&
+        selectedScheduleId !== "bd8" &&
+        selectedScheduleId !== "bd9" &&
+        selectedScheduleId !== "bd10" &&
+        selectedScheduleId !== "bd15" &&
+        selectedScheduleId !== "bd18" &&
+        !showLast3BdContent &&
+        !showLast2BdContent &&
+        !showLast1BdClientContent &&
+        !showLastBdTeamContent)
     ) {
       return;
     }
     // Leave To empty on load; From always follows the signed-in account.
-    setEmailTo("");
-    setEmailCc("");
-    setEmailBcc("");
+    // Team end-of-month: To = sender, BCC = all portal users.
+    if (showLastBdTeamContent) {
+      const teamEmails = portalUsers
+        .map((user) => user.email.trim().toLowerCase())
+        .filter(Boolean);
+      const sender = emailFrom.trim().toLowerCase();
+      const bccList = teamEmails.filter((item) => item !== sender);
+      setEmailTo(sender || teamEmails[0] || "");
+      setEmailCc("");
+      setEmailBcc(bccList.join(", "));
+    } else {
+      setEmailTo("");
+      setEmailCc("");
+      setEmailBcc("");
+    }
     setEmailDeadline("");
     setEmailSendAt("");
     setEmailSendError(null);
     setEmailSendMessage(null);
-  }, [selectedClientId, selectedScheduleId, requestTypeId]);
+  }, [
+    selectedClientId,
+    selectedScheduleId,
+    showLast3BdContent,
+    showLast2BdContent,
+    showLast1BdClientContent,
+    showLastBdTeamContent,
+    requestTypeId,
+    portalUsers,
+    emailFrom,
+  ]);
 
   const selectedSchedule =
     CLIENT_SCHEDULE_ITEMS.find((item) => item.id === selectedScheduleId) ??
@@ -875,22 +1845,31 @@ export function ClientManagementPanel() {
       holidays,
       selected.profile?.country,
       selected.profile?.state ?? "",
+      scheduleNow,
     );
-  }, [
-    selected,
-    selectedScheduleId,
-    holidays,
-  ]);
+  }, [selected, selectedScheduleId, holidays, scheduleNow]);
 
-  useEffect(() => {
-    if (
-      selectedScheduleId !== "bd1" &&
-      selectedScheduleId !== "bd7"
-    ) {
-      return;
-    }
-    setEmailSendAt(defaultScheduleSendAt(selectedScheduleBusinessDate));
-  }, [selectedClientId, selectedScheduleId, selectedScheduleBusinessDate]);
+  // BD date at 9am client TZ → Pakistan (default; editable override in state).
+  const clientTimeZoneMissing = !selected?.profile?.timeZone?.trim();
+  const clientTimeZoneInvalid =
+    !clientTimeZoneMissing &&
+    !resolveClientTimeZone(selected?.profile?.timeZone);
+  const clientTimeZoneError = clientTimeZoneMissing
+    ? CLIENT_TIME_ZONE_REQUIRED_MESSAGE
+    : clientTimeZoneInvalid
+      ? "Client time zone is not recognized. Set a valid time zone in Client Profile."
+      : null;
+  const defaultEmailSendSchedule = useMemo(
+    () =>
+      getClientNineAmSchedule(
+        selectedScheduleBusinessDate,
+        selected?.profile?.timeZone,
+      ),
+    [selectedScheduleBusinessDate, selected?.profile?.timeZone],
+  );
+  const emailSendAtClientLabel = defaultEmailSendSchedule?.clientLabel ?? "";
+  const effectiveEmailSendAt =
+    emailSendAt || defaultEmailSendSchedule?.userDateTimeLocal || "";
 
   const scheduleDateById = useMemo(() => {
     const map = new Map<string, string>();
@@ -905,16 +1884,14 @@ export function ClientManagementPanel() {
         holidays,
         country,
         state,
+        scheduleNow,
       );
       if (date) {
         map.set(item.id, formatBusinessDayLabel(date));
       }
     }
     return map;
-  }, [selected, holidays]);
-
-  const selectedScheduleDate =
-    scheduleDateById.get(selectedSchedule.id) ?? null;
+  }, [selected, holidays, scheduleNow]);
 
   const activeList: ClientRequestList =
     selected && activeRequestScheduleId
@@ -931,17 +1908,41 @@ export function ClientManagementPanel() {
           lastPromotedMonth: "",
         };
 
+  const scheduleMonthKey = currentMonthKey(scheduleNow);
+  /** BD1/BD8 request bullets for the active (demo) month only. */
+  const visibleRequestItems = requestItemsForMonth(
+    activeList.requestItems,
+    scheduleMonthKey,
+  );
   const sharedActionItems = selected
     ? getClientActionItems(requestLists, selected.resource.id)
     : [];
-  const scopedActionItems =
-    showRequestTypeChooser && selected
-      ? getActionItemsForRequestType(
+  const questionScheduleActionItems =
+    showBd9LikeContent && selected
+      ? getActionItemsForSchedules(
           requestLists,
           selected.resource.id,
-          requestTypeId,
+          BD8_QUESTION_SCHEDULE_IDS,
         )
-      : sharedActionItems;
+      : [];
+  const monthScopedActionItems = (
+    items: ActionWorkflowItem[],
+  ): ActionWorkflowItem[] =>
+    items.filter((item) => item.monthKey === scheduleMonthKey);
+  const scopedActionItems = monthScopedActionItems(
+    showBd10Content
+      ? // BD10 only surfaces items marked Late on BD9 (not Completed).
+        questionScheduleActionItems.filter((item) => item.status === "late")
+      : showBd9Content
+        ? questionScheduleActionItems
+        : showRequestTypeChooser && selected
+          ? getActionItemsForRequestType(
+              requestLists,
+              selected.resource.id,
+              requestTypeId,
+            )
+          : sharedActionItems,
+  );
   const actionItems = scopedActionItems.filter(
     (item) => item.status === "action",
   );
@@ -958,6 +1959,15 @@ export function ClientManagementPanel() {
       });
   }, [scopedActionItems]);
   const bd5ActionTableItems = useMemo(() => {
+    if (showBd10Content) {
+      return scopedActionItems
+        .filter((item) => item.status === "late")
+        .sort((a, b) => {
+          const aTime = Date.parse(a.completedAt) || 0;
+          const bTime = Date.parse(b.completedAt) || 0;
+          return bTime - aTime;
+        });
+    }
     const open = scopedActionItems.filter((item) => item.status === "action");
     const resolved = scopedActionItems
       .filter((item) => item.status === "completed" || item.status === "late")
@@ -967,7 +1977,147 @@ export function ClientManagementPanel() {
         return bTime - aTime;
       });
     return [...open, ...resolved];
-  }, [scopedActionItems]);
+  }, [scopedActionItems, showBd10Content]);
+
+  const bd7EmailDisabled =
+    showBd7Content && bd7LateItems.length === 0;
+  const bd10EmailDisabled =
+    showBd10Content && bd5ActionTableItems.length === 0;
+  const bd15MissingReports = useMemo(
+    () =>
+      showBd15Content || showBd18Content
+        ? getMissingBd15Reports(bd15Attachments)
+        : [],
+    [showBd15Content, showBd18Content, bd15Attachments],
+  );
+  /** BD15 and BD18 share sent status — after send, email is view-only. */
+  const bd15EmailAlreadySent =
+    showBd15Email && bd15EmailStatus.emailSent;
+  const bd15ReportsMissingForSend =
+    showBd15Email &&
+    !bd15EmailAlreadySent &&
+    bd15MissingReports.length > 0;
+  /** Tab stays available after send so the email can still be viewed. */
+  const reminderEmailTabDisabled =
+    bd7EmailDisabled ||
+    bd10EmailDisabled ||
+    (showBd15Email &&
+      !bd15EmailStatus.emailSent &&
+      bd15MissingReports.length > 0);
+  const reminderEmailSendDisabled =
+    reminderEmailTabDisabled || bd15EmailAlreadySent;
+  const reminderEmailDisabled = reminderEmailSendDisabled;
+  const reminderEmailDisabledTitle = bd15EmailAlreadySent
+    ? `Email sent on ${formatActionResolvedAt(bd15EmailStatus.emailSentAt) || "—"}`
+    : bd7EmailDisabled
+      ? "No late action items for BD5 found."
+      : bd10EmailDisabled
+        ? "No late BD9 questions found."
+        : bd15ReportsMissingForSend
+          ? `These files are missing: ${bd15MissingReports.join(", ")}`
+          : undefined;
+
+  useEffect(() => {
+    if (reminderEmailTabDisabled && workflowTab === "email") {
+      setWorkflowTab("request");
+    }
+  }, [reminderEmailTabDisabled, workflowTab]);
+
+  async function handleToggleScheduleStar(
+    scheduleId: string,
+    event: MouseEvent,
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!selected || !canEdit || savingScheduleSettings) {
+      return;
+    }
+
+    const nextStore = toggleClientScheduleActive(
+      scheduleSettings,
+      selected.resource.id,
+      scheduleId,
+      ALL_SCHEDULE_IDS,
+    );
+    const entry = {
+      clientId: selected.resource.id,
+      activeScheduleIds: getActiveScheduleIds(
+        nextStore,
+        selected.resource.id,
+        ALL_SCHEDULE_IDS,
+      ),
+    };
+
+    setSavingScheduleSettings(true);
+    setError(null);
+    try {
+      const response = await portalFetch("/api/client-schedule-settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(entry),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(
+          (data as { error?: string }).error ||
+            "Failed to update Active business days.",
+        );
+      }
+      setScheduleSettings(normalizeClientScheduleSettingsStore(data));
+    } catch (saveError) {
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : "Failed to update Active business days.",
+      );
+    } finally {
+      setSavingScheduleSettings(false);
+    }
+  }
+
+  async function handleBd1TemplateChange(nextTemplate: Bd1TemplateId) {
+    if (!selected?.profile || !canEdit) {
+      setError("Link a Client Profile to set BD1 Template.");
+      return;
+    }
+    if (normalizeBd1Template(selected.profile.bd1Template) === nextTemplate) {
+      return;
+    }
+
+    const updated = normalizeClientProfile({
+      ...selected.profile,
+      bd1Template: nextTemplate,
+    });
+    const nextProfiles = profiles.map((profile) =>
+      profile.id === updated.id ? updated : profile,
+    );
+
+    setSavingBd1Template(true);
+    setError(null);
+    try {
+      const response = await portalFetch("/api/client-profiles", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profiles: nextProfiles }),
+      });
+      const data = (await response.json()) as ProfilesResponse;
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to save BD1 Template.");
+      }
+      setProfiles(
+        Array.isArray(data.profiles) ? data.profiles : nextProfiles,
+      );
+      setRequestTypeId(bd1TemplateToRequestTypeId(nextTemplate));
+    } catch (saveError) {
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : "Failed to save BD1 Template.",
+      );
+    } finally {
+      setSavingBd1Template(false);
+    }
+  }
 
   async function persistList(nextList: ClientRequestList) {
     if (!selected || !activeRequestScheduleId) {
@@ -979,7 +2129,10 @@ export function ClientManagementPanel() {
       const response = await portalFetch("/api/client-request-lists", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(nextList),
+        body: JSON.stringify({
+          ...nextList,
+          monthKey: currentMonthKey(scheduleNow),
+        }),
       });
       const data = await response.json();
       if (!response.ok) {
@@ -999,9 +2152,22 @@ export function ClientManagementPanel() {
     }
   }
 
+  function requireActiveSchedule(actionLabel = "perform this action"): boolean {
+    if (isSelectedScheduleActive) {
+      return true;
+    }
+    setError(
+      `This business day is Inactive. Fill the star to ${actionLabel}.`,
+    );
+    return false;
+  }
+
   async function handleAddRequestItem() {
     const label = draftRequestLabel.trim();
     if (!label || !selected || !activeRequestScheduleId) {
+      return;
+    }
+    if (!requireActiveSchedule("edit the request list")) {
       return;
     }
     const nextList = addRequestBulletToList(
@@ -1011,28 +2177,211 @@ export function ClientManagementPanel() {
         scheduleId: activeRequestScheduleId,
       },
       label,
+      scheduleNow,
     );
     setDraftRequestLabel("");
     await persistList(nextList);
+  }
+
+  async function handleQuestionListExcelUpload(
+    event: ChangeEvent<HTMLInputElement>,
+  ) {
+    const file = event.target.files?.[0];
+    if (!file || !selected) {
+      return;
+    }
+    if (!requireActiveSchedule("attach the Excel file")) {
+      event.target.value = "";
+      return;
+    }
+
+    setUploadingQuestionList(true);
+    setError(null);
+    try {
+      const buffer = await file.arrayBuffer();
+      const attachment: GraphMailAttachment = {
+        name: file.name,
+        contentType: mimeTypeForExcelFile(file),
+        contentBytes: arrayBufferToBase64(buffer),
+      };
+      const response = await portalFetch("/api/bd8-email-attachments", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId: selected.resource.id,
+          monthKey: currentMonthKey(scheduleNow),
+          ...attachment,
+        }),
+      });
+      const data = (await response.json()) as {
+        attachment?: GraphMailAttachment | null;
+        error?: string;
+      };
+      if (!response.ok || !data.attachment) {
+        throw new Error(data.error || "Failed to save Excel attachment.");
+      }
+      setQuestionListAttachment({
+        name: data.attachment.name,
+        contentType: data.attachment.contentType || attachment.contentType,
+        contentBytes: data.attachment.contentBytes,
+      });
+    } catch (uploadError) {
+      setError(
+        uploadError instanceof Error
+          ? uploadError.message
+          : "Failed to save Excel attachment.",
+      );
+      setQuestionListAttachment(null);
+      event.target.value = "";
+    } finally {
+      setUploadingQuestionList(false);
+    }
+  }
+
+  async function handleBd15FileUpload(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    if (files.length === 0 || !selected) {
+      return;
+    }
+    if (!requireActiveSchedule("attach report files")) {
+      event.target.value = "";
+      return;
+    }
+
+    setUploadingBd15Files(true);
+    setError(null);
+    try {
+      let nextAttachments = bd15Attachments;
+      for (const file of files) {
+        const lower = file.name.toLowerCase();
+        const isPdf =
+          lower.endsWith(".pdf") || file.type === "application/pdf";
+        const isExcel =
+          lower.endsWith(".xlsx") ||
+          lower.endsWith(".xls") ||
+          lower.endsWith(".csv") ||
+          file.type.includes("spreadsheet") ||
+          file.type.includes("excel") ||
+          file.type === "text/csv";
+        if (!isPdf && !isExcel) {
+          throw new Error(
+            `Only Excel or PDF files are allowed (${file.name}).`,
+          );
+        }
+
+        const existing = nextAttachments.find(
+          (item) => item.name.toLowerCase() === file.name.toLowerCase(),
+        );
+        let replaceSameName = false;
+        if (existing) {
+          const replace = window.confirm(
+            `"${file.name}" is already uploaded. Replace the previous file?`,
+          );
+          if (!replace) {
+            continue;
+          }
+          replaceSameName = true;
+        }
+
+        const buffer = await file.arrayBuffer();
+        const attachment = {
+          name: file.name,
+          contentType: mimeTypeForBd15File(file),
+          contentBytes: arrayBufferToBase64(buffer),
+        };
+        const response = await portalFetch("/api/bd15-email-attachments", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            clientId: selected.resource.id,
+            monthKey: currentMonthKey(scheduleNow),
+            replaceSameName,
+            ...attachment,
+          }),
+        });
+        const data = (await response.json()) as {
+          attachments?: Bd15ApiAttachment[];
+          error?: string;
+        };
+        if (!response.ok || !Array.isArray(data.attachments)) {
+          throw new Error(data.error || "Failed to save PDF attachment.");
+        }
+        nextAttachments = mapBd15ApiAttachments(data.attachments);
+      }
+      setBd15Attachments(nextAttachments);
+      event.target.value = "";
+    } catch (uploadError) {
+      setError(
+        uploadError instanceof Error
+          ? uploadError.message
+          : "Failed to save PDF attachments.",
+      );
+      event.target.value = "";
+    } finally {
+      setUploadingBd15Files(false);
+    }
+  }
+
+  async function handleRemoveBd15Attachment(attachmentId: string) {
+    if (!selected) {
+      return;
+    }
+    if (!requireActiveSchedule("remove PDF attachments")) {
+      return;
+    }
+    setUploadingBd15Files(true);
+    setError(null);
+    try {
+      const response = await portalFetch(
+        `/api/bd15-email-attachments?clientId=${encodeURIComponent(selected.resource.id)}&monthKey=${encodeURIComponent(currentMonthKey(scheduleNow))}&id=${encodeURIComponent(attachmentId)}`,
+        { method: "DELETE" },
+      );
+      const data = (await response.json()) as {
+        attachments?: Bd15ApiAttachment[];
+        error?: string;
+      };
+      if (!response.ok || !Array.isArray(data.attachments)) {
+        throw new Error(data.error || "Failed to remove PDF attachment.");
+      }
+      setBd15Attachments(mapBd15ApiAttachments(data.attachments));
+    } catch (removeError) {
+      setError(
+        removeError instanceof Error
+          ? removeError.message
+          : "Failed to remove PDF attachment.",
+      );
+    } finally {
+      setUploadingBd15Files(false);
+    }
   }
 
   async function handleMoveRequestItem(itemId: string, direction: -1 | 1) {
     if (!selected || !activeRequestScheduleId) {
       return;
     }
-    const items = [...activeList.requestItems];
-    const index = items.findIndex((item) => item.id === itemId);
-    const target = index + direction;
-    if (index < 0 || target < 0 || target >= items.length) {
+    if (!requireActiveSchedule("edit the request list")) {
       return;
     }
-    const [item] = items.splice(index, 1);
-    items.splice(target, 0, item!);
+    const items = [...activeList.requestItems];
+    const monthItems = requestItemsForMonth(items, scheduleMonthKey);
+    const index = monthItems.findIndex((item) => item.id === itemId);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= monthItems.length) {
+      return;
+    }
+    const reordered = [...monthItems];
+    const [item] = reordered.splice(index, 1);
+    reordered.splice(target, 0, item!);
+    const monthIds = new Set(monthItems.map((entry) => entry.id));
+    let cursor = 0;
+    const nextItems = items.map((entry) =>
+      monthIds.has(entry.id) ? reordered[cursor++]! : entry,
+    );
     await persistList({
       ...activeList,
       clientId: selected.resource.id,
       scheduleId: activeRequestScheduleId,
-      requestItems: items,
+      requestItems: nextItems,
     });
   }
 
@@ -1048,6 +2397,9 @@ export function ClientManagementPanel() {
 
   async function handleSaveEditRequestItem() {
     if (!selected || !activeRequestScheduleId || !editingRequestItemId) {
+      return;
+    }
+    if (!requireActiveSchedule("edit the request list")) {
       return;
     }
     const label = editRequestLabel.trim();
@@ -1072,6 +2424,9 @@ export function ClientManagementPanel() {
     if (!selected || !activeRequestScheduleId) {
       return;
     }
+    if (!requireActiveSchedule("edit the request list")) {
+      return;
+    }
     if (!window.confirm(`Delete "${label}"?`)) {
       return;
     }
@@ -1086,6 +2441,7 @@ export function ClientManagementPanel() {
           scheduleId: activeRequestScheduleId,
         },
         itemId,
+        scheduleNow,
       ),
     );
   }
@@ -1097,6 +2453,10 @@ export function ClientManagementPanel() {
     if (!selected) {
       return;
     }
+    if (!isSelectedScheduleActive) {
+      setError("This business day is Inactive. Fill the star to activate it.");
+      return;
+    }
     const owner =
       findListContainingActionItem(
         requestLists,
@@ -1106,8 +2466,159 @@ export function ClientManagementPanel() {
     await persistList(completeActionItem(owner, itemId, status));
   }
 
+  async function handleCheckInSharePoint() {
+    if (!selected || !showBd5Content) {
+      return;
+    }
+    if (!isSelectedScheduleActive) {
+      setError("BD5 is Inactive for this client. Fill the star to activate it.");
+      return;
+    }
+    if (!selectedPortalLink) {
+      setError("This client has no Portal Link to check in SharePoint.");
+      return;
+    }
+    if (!canEdit) {
+      setError("Admin access is required to update action items.");
+      return;
+    }
+
+    setCheckingSharePoint(true);
+    setError(null);
+    setSharePointCheckMessage(null);
+
+    try {
+      let account =
+        instance.getActiveAccount() ??
+        instance.getAllAccounts()[0] ??
+        msalAccount;
+      if (!account) {
+        const result = await instance.loginPopup({
+          ...sharePointRequest,
+          prompt: "select_account",
+        });
+        account = result.account;
+        if (account) {
+          instance.setActiveAccount(account);
+        }
+      }
+      if (!account) {
+        throw new Error(
+          "Sign in with a Fire Fly Microsoft account to check SharePoint.",
+        );
+      }
+
+      const periodDate = scheduleNow;
+      const folder = await listSharePointMonthFolderFiles(
+        instance,
+        account,
+        selectedPortalLink,
+        periodDate,
+      );
+
+      const bankFileFound = sharePointFileNameMatches(
+        folder.fileNames,
+        "Bank Statement",
+      );
+      const creditFileFound = sharePointFileNameMatches(
+        folder.fileNames,
+        "Credit Card Statement",
+      );
+
+      const monthKey = currentMonthKey(periodDate);
+      const candidates = bd5ActionTableItems.filter(
+        (item) => item.monthKey === monthKey || !item.monthKey,
+      );
+
+      let store = requestLists;
+      let bankUpdated = 0;
+      let creditUpdated = 0;
+      const touchedLists = new Map<string, ClientRequestList>();
+
+      for (const item of candidates) {
+        const kind = classifySharePointActionItem(item.label);
+        if (!kind) {
+          continue;
+        }
+        const nextStatus =
+          kind === "bank"
+            ? bankFileFound
+              ? "completed"
+              : "late"
+            : creditFileFound
+              ? "completed"
+              : "late";
+
+        const owner =
+          findListContainingActionItem(
+            store,
+            selected.resource.id,
+            item.id,
+          ) ??
+          getClientRequestList(
+            store,
+            selected.resource.id,
+            activeRequestScheduleId,
+          );
+        const updated = setActionItemStatus(owner, item.id, nextStatus);
+        store = upsertClientRequestList(store, updated, scheduleNow);
+        touchedLists.set(`${updated.clientId}::${updated.scheduleId}`, updated);
+        if (kind === "bank") {
+          bankUpdated += 1;
+        } else {
+          creditUpdated += 1;
+        }
+      }
+
+      if (touchedLists.size === 0) {
+        setSharePointCheckMessage(
+          `Checked ${folder.folderPath}: Bank Statement ${bankFileFound ? "found" : "not found"}; Credit Card Statement ${creditFileFound ? "found" : "not found"}. No matching Bank/Credit Card Statement action items to update.`,
+        );
+        return;
+      }
+
+      setSavingRequestList(true);
+      let nextStore = store;
+      for (const list of touchedLists.values()) {
+        const response = await portalFetch("/api/client-request-lists", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...list,
+            monthKey: currentMonthKey(scheduleNow),
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(
+            (data as { error?: string }).error ||
+              "Failed to save action item updates.",
+          );
+        }
+        nextStore = normalizeClientRequestListsStore(data);
+      }
+      setRequestLists(nextStore);
+
+      setSharePointCheckMessage(
+        `Checked ${folder.folderPath}: Bank Statement ${bankFileFound ? "found → Completed" : "not found → Late"} (${bankUpdated}); Credit Card Statement ${creditFileFound ? "found → Completed" : "not found → Late"} (${creditUpdated}).`,
+      );
+    } catch (checkError) {
+      setError(
+        checkError instanceof Error
+          ? checkError.message
+          : "Failed to check SharePoint folder.",
+      );
+    } finally {
+      setCheckingSharePoint(false);
+      setSavingRequestList(false);
+    }
+  }
+
   async function handleReopenActionItem(itemId: string) {
     if (!selected) {
+      return;
+    }
+    if (!requireActiveSchedule("update action items")) {
       return;
     }
     const owner =
@@ -1163,7 +2674,148 @@ export function ClientManagementPanel() {
     return raw;
   }
 
+  async function markBd15EmailAsSent(sentAt: string = new Date().toISOString()) {
+    if (!selected) {
+      return;
+    }
+    try {
+      const response = await portalFetch("/api/bd15-email-status", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "mark-sent",
+          clientId: selected.resource.id,
+          monthKey: currentMonthKey(scheduleNow),
+          sentAt,
+        }),
+      });
+      const data = (await response.json()) as {
+        status?: {
+          emailSent?: boolean;
+          emailSentAt?: string;
+          comments?: Array<{
+            id?: string;
+            text?: string;
+            createdAt?: string;
+          }>;
+        };
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to save BD15 email status.");
+      }
+      const status = data.status;
+      setBd15EmailStatus({
+        emailSent: Boolean(status?.emailSent),
+        emailSentAt:
+          typeof status?.emailSentAt === "string" ? status.emailSentAt : sentAt,
+        comments: Array.isArray(status?.comments)
+          ? status.comments
+              .filter(
+                (item) =>
+                  typeof item.id === "string" &&
+                  item.id &&
+                  typeof item.text === "string" &&
+                  item.text.trim(),
+              )
+              .map((item) => ({
+                id: item.id as string,
+                text: (item.text as string).trim(),
+                createdAt:
+                  typeof item.createdAt === "string" ? item.createdAt : "",
+              }))
+          : bd15EmailStatus.comments,
+      });
+    } catch {
+      // Email already went out; status update failure should not block the UI.
+    }
+  }
+
+  async function handleAddBd18Comment() {
+    const text = bd18CommentDraft.trim();
+    if (!text || !selected) {
+      return;
+    }
+    if (!requireActiveSchedule("add a status comment")) {
+      return;
+    }
+    setSavingBd18Comment(true);
+    setError(null);
+    try {
+      const response = await portalFetch("/api/bd15-email-status", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "add-comment",
+          clientId: selected.resource.id,
+          monthKey: currentMonthKey(scheduleNow),
+          text,
+        }),
+      });
+      const data = (await response.json()) as {
+        status?: {
+          emailSent?: boolean;
+          emailSentAt?: string;
+          comments?: Array<{
+            id?: string;
+            text?: string;
+            createdAt?: string;
+          }>;
+        };
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to save comment.");
+      }
+      const status = data.status;
+      setBd15EmailStatus({
+        emailSent: Boolean(status?.emailSent),
+        emailSentAt:
+          typeof status?.emailSentAt === "string" ? status.emailSentAt : "",
+        comments: Array.isArray(status?.comments)
+          ? status.comments
+              .filter(
+                (item) =>
+                  typeof item.id === "string" &&
+                  item.id &&
+                  typeof item.text === "string" &&
+                  item.text.trim(),
+              )
+              .map((item) => ({
+                id: item.id as string,
+                text: (item.text as string).trim(),
+                createdAt:
+                  typeof item.createdAt === "string" ? item.createdAt : "",
+              }))
+          : [],
+      });
+      setBd18CommentDraft("");
+    } catch (commentError) {
+      setError(
+        commentError instanceof Error
+          ? commentError.message
+          : "Failed to save comment.",
+      );
+    } finally {
+      setSavingBd18Comment(false);
+    }
+  }
+
   async function handleSendEmailNow() {
+    if (reminderEmailDisabled) {
+      setEmailSendError(
+        reminderEmailDisabledTitle || "No late items found for email.",
+      );
+      setEmailSendMessage(null);
+      return;
+    }
+    if (!isSelectedScheduleActive) {
+      setEmailSendError(
+        "This business day is Inactive. Fill the star to send email.",
+      );
+      setEmailSendMessage(null);
+      return;
+    }
     if (!emailTo.trim() || !emailSubject.trim()) {
       setEmailSendError("To and Subject are required.");
       setEmailSendMessage(null);
@@ -1185,8 +2837,26 @@ export function ClientManagementPanel() {
         highlights: emailAutofillHighlights,
         portalHref: emailPortalHref,
         signature: emailSignature,
+        attachments: showBd15Email
+          ? bd15Attachments.map(({ name, contentType, contentBytes }) => ({
+              name,
+              contentType,
+              contentBytes,
+            }))
+          : showBd8Content && questionListAttachment
+            ? [questionListAttachment]
+            : undefined,
       });
-      setEmailSendMessage("Email sent.");
+      if (showBd15Email) {
+        await markBd15EmailAsSent();
+      }
+      setEmailSendMessage(
+        showBd15Email && bd15Attachments.length > 0
+          ? `Email sent with ${bd15Attachments.length} attachment${bd15Attachments.length === 1 ? "" : "s"}.`
+          : showBd8Content && questionListAttachment
+            ? `Email sent with attachment (${questionListAttachment.name}).`
+            : "Email sent.",
+      );
     } catch (sendError) {
       setEmailSendError(formatMailSendError(sendError));
       setEmailSendMessage(null);
@@ -1196,13 +2866,35 @@ export function ClientManagementPanel() {
   }
 
   async function handleScheduleEmail() {
+    if (reminderEmailDisabled) {
+      setEmailSendError(
+        reminderEmailDisabledTitle || "No late items found for email.",
+      );
+      setEmailSendMessage(null);
+      return;
+    }
+    if (!isSelectedScheduleActive) {
+      setEmailSendError(
+        "This business day is Inactive. Fill the star to schedule email.",
+      );
+      setEmailSendMessage(null);
+      return;
+    }
     if (!emailTo.trim() || !emailSubject.trim()) {
       setEmailSendError("To and Subject are required.");
       setEmailSendMessage(null);
       return;
     }
+    if (clientTimeZoneError) {
+      setEmailSendError(clientTimeZoneError);
+      setEmailSendMessage(null);
+      return;
+    }
 
-    const sendAt = parseDateTimeLocalValue(emailSendAt);
+    const sendAt = parseDateTimeLocalInTimeZone(
+      effectiveEmailSendAt,
+      USER_TIME_ZONE,
+    );
     if (!sendAt) {
       setEmailSendError("Choose a valid Send at date and time.");
       setEmailSendMessage(null);
@@ -1224,10 +2916,36 @@ export function ClientManagementPanel() {
         highlights: emailAutofillHighlights,
         portalHref: emailPortalHref,
         signature: emailSignature,
+        attachments: showBd15Email
+          ? bd15Attachments.map(({ name, contentType, contentBytes }) => ({
+              name,
+              contentType,
+              contentBytes,
+            }))
+          : showBd8Content && questionListAttachment
+            ? [questionListAttachment]
+            : undefined,
         sendAt,
       });
+      const whenLabel = new Intl.DateTimeFormat("en-GB", {
+        timeZone: USER_TIME_ZONE,
+        weekday: "long",
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      }).format(sendAt);
+      if (showBd15Email) {
+        await markBd15EmailAsSent(sendAt.toISOString());
+      }
       setEmailSendMessage(
-        `Email scheduled for ${formatBusinessDayLabel(sendAt)} at ${sendAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.`,
+        showBd15Email && bd15Attachments.length > 0
+          ? `Email scheduled for ${whenLabel} (Pakistan) with ${bd15Attachments.length} attachment${bd15Attachments.length === 1 ? "" : "s"}.`
+          : showBd8Content && questionListAttachment
+            ? `Email scheduled for ${whenLabel} (Pakistan) with attachment (${questionListAttachment.name}).`
+            : `Email scheduled for ${whenLabel} (Pakistan).`,
       );
     } catch (sendError) {
       setEmailSendError(formatMailSendError(sendError));
@@ -1249,6 +2967,18 @@ export function ClientManagementPanel() {
         </p>
       ) : (
         <div className="client-management-stack">
+          <p
+            className={
+              demoMonthLabel
+                ? "client-management-demo-banner"
+                : "client-management-demo-banner client-management-demo-banner--empty"
+            }
+            role="status"
+          >
+            {demoMonthLabel
+              ? `Demo month: ${demoMonthLabel} — BD dates follow this month (set in Lookup → Repeated Tasks).`
+              : "\u00a0"}
+          </p>
           <div className="client-picker">
             <div
               className="client-picker-list"
@@ -1314,13 +3044,69 @@ export function ClientManagementPanel() {
                                   {left.label}
                                 </th>
                                 <td className="client-info-value">
-                                  {left.value}
+                                  {left.key === "bd1Template" ? (
+                                    selected.profile ? (
+                                      <select
+                                        className="field-input client-info-select"
+                                        value={selectedBd1Template}
+                                        disabled={!canEdit || savingBd1Template}
+                                        onChange={(event) =>
+                                          void handleBd1TemplateChange(
+                                            normalizeBd1Template(
+                                              event.target.value,
+                                            ),
+                                          )
+                                        }
+                                      >
+                                        {BD1_TEMPLATE_OPTIONS.map((option) => (
+                                          <option
+                                            key={option.id}
+                                            value={option.id}
+                                          >
+                                            {option.label}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    ) : (
+                                      "—"
+                                    )
+                                  ) : (
+                                    left.value
+                                  )}
                                 </td>
                                 <th scope="row" className="client-info-field">
                                   {right?.label ?? ""}
                                 </th>
                                 <td className="client-info-value">
-                                  {right?.value ?? ""}
+                                  {right?.key === "bd1Template" ? (
+                                    selected.profile ? (
+                                      <select
+                                        className="field-input client-info-select"
+                                        value={selectedBd1Template}
+                                        disabled={!canEdit || savingBd1Template}
+                                        onChange={(event) =>
+                                          void handleBd1TemplateChange(
+                                            normalizeBd1Template(
+                                              event.target.value,
+                                            ),
+                                          )
+                                        }
+                                      >
+                                        {BD1_TEMPLATE_OPTIONS.map((option) => (
+                                          <option
+                                            key={option.id}
+                                            value={option.id}
+                                          >
+                                            {option.label}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    ) : (
+                                      "—"
+                                    )
+                                  ) : (
+                                    right?.value ?? ""
+                                  )}
                                 </td>
                               </tr>
                             ),
@@ -1333,47 +3119,156 @@ export function ClientManagementPanel() {
 
                 <div className="client-schedule-layout">
                   <aside
-                    className="lookup-fields client-schedule-sidebar"
+                    className="client-schedule-sidebar"
                     aria-label="Client schedule"
                   >
-                    {CLIENT_SCHEDULE_ITEMS.map((item) => {
-                      const businessDate = scheduleDateById.get(item.id);
-                      return (
+                    <div className="schedule-pane-header">
+                      <p className="schedule-pane-title">Active</p>
+                      <p className="schedule-pane-hint">
+                        Only these days send email and run actions.
+                      </p>
+                    </div>
+
+                    <div className="schedule-pane-list">
+                      {activeScheduleItems.length === 0 ? (
+                        <p className="schedule-section-empty">
+                          No active days. Expand Inactive below and click ☆ to
+                          activate.
+                        </p>
+                      ) : (
+                        activeScheduleItems.map((item) => {
+                          const businessDate = scheduleDateById.get(item.id);
+                          const isSelected = selectedSchedule.id === item.id;
+                          return (
+                            <div
+                              key={item.id}
+                              className={
+                                isSelected
+                                  ? "schedule-row schedule-row--on schedule-row--selected"
+                                  : "schedule-row schedule-row--on"
+                              }
+                            >
+                              <button
+                                type="button"
+                                className="schedule-star schedule-star--filled"
+                                aria-label={`Deactivate ${item.label}`}
+                                title="Move to Inactive"
+                                disabled={!canEdit || savingScheduleSettings}
+                                onClick={(event) =>
+                                  void handleToggleScheduleStar(item.id, event)
+                                }
+                              >
+                                ★
+                              </button>
+                              <button
+                                type="button"
+                                className="schedule-day-link"
+                                onClick={() => setSelectedScheduleId(item.id)}
+                              >
+                                <span className="client-schedule-link-label">
+                                  {item.label}
+                                </span>
+                                {businessDate ? (
+                                  <span className="client-schedule-link-date">
+                                    {businessDate}
+                                  </span>
+                                ) : null}
+                              </button>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    <div className="schedule-inactive-block">
+                      {inactiveScheduleItems.length === 0 ? (
+                        <p className="schedule-inactive-toggle-label">
+                          Inactive · none
+                        </p>
+                      ) : (
                         <button
-                          key={item.id}
                           type="button"
-                          className={
-                            selectedSchedule.id === item.id
-                              ? "lookup-field-link active"
-                              : "lookup-field-link"
+                          className="schedule-inactive-toggle"
+                          aria-expanded={inactiveExpanded}
+                          onClick={() =>
+                            setInactiveExpanded((open) => !open)
                           }
-                          onClick={() => setSelectedScheduleId(item.id)}
                         >
-                          <span className="client-schedule-link-text">
-                            <span className="client-schedule-link-label">
-                              {item.label}
-                            </span>
-                            {businessDate ? (
-                              <span className="client-schedule-link-date">
-                                {businessDate}
-                              </span>
-                            ) : null}
+                          <span>
+                            Inactive · {inactiveScheduleItems.length}
+                          </span>
+                          <span aria-hidden="true">
+                            {inactiveExpanded ? "▾" : "▸"}
                           </span>
                         </button>
-                      );
-                    })}
+                      )}
+
+                      {inactiveExpanded && inactiveScheduleItems.length > 0 ? (
+                        <div className="schedule-pane-list schedule-pane-list--inactive">
+                          {inactiveScheduleItems.map((item) => {
+                            const businessDate = scheduleDateById.get(item.id);
+                            const isSelected =
+                              selectedSchedule.id === item.id;
+                            return (
+                              <div
+                                key={item.id}
+                                className={
+                                  isSelected
+                                    ? "schedule-row schedule-row--off schedule-row--selected"
+                                    : "schedule-row schedule-row--off"
+                                }
+                              >
+                                <button
+                                  type="button"
+                                  className="schedule-star"
+                                  aria-label={`Activate ${item.label}`}
+                                  title="Move to Active"
+                                  disabled={
+                                    !canEdit || savingScheduleSettings
+                                  }
+                                  onClick={(event) =>
+                                    void handleToggleScheduleStar(
+                                      item.id,
+                                      event,
+                                    )
+                                  }
+                                >
+                                  ☆
+                                </button>
+                                <button
+                                  type="button"
+                                  className="schedule-day-link"
+                                  onClick={() =>
+                                    setSelectedScheduleId(item.id)
+                                  }
+                                >
+                                  <span className="client-schedule-link-label">
+                                    {item.label}
+                                  </span>
+                                  {businessDate ? (
+                                    <span className="client-schedule-link-date">
+                                      {businessDate}
+                                    </span>
+                                  ) : null}
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                    </div>
                   </aside>
 
                   <div className="client-schedule-panel">
-                    <div className="client-schedule-panel-header">
-                      <h3 className="section-title">
-                        {selectedSchedule.label}
-                        {selectedScheduleDate
-                          ? ` — ${selectedScheduleDate}`
-                          : ""}
-                      </h3>
-                    </div>
-
+                    {!isSelectedScheduleActive ? (
+                      <p className="inline-notice inline-notice--error schedule-inactive-banner">
+                        <span className="inline-notice__text">
+                          This business day is Inactive. Fill the star in the
+                          sidebar to activate it before sending email or updating
+                          actions.
+                        </span>
+                      </p>
+                    ) : null}
                     {(() => {
                       const workflowTabsClassName = showRequestTypeChooser
                         ? "lookup-section-tabs bd1-workflow-tabs request-workflow-tabs"
@@ -1381,13 +3276,41 @@ export function ClientManagementPanel() {
 
                       const requestWorkflow = (
                         <>
-                          {showBd1LikeWorkflow ? (
-                            <p className="bd1-workflow-kicker">
-                              {showBd7Content
-                                ? "Late Action Items shows only items marked Late on BD5 for the selected request type."
-                                : "Use the tabs below for request list, action items, and email."}
-                            </p>
+                          {showLastBdSchedule ? (
+                            <div
+                              className="lookup-section-tabs request-workflow-tabs last-bd-audience-tabs"
+                              role="tablist"
+                              aria-label="Email audience"
+                            >
+                              <button
+                                type="button"
+                                role="tab"
+                                aria-selected={lastBdAudience === "client"}
+                                className={
+                                  lastBdAudience === "client"
+                                    ? "lookup-section-tab active"
+                                    : "lookup-section-tab"
+                                }
+                                onClick={() => setLastBdAudience("client")}
+                              >
+                                Client
+                              </button>
+                              <button
+                                type="button"
+                                role="tab"
+                                aria-selected={lastBdAudience === "team"}
+                                className={
+                                  lastBdAudience === "team"
+                                    ? "lookup-section-tab active"
+                                    : "lookup-section-tab"
+                                }
+                                onClick={() => setLastBdAudience("team")}
+                              >
+                                Team
+                              </button>
+                            </div>
                           ) : null}
+                          {!showBd5Content && !showEndOfMonthEmailOnly ? (
                           <div
                             className={workflowTabsClassName}
                             role="tablist"
@@ -1405,9 +3328,15 @@ export function ClientManagementPanel() {
                           }
                           onClick={() => setWorkflowTab("request")}
                         >
-                          Request List Template
+                          {showBd15Email
+                            ? "Attachments"
+                            : showBd8Content
+                              ? "Question List Template"
+                              : "Request List Template"}
                         </button>
                       ) : null}
+                      {showBd9LikeContent ||
+                      (!showBd1LikeRequestList && !showBd5Content) ? (
                       <button
                         type="button"
                         role="tab"
@@ -1419,19 +3348,36 @@ export function ClientManagementPanel() {
                         }
                         onClick={() => setWorkflowTab("action")}
                       >
-                        {showBd7Content ? "Late Action Items" : "Action Items"}
+                        {showBd9LikeContent
+                          ? "Question List Status"
+                          : showBd7Content
+                            ? "Late Action Items"
+                            : "Action Items"}
                       </button>
+                      ) : null}
                       {showBd1LikeWorkflow ? (
                         <button
                           type="button"
                           role="tab"
                           aria-selected={workflowTab === "email"}
+                          aria-disabled={reminderEmailTabDisabled || undefined}
+                          disabled={reminderEmailTabDisabled}
+                          title={
+                            reminderEmailTabDisabled
+                              ? reminderEmailDisabledTitle
+                              : undefined
+                          }
                           className={
                             workflowTab === "email"
                               ? "lookup-section-tab active"
                               : "lookup-section-tab"
                           }
-                          onClick={() => setWorkflowTab("email")}
+                          onClick={() => {
+                            if (reminderEmailTabDisabled) {
+                              return;
+                            }
+                            setWorkflowTab("email");
+                          }}
                         >
                           Email
                         </button>
@@ -1452,20 +3398,279 @@ export function ClientManagementPanel() {
                         </button>
                       ) : null}
                     </div>
-
+                          ) : null}
+                          {showBd7Content ? (
+                            <p className="bd1-workflow-kicker">
+                              Late Action Items shows only items marked Late on
+                              BD5 for the selected request type.
+                            </p>
+                          ) : null}
                     {showRequestListTab && workflowTab === "request" ? (
                       <div className="request-list-panel">
+                        {showBd15Email ? (
+                          <>
+                            {(() => {
+                              const sentAtLabel = formatActionResolvedAt(
+                                bd15EmailStatus.emailSentAt,
+                              );
+                              return (
+                                <p
+                                  className={
+                                    bd15EmailStatus.emailSent
+                                      ? "bd18-email-status bd18-email-status--sent"
+                                      : "bd18-email-status bd18-email-status--not-sent"
+                                  }
+                                >
+                                  {bd15EmailStatus.emailSent
+                                    ? `Email sent${sentAtLabel ? ` on ${sentAtLabel}` : ""}`
+                                    : "Email not sent"}
+                                </p>
+                              );
+                            })()}
+                            <p className="lookup-hint">
+                              Upload the required PDF files for this month. They
+                              are kept when you switch tabs and cleared
+                              automatically next month.
+                            </p>
+                            <ul className="bd15-required-reports">
+                              {BD15_REQUIRED_REPORTS.map((report) => {
+                                const found = bd15Attachments.some((file) =>
+                                  bd15FileMatchesReport(file.name, report),
+                                );
+                                return (
+                                  <li
+                                    key={report}
+                                    className={
+                                      found
+                                        ? "bd15-required-report bd15-required-report--found"
+                                        : "bd15-required-report bd15-required-report--missing"
+                                    }
+                                  >
+                                    {found ? "✓" : "○"} {report}
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                            {bd15MissingReports.length > 0 ? (
+                              <p className="form-message error">
+                                These files are missing:{" "}
+                                {bd15MissingReports.join(", ")}
+                              </p>
+                            ) : null}
+                            <div className="question-list-upload">
+                              <label className="field field--wide">
+                                <span className="sr-only">
+                                  Books closed report files
+                                </span>
+                                <input
+                                  ref={bd15FileRef}
+                                  className="field-input"
+                                  type="file"
+                                  accept=".xlsx,.xls,.csv,.pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/pdf"
+                                  multiple
+                                  disabled={
+                                    uploadingBd15Files ||
+                                    !isSelectedScheduleActive ||
+                                    bd15EmailAlreadySent
+                                  }
+                                  onChange={(event) =>
+                                    void handleBd15FileUpload(event)
+                                  }
+                                />
+                              </label>
+                              <p className="lookup-hint">
+                                {uploadingBd15Files
+                                  ? "Saving…"
+                                  : "Accepts multiple Excel (.xlsx, .xls, .csv) or PDF files. File names should include the report name."}
+                              </p>
+                            </div>
+                            {bd15Attachments.length === 0 ? (
+                              <p className="lookup-hint">
+                                No attachments yet.
+                              </p>
+                            ) : (
+                              <div className="table-wrap bd5-action-table-wrap">
+                                <table className="projects-table bd5-action-table">
+                                  <thead>
+                                    <tr>
+                                      <th scope="col">List</th>
+                                      <th scope="col">Date Time</th>
+                                      <th scope="col">Action</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {bd15Attachments.map((file) => {
+                                      const uploadedAt = formatActionResolvedAt(
+                                        file.savedAt,
+                                      );
+                                      return (
+                                        <tr
+                                          key={file.id}
+                                          className="bd5-action-row"
+                                        >
+                                          <td className="bd5-action-list-cell">
+                                            {file.name}
+                                          </td>
+                                          <td className="bd5-action-datetime-cell">
+                                            {uploadedAt || "—"}
+                                          </td>
+                                          <td>
+                                            <button
+                                              type="button"
+                                              className="button secondary"
+                                              disabled={
+                                                uploadingBd15Files ||
+                                                !isSelectedScheduleActive ||
+                                                bd15EmailAlreadySent
+                                              }
+                                              onClick={() =>
+                                                void handleRemoveBd15Attachment(
+                                                  file.id,
+                                                )
+                                              }
+                                            >
+                                              Remove
+                                            </button>
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+
+                            {showBd18Content ? (
+                              <div className="bd18-comments">
+                                <h5 className="bd18-comments-title">
+                                  Comments
+                                </h5>
+                                <p className="lookup-hint">
+                                  {bd15EmailStatus.emailSent
+                                    ? "Notes about this BD15 email (saved with date and time)."
+                                    : "Add a note explaining why BD15 email was not sent (saved with date and time)."}
+                                </p>
+                                <div className="request-list-add">
+                                  <input
+                                    className="field-input"
+                                    value={bd18CommentDraft}
+                                    placeholder="Why was this not sent on BD15?"
+                                    disabled={
+                                      savingBd18Comment ||
+                                      !isSelectedScheduleActive
+                                    }
+                                    onChange={(event) =>
+                                      setBd18CommentDraft(event.target.value)
+                                    }
+                                    onKeyDown={(event) => {
+                                      if (event.key === "Enter") {
+                                        event.preventDefault();
+                                        void handleAddBd18Comment();
+                                      }
+                                    }}
+                                  />
+                                  <button
+                                    type="button"
+                                    className="button secondary-solid"
+                                    disabled={
+                                      savingBd18Comment ||
+                                      !isSelectedScheduleActive ||
+                                      !bd18CommentDraft.trim()
+                                    }
+                                    onClick={() => void handleAddBd18Comment()}
+                                  >
+                                    {savingBd18Comment
+                                      ? "Saving…"
+                                      : "Add comment"}
+                                  </button>
+                                </div>
+                                {bd15EmailStatus.comments.length === 0 ? (
+                                  <p className="lookup-hint">
+                                    No comments yet.
+                                  </p>
+                                ) : (
+                                  <div className="table-wrap bd5-action-table-wrap">
+                                    <table className="projects-table bd5-action-table">
+                                      <thead>
+                                        <tr>
+                                          <th scope="col">Comment</th>
+                                          <th scope="col">Date Time</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {bd15EmailStatus.comments.map(
+                                          (comment) => (
+                                            <tr
+                                              key={comment.id}
+                                              className="bd5-action-row"
+                                            >
+                                              <td className="bd5-action-list-cell">
+                                                {comment.text}
+                                              </td>
+                                              <td className="bd5-action-datetime-cell">
+                                                {formatActionResolvedAt(
+                                                  comment.createdAt,
+                                                ) || "—"}
+                                              </td>
+                                            </tr>
+                                          ),
+                                        )}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                )}
+                              </div>
+                            ) : null}
+                          </>
+                        ) : (
+                          <>
                         <p className="lookup-hint">
-                          Add items here. Items created this month appear on
-                          Action Items right away; the full list also rolls
-                          into Action Items when a new month starts.
+                          {showBd8Content
+                            ? "Add questions as text below. Excel is saved as the email attachment for this month (kept when you switch tabs; cleared automatically next month)."
+                            : "Add items here. The Email tab uses these bullets directly for this request type."}
                         </p>
+                        {showBd8Content ? (
+                          <div className="question-list-upload">
+                            <label className="field field--wide">
+                              <span className="sr-only">
+                                Question list Excel file
+                              </span>
+                              <input
+                                ref={questionListFileRef}
+                                className="field-input"
+                                type="file"
+                                accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+                                disabled={
+                                  uploadingQuestionList ||
+                                  savingRequestList ||
+                                  !isSelectedScheduleActive
+                                }
+                                onChange={(event) =>
+                                  void handleQuestionListExcelUpload(event)
+                                }
+                              />
+                            </label>
+                            <p className="lookup-hint">
+                              {uploadingQuestionList
+                                ? "Loading…"
+                                : questionListAttachment
+                                  ? `Email attachment: ${questionListAttachment.name}`
+                                  : "Accepts .xlsx, .xls, or .csv. Saved until replaced or the month changes."}
+                            </p>
+                          </div>
+                        ) : null}
                         <div className="request-list-add">
                           <input
                             className="field-input"
                             value={draftRequestLabel}
-                            placeholder="Add bullet point…"
-                            disabled={savingRequestList}
+                            placeholder={
+                              showBd8Content
+                                ? "Add a question…"
+                                : "Add bullet point…"
+                            }
+                            disabled={
+                              savingRequestList || !isSelectedScheduleActive
+                            }
                             onChange={(event) =>
                               setDraftRequestLabel(event.target.value)
                             }
@@ -1480,7 +3685,9 @@ export function ClientManagementPanel() {
                             type="button"
                             className="button secondary-solid"
                             disabled={
-                              savingRequestList || !draftRequestLabel.trim()
+                              savingRequestList ||
+                              !isSelectedScheduleActive ||
+                              !draftRequestLabel.trim()
                             }
                             onClick={() => void handleAddRequestItem()}
                           >
@@ -1488,13 +3695,15 @@ export function ClientManagementPanel() {
                           </button>
                         </div>
 
-                        {activeList.requestItems.length === 0 ? (
+                        {visibleRequestItems.length === 0 ? (
                           <p className="lookup-hint">
-                            No request bullets yet.
+                            {showBd8Content
+                              ? "No questions loaded yet."
+                              : "No request bullets yet."}
                           </p>
                         ) : (
                           <ul className="request-list-items">
-                            {activeList.requestItems.map((item, index) => {
+                            {visibleRequestItems.map((item, index) => {
                               const isEditing =
                                 editingRequestItemId === item.id;
                               return (
@@ -1580,8 +3789,8 @@ export function ClientManagementPanel() {
                                           title="Move down"
                                           disabled={
                                             index ===
-                                              activeList.requestItems.length -
-                                                1 || savingRequestList
+                                              visibleRequestItems.length - 1 ||
+                                            savingRequestList
                                           }
                                           onClick={() =>
                                             void handleMoveRequestItem(
@@ -1630,20 +3839,63 @@ export function ClientManagementPanel() {
                             })}
                           </ul>
                         )}
+                          </>
+                        )}
                       </div>
                     ) : null}
 
                     {workflowTab === "action" ? (
                       <div className="request-list-panel">
-                        {showBd5Content ? (
+                        {showReviewActionTable ? (
                           <>
-                            <p className="lookup-hint">
-                              BD1 action items for this request type. Mark each
-                              row Completed or Late.
-                            </p>
+                            {showBd5Content ? (
+                              <>
+                                <div className="bd5-action-toolbar">
+                                  <p className="lookup-hint">
+                                    Checks the same SharePoint month folder as
+                                    the BD1 email portal link for files named
+                                    Bank Statement / Credit Card Statement, then
+                                    marks matching action rows Completed or Late.
+                                  </p>
+                                  <button
+                                    type="button"
+                                    className="button secondary-solid"
+                                    disabled={
+                                      !isSelectedScheduleActive ||
+                                      checkingSharePoint ||
+                                      savingRequestList ||
+                                      !canEdit ||
+                                      !selectedPortalLink
+                                    }
+                                    onClick={() =>
+                                      void handleCheckInSharePoint()
+                                    }
+                                  >
+                                    {checkingSharePoint
+                                      ? "Checking SharePoint…"
+                                      : "Check in SharePoint"}
+                                  </button>
+                                </div>
+                                {sharePointCheckMessage ? (
+                                  <p className="lookup-hint bd5-sharepoint-result">
+                                    {sharePointCheckMessage}
+                                  </p>
+                                ) : null}
+                              </>
+                            ) : showBd9Content ? (
+                              <p className="lookup-hint">
+                                BD8 question list items. Mark each row Completed
+                                or Late. Late items automatically appear on
+                                BD10.
+                              </p>
+                            ) : null}
                             {bd5ActionTableItems.length === 0 ? (
                               <p className="lookup-hint">
-                                No action items for this type yet.
+                                {showBd10Content
+                                  ? "No late BD9 questions found."
+                                  : showBd9Content
+                                    ? "No BD8 question action items yet."
+                                    : "No action items for this type yet."}
                               </p>
                             ) : (
                               <div className="table-wrap bd5-action-table-wrap">
@@ -1725,6 +3977,35 @@ export function ClientManagementPanel() {
                                                   Late
                                                 </button>
                                               </div>
+                                            ) : showBd10Content &&
+                                              item.status === "late" ? (
+                                              <div className="bd5-action-row-actions">
+                                                <button
+                                                  type="button"
+                                                  className="button secondary-solid bd5-action-btn bd5-action-btn--completed"
+                                                  disabled={savingRequestList}
+                                                  onClick={() =>
+                                                    void handleCompleteActionItem(
+                                                      item.id,
+                                                      "completed",
+                                                    )
+                                                  }
+                                                >
+                                                  Completed
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  className="button secondary"
+                                                  disabled={savingRequestList}
+                                                  onClick={() =>
+                                                    void handleReopenActionItem(
+                                                      item.id,
+                                                    )
+                                                  }
+                                                >
+                                                  Reopen
+                                                </button>
+                                              </div>
                                             ) : (
                                               <button
                                                 type="button"
@@ -1750,13 +4031,9 @@ export function ClientManagementPanel() {
                           </>
                         ) : showBd7Content ? (
                           <>
-                            <p className="lookup-hint">
-                              Items marked Late on BD5 for this category
-                              (Bank and Credit Card, or Other Statements).
-                            </p>
                             {bd7LateItems.length === 0 ? (
                               <p className="lookup-hint">
-                                No late action items for this category yet.
+                                No late action items for BD5 found.
                               </p>
                             ) : (
                               <div className="table-wrap bd5-action-table-wrap">
@@ -1842,7 +4119,7 @@ export function ClientManagementPanel() {
                     ) : null}
 
                     {!showBd1LikeWorkflow &&
-                    !showBd5Content &&
+                    !showReviewActionTable &&
                     workflowTab === "completed" ? (
                       <div className="request-list-panel">
                         <p className="lookup-hint">
@@ -1891,9 +4168,78 @@ export function ClientManagementPanel() {
                     {showBd1LikeWorkflow && workflowTab === "email" ? (
                       <div className="client-schedule-email client-schedule-email--tab">
                         <h4 className="client-schedule-email-title">Email</h4>
+                        {bd15EmailAlreadySent ? (
+                          <p className="bd18-email-status bd18-email-status--sent">
+                            Email sent on{" "}
+                            {formatActionResolvedAt(
+                              bd15EmailStatus.emailSentAt,
+                            ) || "—"}
+                          </p>
+                        ) : null}
                         <p className="lookup-hint">
-                          Subject and body are filled from Email Template{" "}
-                          {requestTypeId === "other-statements" ? "2" : "1"}.
+                          {showBd15Email ? (
+                            <>
+                              Subject and body are filled from Email Template 11.
+                              All required report files from Attachments are
+                              sent with the email
+                              {bd15Attachments.length > 0
+                                ? ` (${bd15Attachments.length} file${bd15Attachments.length === 1 ? "" : "s"})`
+                                : ""}
+                              {bd15EmailAlreadySent
+                                ? ". Sending is disabled because this email was already sent."
+                                : "."}
+                            </>
+                          ) : showBd10Content ? (
+                            <>
+                              Subject and body are filled from Email Template 7.
+                              Outstanding items are only questions marked Late
+                              on BD9.
+                            </>
+                          ) : showBd9Content ? (
+                            <>
+                              Subject and body are filled from Email Template 8.
+                              [Number] uses open and late BD8 questions from
+                              Question List Status.
+                            </>
+                          ) : showBd8Content ? (
+                            <>
+                              Subject and body are filled from Email Template 3.
+                              [Number] and [Question List] come from questions
+                              you add as text. The Excel file is email
+                              attachment only
+                              {questionListAttachment
+                                ? ` (${questionListAttachment.name})`
+                                : ""}.
+                            </>
+                          ) : showLast3BdContent ? (
+                            <>
+                              Subject and body are filled from Email Template 5.
+                            </>
+                          ) : showLast2BdContent ? (
+                            <>
+                              Subject and body are filled from Email Template 12.
+                            </>
+                          ) : showLast1BdClientContent ? (
+                            <>
+                              Client email for Last 1 BD — draft freely (no
+                              numbered template yet). Switch to Team for
+                              Template 18.
+                            </>
+                          ) : showLastBdTeamContent ? (
+                            <>
+                              Subject and body are filled from Email Template 18
+                              (team end-of-month reminder). To is you; BCC is
+                              everyone in User Management.
+                            </>
+                          ) : (
+                            <>
+                              Subject and body are filled from Email Template{" "}
+                              {requestTypeId === "other-statements" ? "2" : "1"}
+                              {showBd1TypeContent
+                                ? ". The account list comes from the Request List Template."
+                                : "."}
+                            </>
+                          )}
                         </p>
                         <div className="client-schedule-email-fields">
                           <label className="field">
@@ -1903,6 +4249,7 @@ export function ClientManagementPanel() {
                               type="text"
                               inputMode="email"
                               value={emailTo}
+                              disabled={bd15EmailAlreadySent}
                               onChange={(event) =>
                                 setEmailTo(event.target.value)
                               }
@@ -1928,6 +4275,7 @@ export function ClientManagementPanel() {
                               type="text"
                               inputMode="email"
                               value={emailCc}
+                              disabled={bd15EmailAlreadySent}
                               onChange={(event) =>
                                 setEmailCc(event.target.value)
                               }
@@ -1941,6 +4289,7 @@ export function ClientManagementPanel() {
                               type="text"
                               inputMode="email"
                               value={emailBcc}
+                              disabled={bd15EmailAlreadySent}
                               onChange={(event) =>
                                 setEmailBcc(event.target.value)
                               }
@@ -1953,21 +4302,49 @@ export function ClientManagementPanel() {
                               className="field-input"
                               type="date"
                               value={effectiveEmailDeadline}
+                              disabled={bd15EmailAlreadySent}
                               onChange={(event) =>
                                 setEmailDeadline(event.target.value)
                               }
                             />
                           </label>
+                          <div className="field">
+                            <span className="field-label">
+                              Send at (client time zone)
+                            </span>
+                            <div className="field-input field-input--readonly">
+                              {emailSendAtClientLabel || "—"}
+                            </div>
+                            {clientTimeZoneError ? (
+                              <span className="form-message error">
+                                {clientTimeZoneError}
+                              </span>
+                            ) : (
+                              <span className="lookup-hint">
+                                This BD date at 9:00 am in the client’s time
+                                zone
+                              </span>
+                            )}
+                          </div>
                           <label className="field">
-                            <span className="field-label">Send at</span>
+                            <span className="field-label">
+                              Scheduled send (Pakistan)
+                            </span>
                             <input
                               className="field-input"
                               type="datetime-local"
-                              value={emailSendAt}
+                              value={effectiveEmailSendAt}
+                              disabled={
+                                bd15EmailAlreadySent ||
+                                Boolean(clientTimeZoneError)
+                              }
                               onChange={(event) =>
                                 setEmailSendAt(event.target.value)
                               }
                             />
+                            <span className="lookup-hint">
+                              Same moment in Pakistan — matches Outlook drafts
+                            </span>
                           </label>
                           <div className="field field--wide">
                             <span className="field-label">Subject</span>
@@ -2014,6 +4391,8 @@ export function ClientManagementPanel() {
                             type="button"
                             className="button primary"
                             disabled={
+                              reminderEmailDisabled ||
+                              !isSelectedScheduleActive ||
                               sendingEmail ||
                               schedulingEmail ||
                               !emailTo.trim() ||
@@ -2027,11 +4406,14 @@ export function ClientManagementPanel() {
                             type="button"
                             className="button secondary-solid"
                             disabled={
+                              reminderEmailDisabled ||
+                              !isSelectedScheduleActive ||
                               sendingEmail ||
                               schedulingEmail ||
                               !emailTo.trim() ||
                               !emailSubject.trim() ||
-                              !emailSendAt.trim()
+                              !effectiveEmailSendAt.trim() ||
+                              Boolean(clientTimeZoneError)
                             }
                             onClick={() => void handleScheduleEmail()}
                           >
@@ -2051,79 +4433,49 @@ export function ClientManagementPanel() {
                         </>
                       );
 
-                      if (!showRequestTypeChooser) {
+                      if (
+                        !showRequestTypeChooser &&
+                        !showBd8Content &&
+                        !showBd9LikeContent &&
+                        !showBd15Content &&
+                        !showBd18Content
+                      ) {
                         return requestWorkflow;
                       }
 
+                      const requestBodyTitle = showBd15Email
+                        ? "Books Closed."
+                        : showBd10Content
+                          ? "SECOND REMINDER: Uncategorized Transactions: Questions for the Client"
+                          : showBd9Content
+                            ? "FIRST REMINDER: Uncategorized Transactions: Questions for the Client"
+                            : showBd8Content
+                              ? "Uncategorized Transactions: Questions for the Client"
+                              : activeRequestType.label;
+
                       return (
                         <div className="bd1-request-type-block">
-                          <p className="bd1-request-type-kicker">
-                            Step 1 — Choose request type
-                          </p>
-                          <div
-                            className="bd1-request-choices"
-                            role="tablist"
-                            aria-label={`${selectedSchedule.label} request type`}
-                          >
-                            {BD1_SUB_MENUS.map((item) => {
-                              const isActive = requestTypeId === item.id;
-                              return (
-                                <button
-                                  key={item.id}
-                                  type="button"
-                                  role="tab"
-                                  aria-selected={isActive}
-                                  className={
-                                    isActive
-                                      ? "bd1-request-choice bd1-request-choice--active"
-                                      : "bd1-request-choice"
-                                  }
-                                  onClick={() => setRequestTypeId(item.id)}
-                                >
-                                  <span className="bd1-request-choice-title">
-                                    {item.label}
-                                  </span>
-                                  <span
-                                    className={
-                                      isActive
-                                        ? "bd1-request-choice-status"
-                                        : "bd1-request-choice-status bd1-request-choice-status--muted"
-                                    }
-                                  >
-                                    {isActive ? "Selected" : "Select"}
-                                  </span>
-                                </button>
-                              );
-                            })}
-                          </div>
-
                           <div
                             className="bd1-request-body"
-                            role="tabpanel"
+                            role="region"
                             aria-labelledby="bd1-request-body-title"
                           >
                             <div className="bd1-request-body-header">
                               <div className="bd1-request-body-header-main">
-                                <span className="bd1-request-body-eyebrow">
-                                  Step 2 — Content for this type
-                                </span>
                                 <h4
                                   id="bd1-request-body-title"
                                   className="bd1-request-body-title"
                                 >
-                                  {activeRequestType.label}
+                                  {requestBodyTitle}
                                 </h4>
-                                <p className="bd1-request-body-hint">
-                                  Everything below applies to this request
-                                  type only.
-                                </p>
+                                {showBd1TypeContent ? (
+                                  <p className="bd1-request-body-hint">
+                                    Set BD1 Template under Client Info. Template
+                                    1 uses Bank and Credit Card; Template 2 uses
+                                    Bank, Credit Card And Other Statements.
+                                  </p>
+                                ) : null}
                               </div>
-                              <span
-                                className="bd1-request-body-selected-pill"
-                                aria-hidden="true"
-                              >
-                                Active
-                              </span>
                             </div>
                             <div className="bd1-request-body-content">
                               <div className="bd1-workflow-section">
