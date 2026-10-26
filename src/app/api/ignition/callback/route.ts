@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { getIgnitionPublicBaseUrl } from "@/lib/ignition/config";
 import { exchangeAuthorizationCode } from "@/lib/ignition/oauth";
 import {
   getOAuthPkceCookieName,
@@ -7,8 +8,21 @@ import {
   writeIgnitionTokens,
 } from "@/lib/ignition/tokens";
 
+function portalHomeBase(request: Request): string {
+  // Prefer public portal URL — request.url is often https://0.0.0.0:3000 in Docker.
+  const publicBase = getIgnitionPublicBaseUrl().replace(/\/+$/, "");
+  if (publicBase) {
+    return publicBase;
+  }
+  const fromRequest = new URL(request.url);
+  if (/0\.0\.0\.0/i.test(fromRequest.hostname)) {
+    return "https://clientportal.fireflyaccountancy.com";
+  }
+  return fromRequest.origin;
+}
+
 function portalRedirect(request: Request, query: Record<string, string>) {
-  const url = new URL("/", request.url);
+  const url = new URL("/", portalHomeBase(request));
   for (const [key, value] of Object.entries(query)) {
     url.searchParams.set(key, value);
   }

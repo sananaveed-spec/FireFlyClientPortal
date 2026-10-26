@@ -46,3 +46,23 @@ export function assertIgnitionConfigured(config: IgnitionConfig): void {
     throw new Error("IGNITION_REDIRECT_URI is not configured.");
   }
 }
+
+/** Public browser origin for redirects / webhooks (not Docker 0.0.0.0). */
+export function getIgnitionPublicBaseUrl(): string {
+  const fromEnv =
+    process.env.IGNITION_PUBLIC_BASE_URL?.trim() ||
+    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
+    "";
+  if (fromEnv) {
+    return fromEnv.replace(/\/+$/, "");
+  }
+  try {
+    const redirectUri = getIgnitionConfig().redirectUri;
+    if (redirectUri && !/localhost|127\.0\.0\.1|0\.0\.0\.0/i.test(redirectUri)) {
+      return new URL(redirectUri).origin;
+    }
+  } catch {
+    // fall through
+  }
+  return "https://clientportal.fireflyaccountancy.com";
+}

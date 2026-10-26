@@ -10,7 +10,11 @@ import {
   readClientProfiles,
   writeClientProfiles,
 } from "@/lib/data-store";
-import { getIgnitionConfig } from "@/lib/ignition/config";
+import {
+  getIgnitionConfig,
+  getIgnitionPublicBaseUrl,
+} from "@/lib/ignition/config";
+export { getIgnitionPublicBaseUrl } from "@/lib/ignition/config";
 import {
   applyActiveProposalsToProfiles,
   createProfilesForAcceptedIgnitionClients,
@@ -62,17 +66,6 @@ function isMissingFile(error: unknown) {
     "code" in error &&
     (error as { code?: string }).code === "ENOENT"
   );
-}
-
-export function getIgnitionPublicBaseUrl(): string {
-  const fromEnv =
-    process.env.IGNITION_PUBLIC_BASE_URL?.trim() ||
-    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
-    "";
-  if (fromEnv) {
-    return fromEnv.replace(/\/+$/, "");
-  }
-  return "https://clientportal.fireflyaccountancy.com";
 }
 
 export function getIgnitionWebhookReceiveUrl(): string {
