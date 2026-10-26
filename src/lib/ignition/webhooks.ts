@@ -16,9 +16,11 @@ import {
 } from "@/lib/ignition/config";
 export { getIgnitionPublicBaseUrl } from "@/lib/ignition/config";
 import {
-  applyActiveProposalsToProfiles,
+  applyActiveProposalToProfile,
   createProfilesForAcceptedIgnitionClients,
+  matchIgnitionClientToProfile,
   normalizeIgnitionProposal,
+  pickActiveProposalByClient,
   type IgnitionProposalRecord,
 } from "@/lib/ignition/proposals";
 import { getValidAccessToken } from "@/lib/ignition/tokens";
@@ -501,11 +503,15 @@ export async function processIgnitionWebhookEvent(event: {
     [clientMatch],
     [proposal],
   );
-  const nextProfiles = applyActiveProposalsToProfiles(
-    ensured.profiles,
-    [clientMatch],
-    [proposal],
-  );
+  // Only update this Ignition client — do not clear other profiles' proposal links.
+  const activeByClient = pickActiveProposalByClient([proposal]);
+  const nextProfiles = ensured.profiles.map((profile) => {
+    const matched = matchIgnitionClientToProfile(profile, [clientMatch]);
+    if (!matched || matched.id !== clientMatch.id) {
+      return profile;
+    }
+    return applyActiveProposalToProfile(profile, [clientMatch], activeByClient);
+  });
   await writeClientProfiles(nextProfiles);
 
   if (ensured.created.length > 0) {
