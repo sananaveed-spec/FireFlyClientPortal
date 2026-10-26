@@ -9,6 +9,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { useAccess } from "@/auth/accessContext";
 import {
   IgnitionProposalViewer,
