@@ -18,7 +18,9 @@ export type EmailTemplateId =
   | "template-15"
   | "template-16"
   | "template-17"
-  | "template-18";
+  | "template-18"
+  | "template-19"
+  | "template-20";
 
 export type EmailTemplate = {
   id: string;
@@ -348,7 +350,7 @@ Thank you.`,
     id: "template-17",
     title: "Pakistan Holiday Notice (Clients)",
     whenSent:
-      "15 calendar days before each Pakistan holiday series (weekends count), then shifted to the previous weekday if that date is Sat/Sun (9:00 AM in each client's time zone). Multi-day holidays share one email. Sent to all Client Profile emails from ayesha@fireflyaccountancy.com or sana@epsfresno.com.",
+      "7 business days before each Pakistan holiday series (Sat/Sun skipped; 9:00 AM in each client's time zone). Multi-day holidays share one email. Sent to all Client Profile emails from ayesha@fireflyaccountancy.com or sana@epsfresno.com.",
     subject: "Notice: Upcoming Pakistan holiday — [Holiday Name]",
     body: `Hi,
 
@@ -364,7 +366,7 @@ Thank you.`,
     id: "template-18",
     title: "End-of-Month Team Reminder",
     whenSent:
-      "Last 3 / Last 2 / Last 1 BD in Client Management → Team button. One template for all three sidebar days.",
+      "Last 3 / Last 2 / Last 1 BD in Client Management (team reminder to portal users). One template for all three sidebar days.",
     subject: "Team reminder: [Last BD Label] — complete pending work",
     body: `Hi team,
 
@@ -376,6 +378,45 @@ Please complete all pending Client Management work before month-end:
 • Reviews, packages, and status checks still in progress
 
 Finish what you can today so nothing carries into next month unnecessarily.
+
+Thank you.`,
+  },
+  {
+    id: "template-19",
+    title: "Ignition Proposal Ending Soon (Team)",
+    whenSent:
+      "Two calendar months before the proposal expiry date at 9:00 PM Pakistan time (weekends and holidays count; weekend/holiday → next working day). If the expiry year is after the current year (e.g. 2027), schedule for the next working day at 9:00 PM Pakistan time. Whole team in User Management from ayesha@fireflyaccountancy.com or sana@epsfresno.com.",
+    subject:
+      "Reminder: [Client Name] proposal [Proposal Reference] expires on [Expiry Date]",
+    body: `Hi team,
+
+This proposal is going to expire on [Expiry Date].
+
+• Client: [Client Name]
+• Proposal: [Proposal Name]
+• Reference: [Proposal Reference]
+• Expiry date: [Expiry Date]
+
+Please review and follow up with the client if needed.
+
+Thank you.`,
+  },
+  {
+    id: "template-20",
+    title: "Ignition Proposal Ending Soon (Client)",
+    whenSent:
+      "One calendar month before the proposal expiry date at 9:00 PM Pakistan time (weekends and holidays count; weekend/holiday → next working day). BCC to that client's profile emails only, from ayesha@fireflyaccountancy.com or sana@epsfresno.com. Status/logic only until live send is enabled.",
+    subject:
+      "[Client Name]: Your proposal [Proposal Reference] expires on [Expiry Date]",
+    body: `Hi,
+
+This proposal is going to expire on [Expiry Date].
+
+• Proposal: [Proposal Name]
+• Reference: [Proposal Reference]
+• Expiry date: [Expiry Date]
+
+Please reply if you would like to renew or discuss next steps.
 
 Thank you.`,
   },

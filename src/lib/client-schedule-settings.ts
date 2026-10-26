@@ -33,7 +33,7 @@ export function normalizeClientScheduleSettings(
               if (normalized === "questions-plus-3-bd") {
                 return "bd9";
               }
-              // Merged Last N BD (Team) into Last N BD + Client/Team toggle
+              // Legacy Last N BD (Team) ids → Last N BD
               const teamMatch = /^last-(\d+)-bd-team$/i.exec(normalized);
               if (teamMatch) {
                 return `last-${teamMatch[1]}-bd`;

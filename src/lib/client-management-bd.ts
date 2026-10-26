@@ -63,19 +63,19 @@ export const CLIENT_MANAGEMENT_BD_SLOTS: ClientManagementBdSlot[] = [
   {
     id: "last-3-bd",
     label: "Last 3 BD",
-    defaultTemplate: "Client: Template 5 · Team: Template 18",
+    defaultTemplate: "Template 18 (Team)",
     deadlineRule: "—",
   },
   {
     id: "last-2-bd",
     label: "Last 2 BD",
-    defaultTemplate: "Client: Template 12 · Team: Template 18",
+    defaultTemplate: "Template 18 (Team)",
     deadlineRule: "—",
   },
   {
     id: "last-1-bd",
     label: "Last 1 BD",
-    defaultTemplate: "Client: End-of-month follow-up · Team: Template 18",
+    defaultTemplate: "Template 18 (Team)",
     deadlineRule: "—",
   },
 ];

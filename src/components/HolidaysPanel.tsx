@@ -694,7 +694,7 @@ export function HolidaysPanel() {
                     <h3 className="section-title">Holidays</h3>
                     <p className="lookup-hint">
                       {showEmailStatusColumn
-                        ? `Team (Template 16): last weekday before · 9:00 AM Pakistan. Clients (Template 17): 15 calendar days before (weekday-adjusted) · 9:00 AM client time zone. Upcoming schedule is visible to all portal users. Send/schedule: ${pakistanHolidayEmailSendersLabel()}.`
+                        ? `Team (Template 16): last weekday before · 9:00 AM Pakistan. Clients (Template 17): 7 business days before · 9:00 AM client time zone. Upcoming schedule is visible to all portal users. Send/schedule: ${pakistanHolidayEmailSendersLabel()}.`
                         : showRegionColumn
                           ? `Federal holidays use ${regionLabel} = All. Choose a specific ${regionLabel.toLowerCase()} for local holidays.`
                           : `Add company holidays with a name and date for ${activeCountry.name}.`}
@@ -732,7 +732,7 @@ export function HolidaysPanel() {
                     </h4>
                     <p className="lookup-hint holiday-email-preview__hint">
                       Visible to all portal users. Team: last weekday before ·
-                      Clients: 15 calendar days before (weekday-adjusted).
+                      Clients: 7 business days before.
                       Status shows Scheduled after{" "}
                       {pakistanHolidayEmailSendersLabel()} schedules the send.
                     </p>

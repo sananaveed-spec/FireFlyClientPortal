@@ -1,8 +1,38 @@
-1 - Profit & Loss Account (Mandatory) excel/pdf .... profit loss
-2 - Balance Sheet (Mandatory) excel/pdf ...... balance sheet
-Excel/CSV is 99.9%. Rarely use PDF
-Government holidays to be sent to the whole team and client atleast 15 days before the holiday
+- 7 days client .... Done
+- Client 3DB remove, only team members reminder. .... Done
+- Client K proposal -> Proposal - Active, Proposal attach to client.... Done 
+(View Only? View + Download?)
+- Ending soon -  2 months prior staff, 1 month prior client
+- Client Invoices handle krni hy....last kb pay kia, next kb dy ga.... Done
 
-Delete BD20
 
--1Business Day -3, -2, -1(Notification to be sent to team members via email to complete the bank and credit cards categorized process and prepare client month end tasks) .... single user owner.... overall team ko ye reminder jaye ga.... 
+
+
+
+Schedule? team member name?
+Server code sharepoint logic...
+
+
+
+crestview -CA
+EPs - USA
+
+
+ending soon....
+
+1. renew - 2 months prior staff, 1 month prior client
+
+
+REnew converted accepted .... new wala... purany wala completed. Revise terms and coditions accepeted. 
+
+
+2. Proposal accept, new client added.... AUTO add to client, team ko notification show ho ga bs. 
+
+
+3. ..
+
+paypal ko attach kesy krna system sy.... 
+
+
+
+

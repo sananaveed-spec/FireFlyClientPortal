@@ -126,12 +126,31 @@ export async function getValidAccessToken(): Promise<{
 
   if (isTokenExpired(tokens)) {
     if (!tokens.refreshToken) {
+      await clearIgnitionTokens();
       throw new Error(
-        "Ignition access token expired and no refresh token is available. Reconnect Ignition.",
+        "Ignition access token expired and no refresh token is available. Disconnect and Connect again.",
       );
     }
-    tokens = await refreshAccessToken(tokens.refreshToken, tokens);
-    await writeIgnitionTokens(tokens);
+    try {
+      tokens = await refreshAccessToken(tokens.refreshToken, tokens);
+      await writeIgnitionTokens(tokens);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Ignition token refresh failed.";
+      const lower = message.toLowerCase();
+      if (
+        lower.includes("invalid_grant") ||
+        lower.includes("invalid") ||
+        lower.includes("revoked") ||
+        lower.includes("expired")
+      ) {
+        await clearIgnitionTokens();
+        throw new Error(
+          "Ignition login expired. Disconnect and Connect again, then Sync.",
+        );
+      }
+      throw error;
+    }
   }
 
   return { accessToken: tokens.accessToken, tokens };

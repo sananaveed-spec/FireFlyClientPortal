@@ -58,7 +58,7 @@
       "bookkeepingServices": [
         "Monthly Bookkeeping"
       ],
-      "starred": true
+      "starred": false
     },
     {
       "id": "template-6",
@@ -142,7 +142,7 @@
       "bookkeepingServices": [
         "Monthly Bookkeeping"
       ],
-      "starred": true
+      "starred": false
     },
     {
       "id": "template-13",
@@ -194,7 +194,7 @@
       "id": "template-17",
       "label": "Template 11 (Client)",
       "title": "Pakistan Holiday Notice (Clients)",
-      "whenSent": "15 calendar days before each Pakistan holiday series (weekends count), then shifted to the previous weekday if that date is Sat/Sun (9:00 AM in each client's time zone). Multi-day holidays share one email. Sent to all Client Profile emails from ayesha@fireflyaccountancy.com or sana@epsfresno.com.",
+      "whenSent": "7 business days before each Pakistan holiday series (Sat/Sun skipped; 9:00 AM in each client's time zone). Multi-day holidays share one email. Sent to all Client Profile emails from ayesha@fireflyaccountancy.com or sana@epsfresno.com.",
       "subject": "Notice: Upcoming Pakistan holiday — [Holiday Name]",
       "body": "Hi,\n\nThis is a notice that our Pakistan office will be closed for an upcoming holiday:\n\n• [Holiday Name] — [Holiday Date]\n\nPlease plan any document requests or replies accordingly. We will respond as soon as we return.\n\nThank you.",
       "bookkeepingServices": [],
@@ -204,7 +204,7 @@
       "id": "template-18",
       "label": "Template 9 (Team Reminder)",
       "title": "End-of-Month Team Reminder",
-      "whenSent": "Last 3 / Last 2 / Last 1 BD of month (Team) in Client Management. One template for all three sidebar days.",
+      "whenSent": "Last 3 / Last 2 / Last 1 BD in Client Management (team reminder to portal users). One template for all three sidebar days.",
       "subject": "Team reminder: [Last BD Label] — complete pending work",
       "body": "Hi team,\n\nThis is a reminder that we are in the [Last BD Label].\n\nPlease complete all pending Client Management work before month-end:\n• Outstanding document requests and late items\n• Open questions and follow-ups\n• Reviews, packages, and status checks still in progress\n\nFinish what you can today so nothing carries into next month unnecessarily.",
       "bookkeepingServices": [],

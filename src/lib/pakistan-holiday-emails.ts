@@ -10,7 +10,7 @@ import {
 
 export type PakistanHolidayEmailStatus = "scheduled" | "sent";
 
-/** Team notice (day before) vs client notice (15 calendar days before). */
+/** Team notice (day before) vs client notice (7 business days before). */
 export type PakistanHolidayEmailAudience = "team" | "client";
 
 export type PakistanHolidayEmailEntry = {
@@ -70,8 +70,8 @@ export type PakistanHolidayEmailStatusLabel = "Scheduled" | "Sent" | "—";
 export const PAKISTAN_HOLIDAY_EMAIL_TEMPLATE_ID = "template-16";
 export const PAKISTAN_HOLIDAY_CLIENT_EMAIL_TEMPLATE_ID = "template-17";
 
-/** Calendar days before the holiday for client notices (weekends count). */
-export const PAKISTAN_HOLIDAY_CLIENT_EMAIL_LEAD_DAYS = 15;
+/** Business days before the holiday for client notices (Sat/Sun skipped). */
+export const PAKISTAN_HOLIDAY_CLIENT_EMAIL_LEAD_BUSINESS_DAYS = 7;
 
 /** Preferred From/To mailbox when scheduling Pakistan holiday emails. */
 export const PAKISTAN_HOLIDAY_EMAIL_SENDER =
@@ -597,20 +597,28 @@ export function pakistanHolidayEmailSendDate(holidayDate: string): string | null
 }
 
 /**
- * Client send calendar date: 15 calendar days before the holiday (weekends
- * count), then rolled back to Friday if that date is a weekend.
+ * Client send calendar date: 7 business days before the holiday (Sat/Sun
+ * skipped). The result is always a weekday.
  */
 export function pakistanHolidayClientEmailSendDate(
   holidayDate: string,
 ): string | null {
-  const target = shiftCalendarDate(
-    holidayDate.trim(),
-    -PAKISTAN_HOLIDAY_CLIENT_EMAIL_LEAD_DAYS,
-  );
-  if (!target) {
+  let current = holidayDate.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(current)) {
     return null;
   }
-  return adjustPakistanHolidayEmailSendDateToWeekday(target);
+  let remaining = PAKISTAN_HOLIDAY_CLIENT_EMAIL_LEAD_BUSINESS_DAYS;
+  while (remaining > 0) {
+    const previous = shiftCalendarDate(current, -1);
+    if (!previous) {
+      return null;
+    }
+    current = previous;
+    if (!isWeekendHolidayDate(current)) {
+      remaining -= 1;
+    }
+  }
+  return current;
 }
 
 function sendAtFromYmd(sendDate: string, timeZone: string): Date | null {
@@ -638,8 +646,7 @@ export function pakistanHolidayEmailSendAt(holidayDate: string): Date | null {
 }
 
 /**
- * 9:00 AM in the client's time zone, ~15 calendar days before the holiday
- * (weekday-adjusted send date).
+ * 9:00 AM in the client's time zone, 7 business days before the holiday.
  */
 export function pakistanHolidayClientEmailSendAt(
   holidayDate: string,
@@ -882,7 +889,7 @@ function formatPreviewSendLabel(
 }
 
 /**
- * Upcoming holiday email preview (team day-before + client 15-day).
+ * Upcoming holiday email preview (team day-before + client 7 business days).
  * Status comes from the store once Graph has accepted the schedule.
  */
 export function buildPakistanHolidayEmailPreview(

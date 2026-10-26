@@ -112,6 +112,10 @@ function pakistanHolidayEmailsPath() {
   return path.join(getDataDir(), "pakistan-holiday-emails.json");
 }
 
+function ignitionEndingSoonEmailsPath() {
+  return path.join(getDataDir(), "ignition-ending-soon-emails.json");
+}
+
 async function writeJsonFile(filePath: string, value: unknown) {
   const serialized = JSON.stringify(value, null, 2);
   if (typeof serialized !== "string" || !serialized.trim()) {
@@ -622,4 +626,26 @@ export async function writePakistanHolidayEmailsFile(
     throw new Error("Invalid Pakistan holiday emails payload.");
   }
   await writeJsonFile(pakistanHolidayEmailsPath(), value);
+}
+
+export async function readIgnitionEndingSoonEmailsFile(): Promise<unknown> {
+  await ensureDataDir();
+  const filePath = ignitionEndingSoonEmailsPath();
+  const parsed = await readJsonFileOrNull(filePath);
+  if (parsed == null) {
+    const empty = { dryRun: false, entries: [] };
+    await writeJsonFile(filePath, empty);
+    return empty;
+  }
+  return parsed;
+}
+
+export async function writeIgnitionEndingSoonEmailsFile(
+  value: unknown,
+): Promise<void> {
+  await ensureDataDir();
+  if (!value || typeof value !== "object") {
+    throw new Error("Invalid Ignition ending-soon emails payload.");
+  }
+  await writeJsonFile(ignitionEndingSoonEmailsPath(), value);
 }

@@ -9,8 +9,11 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import { createPortal } from "react-dom";
 import { useAccess } from "@/auth/accessContext";
+import {
+  IgnitionProposalViewer,
+  type IgnitionProposalViewerTarget,
+} from "@/components/IgnitionProposalViewer";
 import {
   BD1_TEMPLATE_OPTIONS,
   createEmptyClientProfileForm,
@@ -152,6 +155,7 @@ const TABLE_COLUMNS: { key: keyof ClientProfileEntry; label: string }[] = [
   { key: "fiscalYearEnd", label: "Year End" },
   { key: "website", label: "Website" },
   { key: "portalLink", label: "Portal Link" },
+  { key: "activeProposalReference", label: "Active Proposal" },
   { key: "canadianBusinessNumber", label: "Canadian Business Number" },
   { key: "gstHst", label: "GST/HST" },
   { key: "payrollProvider", label: "Payroll Provider" },
@@ -330,10 +334,40 @@ function toWebsiteHref(value: string): string {
   return `https://${trimmed}`;
 }
 
+type ProposalCellActions = {
+  onView: (profile: ClientProfileEntry) => void;
+};
+
 function renderProfileCell(
   key: keyof ClientProfileEntry,
   value: unknown,
+  profile?: ClientProfileEntry,
+  proposalActions?: ProposalCellActions,
 ): ReactNode {
+  if (key === "activeProposalReference") {
+    const reference =
+      profile?.activeProposalReference?.trim() ||
+      String(value ?? "").trim();
+    const slug = profile?.activeProposalSlug?.trim() || "";
+    const title =
+      profile?.activeProposalName?.trim() || reference || "Active proposal";
+    if (!reference && !slug) {
+      return "—";
+    }
+    if (slug && profile && proposalActions) {
+      return (
+        <button
+          type="button"
+          className="table-link-button"
+          title={title}
+          onClick={() => proposalActions.onView(profile)}
+        >
+          {reference || "Proposal"}
+        </button>
+      );
+    }
+    return reference || "—";
+  }
   const text = formatProfileCell(key, value);
   if (!text) {
     return "—";
@@ -434,6 +468,8 @@ export function ClientProfilePanel() {
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(
     null,
   );
+  const [proposalViewer, setProposalViewer] =
+    useState<IgnitionProposalViewerTarget | null>(null);
   const [importMatchMode, setImportMatchMode] =
     useState<ImportMatchMode>("replace");
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -573,10 +609,38 @@ export function ClientProfilePanel() {
       pointOfContact: profile.pointOfContact,
       pocEmail: profile.pocEmail,
       pocPhone: profile.pocPhone,
+      ignitionClientSlug: profile.ignitionClientSlug || "",
+      activeProposalSlug: profile.activeProposalSlug || "",
+      activeProposalName: profile.activeProposalName || "",
+      activeProposalReference: profile.activeProposalReference || "",
+      activeProposalViewUrl: profile.activeProposalViewUrl || "",
+      activeProposalPdfUrl: profile.activeProposalPdfUrl || "",
     });
     syncYearEndParts(profile.fiscalYearEnd);
     setError(null);
     setFormOpen(true);
+  }
+
+  function openActiveProposal(
+    profile: ClientProfileEntry,
+    mode: "view" | "download",
+  ) {
+    const slug = profile.activeProposalSlug.trim();
+    if (!slug) {
+      return;
+    }
+    setProposalViewer({
+      slug,
+      reference:
+        profile.activeProposalReference.trim() ||
+        profile.activeProposalName.trim() ||
+        slug,
+      clientLabel:
+        profile.legalName.trim() ||
+        profile.operatingName.trim() ||
+        "Client",
+      mode,
+    });
   }
 
   function closeAddForm() {
@@ -1054,36 +1118,46 @@ export function ClientProfilePanel() {
   }, [page, totalPages]);
 
   useEffect(() => {
+    if (!ready) {
+      return;
+    }
     const wrap = tableWrapRef.current;
     if (!wrap) {
       return;
     }
 
+    let frame = 0;
+    let lastAppliedSize = 0;
+
     function measurePageSize() {
-      const container = tableWrapRef.current;
-      if (!container) {
-        return;
-      }
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const container = tableWrapRef.current;
+        if (!container) {
+          return;
+        }
 
-      const available = container.clientHeight;
-      if (available <= 0) {
-        return;
-      }
+        const available = container.clientHeight;
+        if (available <= 0) {
+          return;
+        }
 
-      const header =
-        container.querySelector("thead")?.getBoundingClientRect().height ??
-        FALLBACK_HEADER_HEIGHT;
-      const sampleRow = container.querySelector("tbody tr");
-      const rowHeight = sampleRow
-        ? sampleRow.getBoundingClientRect().height
-        : FALLBACK_ROW_HEIGHT;
-      const usable = Math.max(0, available - header);
-      const nextSize = Math.max(
-        MIN_PAGE_SIZE,
-        Math.floor(usable / Math.max(rowHeight, 1)),
-      );
-
-      setPageSize((current) => (current === nextSize ? current : nextSize));
+        // Use fixed row height so measuring content cannot feed back into
+        // pageSize → row count → ResizeObserver → measure (screen jerk).
+        const header =
+          container.querySelector("thead")?.getBoundingClientRect().height ??
+          FALLBACK_HEADER_HEIGHT;
+        const usable = Math.max(0, available - header);
+        const nextSize = Math.max(
+          MIN_PAGE_SIZE,
+          Math.floor(usable / FALLBACK_ROW_HEIGHT),
+        );
+        if (nextSize === lastAppliedSize) {
+          return;
+        }
+        lastAppliedSize = nextSize;
+        setPageSize((current) => (current === nextSize ? current : nextSize));
+      });
     }
 
     measurePageSize();
@@ -1094,10 +1168,11 @@ export function ClientProfilePanel() {
     window.addEventListener("resize", measurePageSize);
 
     return () => {
+      cancelAnimationFrame(frame);
       observer.disconnect();
       window.removeEventListener("resize", measurePageSize);
     };
-  }, [ready, visibleProfiles.length, pageProfiles.length]);
+  }, [ready]);
 
   function handleFilterChange(filterId: string, values: string[]) {
     setActiveFilters((current) => ({ ...current, [filterId]: values }));
@@ -1248,7 +1323,12 @@ export function ClientProfilePanel() {
         [];
       headers.forEach((header, index) => {
         const key = labelToKey.get(header);
-        if (key) {
+        // Ignition proposal links are filled by Sync — skip on CSV import.
+        if (
+          key &&
+          key !== "ignitionClientSlug" &&
+          !String(key).startsWith("activeProposal")
+        ) {
           columnIndexes.push({ key, index });
         }
       });
@@ -1478,6 +1558,13 @@ export function ClientProfilePanel() {
       financialsContact: form.financialsContact.trim(),
       financialsEmail: form.financialsEmail.trim(),
       financialsPhone: form.financialsPhone.trim(),
+      // Preserve Ignition proposal links from sync (not edited in this form).
+      ignitionClientSlug: existing?.ignitionClientSlug ?? "",
+      activeProposalSlug: existing?.activeProposalSlug ?? "",
+      activeProposalName: existing?.activeProposalName ?? "",
+      activeProposalReference: existing?.activeProposalReference ?? "",
+      activeProposalViewUrl: existing?.activeProposalViewUrl ?? "",
+      activeProposalPdfUrl: existing?.activeProposalPdfUrl ?? "",
       createdAt: existing?.createdAt ?? new Date().toISOString(),
     };
 
@@ -2761,7 +2848,16 @@ export function ClientProfilePanel() {
                             : undefined
                       }
                     >
-                      {renderProfileCell(column.key, profile[column.key])}
+                      {renderProfileCell(
+                        column.key,
+                        profile[column.key],
+                        profile,
+                        {
+                          onView: (row) => {
+                            void openActiveProposal(row, "view");
+                          },
+                        },
+                      )}
                     </td>
                   ))}
                   <td className="col-actions">
@@ -2801,6 +2897,11 @@ export function ClientProfilePanel() {
           </button>
         </div>
       ) : null}
+
+      <IgnitionProposalViewer
+        target={proposalViewer}
+        onClose={() => setProposalViewer(null)}
+      />
     </section>
   );
 }

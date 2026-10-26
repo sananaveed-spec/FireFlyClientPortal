@@ -405,7 +405,7 @@ const CLIENT_INFO_FIELDS: { key: string; label: string }[] = [
   { key: "portalLink", label: "Portal Link" },
 ];
 
-/** Sidebar order: BD1→…→BD18, then end-of-month by date (Last 3 → Last 2 → Last 1), Client above Team. */
+/** Sidebar order: BD1→…→BD18, then end-of-month by date (Last 3 → Last 2 → Last 1). */
 const CLIENT_SCHEDULE_ITEMS = [
   { id: "bd1", label: "BD1" },
   { id: "bd5", label: "BD5" },
@@ -423,8 +423,6 @@ const CLIENT_SCHEDULE_ITEMS = [
 const CLIENT_SCHEDULE_ORDER = new Map<string, number>(
   CLIENT_SCHEDULE_ITEMS.map((item, index) => [item.id, index]),
 );
-
-type LastBdAudience = "client" | "team";
 
 function isLastBdSchedule(scheduleId: string): boolean {
   return /^last-\d+-bd$/i.test(scheduleId.trim());
@@ -734,8 +732,6 @@ export function ClientManagementPanel() {
   const [selectedScheduleId, setSelectedScheduleId] = useState<string>(
     CLIENT_SCHEDULE_ITEMS[0].id,
   );
-  const [lastBdAudience, setLastBdAudience] =
-    useState<LastBdAudience>("client");
   const [requestLists, setRequestLists] = useState<ClientRequestListsStore>(
     createEmptyRequestListsStore(),
   );
@@ -866,20 +862,8 @@ export function ClientManagementPanel() {
   const showBd15Content = selectedScheduleId === "bd15";
   /** BD18 is the status check for BD15 books-closed email/files. */
   const showBd18Content = selectedScheduleId === "bd18";
-  /** Last 3 / 2 / 1 BD sidebar days: Client | Team email only. */
+  /** Last 3 / 2 / 1 BD: Template 18 team email only (portal users). */
   const showLastBdSchedule = isLastBdSchedule(selectedScheduleId);
-  /** Last 3 BD → Client: Template 5. */
-  const showLast3BdContent =
-    selectedScheduleId === "last-3-bd" && lastBdAudience === "client";
-  /** Last 2 BD → Client: Template 12. */
-  const showLast2BdContent =
-    selectedScheduleId === "last-2-bd" && lastBdAudience === "client";
-  /** Last 1 BD → Client: end-of-month follow-up (no numbered template yet). */
-  const showLast1BdClientContent =
-    selectedScheduleId === "last-1-bd" && lastBdAudience === "client";
-  /** Last N BD → Team: Template 18 to portal users. */
-  const showLastBdTeamContent =
-    showLastBdSchedule && lastBdAudience === "team";
   const showEndOfMonthEmailOnly = showLastBdSchedule;
   /** BD9/BD10 review BD8 questions (Completed/Late) + reminder email. */
   const showBd9Content = selectedScheduleId === "bd9";
@@ -1494,12 +1478,10 @@ export function ClientManagementPanel() {
   }, [effectiveEmailDeadline]);
 
   useEffect(() => {
-    // Migrate legacy Last N BD (Team) sidebar ids into the merged slot + Team toggle.
+    // Migrate legacy Last N BD (Team) sidebar ids into Last N BD.
     const legacyTeam = /^last-(\d+)-bd-team$/i.exec(selectedScheduleId.trim());
     if (legacyTeam) {
       setSelectedScheduleId(`last-${legacyTeam[1]}-bd`);
-      setLastBdAudience("team");
-      return;
     }
   }, [selectedScheduleId]);
 
@@ -1513,35 +1495,21 @@ export function ClientManagementPanel() {
         selectedScheduleId !== "bd10" &&
         selectedScheduleId !== "bd15" &&
         selectedScheduleId !== "bd18" &&
-        !showLast3BdContent &&
-        !showLast2BdContent &&
-        !showLast1BdClientContent &&
-        !showLastBdTeamContent)
+        !showLastBdSchedule)
     ) {
       return;
     }
-    if (showLast1BdClientContent) {
-      setEmailSubject("");
-      setEmailBody("");
-      setEmailPortalHref("");
-      setEmailAutofillHighlights([]);
-      return;
-    }
-    const template = showLast3BdContent
-      ? findEmailTemplateById(emailTemplates, "template-5")
-      : showLast2BdContent
-        ? findEmailTemplateById(emailTemplates, "template-12")
-        : showLastBdTeamContent
-          ? findEmailTemplateById(emailTemplates, "template-18")
-          : selectedScheduleId === "bd15" || selectedScheduleId === "bd18"
-            ? findEmailTemplateById(emailTemplates, "template-11")
-            : selectedScheduleId === "bd10"
-              ? findEmailTemplateById(emailTemplates, "template-7")
-              : selectedScheduleId === "bd9"
-                ? findEmailTemplateById(emailTemplates, "template-8")
-                : selectedScheduleId === "bd8"
-                  ? findEmailTemplateById(emailTemplates, "template-3")
-                  : findBd1EmailTemplate(emailTemplates, requestTypeId);
+    const template = showLastBdSchedule
+      ? findEmailTemplateById(emailTemplates, "template-18")
+      : selectedScheduleId === "bd15" || selectedScheduleId === "bd18"
+        ? findEmailTemplateById(emailTemplates, "template-11")
+        : selectedScheduleId === "bd10"
+          ? findEmailTemplateById(emailTemplates, "template-7")
+          : selectedScheduleId === "bd9"
+            ? findEmailTemplateById(emailTemplates, "template-8")
+            : selectedScheduleId === "bd8"
+              ? findEmailTemplateById(emailTemplates, "template-3")
+              : findBd1EmailTemplate(emailTemplates, requestTypeId);
     const clientName =
       selectedOperatingName.replace(/[.:]+$/g, "").trim() ||
       selectedOperatingName.trim() ||
@@ -1551,7 +1519,6 @@ export function ClientManagementPanel() {
     const periodDate = scheduleNow;
     const period = formatCurrentPeriod(periodDate);
     const periodPortalHref = resolvePortalHref(portalLink, periodDate);
-    // Template 5 (Last 3 BD): formal request is next month's BD1 / due BD4.
     const nextMonthAnchor = new Date(
       scheduleNow.getFullYear(),
       scheduleNow.getMonth() + 1,
@@ -1564,21 +1531,10 @@ export function ClientManagementPanel() {
       selected?.profile?.state ?? "",
       nextMonthAnchor,
     );
-    const nextBd4Date = getScheduleBusinessDate(
-      "bd4",
-      holidays,
-      selected?.profile?.country,
-      selected?.profile?.state ?? "",
-      nextMonthAnchor,
-    );
     const bd1DateLabel = nextBd1Date
       ? formatBusinessDayLabel(nextBd1Date)
       : "[BD1 Date]";
-    const dueDate = showLast3BdContent
-      ? nextBd4Date
-        ? formatBusinessDayLabel(nextBd4Date)
-        : emailDeadlineLabel || "[Due Date]"
-      : emailDeadlineLabel;
+    const dueDate = emailDeadlineLabel;
     const emailMonthKey = currentMonthKey(periodDate);
     const typeActionItems = getActionItemsForRequestType(
       requestLists,
@@ -1602,30 +1558,11 @@ export function ClientManagementPanel() {
       ).requestItems,
       emailMonthKey,
     );
-    const last3BdStatementItems = showLast3BdContent
-      ? [
-          ...requestItemsForMonth(
-            getClientRequestList(requestLists, selectedClientId, "bd1")
-              .requestItems,
-            emailMonthKey,
-          ),
-          ...requestItemsForMonth(
-            getClientRequestList(
-              requestLists,
-              selectedClientId,
-              "bd1-other-statements",
-            ).requestItems,
-            emailMonthKey,
-          ),
-        ]
-      : [];
     // BD1/BD8 email uses Request List Template bullets directly.
     // BD7 email still uses items marked Late on BD5.
     // BD9 reminder uses open + late BD8 questions; BD10 uses only Late from BD9.
-    // Last 3 BD Client (Template 5) uses BD1 request-list bullets as the statements list.
-    const emailListItems = showLast3BdContent
-      ? last3BdStatementItems
-      : selectedScheduleId === "bd7"
+    const emailListItems =
+      selectedScheduleId === "bd7"
         ? typeActionItems.filter((item) => item.status === "late")
         : selectedScheduleId === "bd10"
           ? bd8QuestionActionItems.filter((item) => item.status === "late")
@@ -1640,24 +1577,15 @@ export function ClientManagementPanel() {
     const otherListPlaceholder =
       "• [List of loan, line of credit, lease, investment or other accounts]";
     const outstandingListPlaceholder = "• [List of outstanding items only]";
-    const statementsListPlaceholder =
-      "• [List of statements and reports for this client]";
     const actionListText =
       emailListItems.length > 0
         ? emailListItems.map((item) => `• ${item.label}`).join("\n")
-        : showLast3BdContent
-          ? statementsListPlaceholder
-          : selectedScheduleId === "bd9" || selectedScheduleId === "bd10"
-            ? outstandingListPlaceholder
-            : requestTypeId === "other-statements"
-              ? otherListPlaceholder
-              : bankListPlaceholder;
-    const openQuestionCount = showLast2BdContent
-      ? bd8QuestionActionItems.filter(
-          (item) =>
-            item.status === "action" || item.status === "late",
-        ).length
-      : emailListItems.length;
+        : selectedScheduleId === "bd9" || selectedScheduleId === "bd10"
+          ? outstandingListPlaceholder
+          : requestTypeId === "other-statements"
+            ? otherListPlaceholder
+            : bankListPlaceholder;
+    const openQuestionCount = emailListItems.length;
     const questionCount =
       openQuestionCount > 0 ? String(openQuestionCount) : "[Number]";
     const questionListText =
@@ -1766,10 +1694,7 @@ export function ClientManagementPanel() {
   }, [
     selectedClientId,
     selectedScheduleId,
-    showLast3BdContent,
-    showLast2BdContent,
-    showLast1BdClientContent,
-    showLastBdTeamContent,
+    showLastBdSchedule,
     requestTypeId,
     selectedOperatingName,
     selectedPointOfContact,
@@ -1793,16 +1718,13 @@ export function ClientManagementPanel() {
         selectedScheduleId !== "bd10" &&
         selectedScheduleId !== "bd15" &&
         selectedScheduleId !== "bd18" &&
-        !showLast3BdContent &&
-        !showLast2BdContent &&
-        !showLast1BdClientContent &&
-        !showLastBdTeamContent)
+        !showLastBdSchedule)
     ) {
       return;
     }
     // Leave To empty on load; From always follows the signed-in account.
-    // Team end-of-month: To = sender, BCC = all portal users.
-    if (showLastBdTeamContent) {
+    // Last N BD team reminder: To = sender, BCC = all portal users.
+    if (showLastBdSchedule) {
       const teamEmails = portalUsers
         .map((user) => user.email.trim().toLowerCase())
         .filter(Boolean);
@@ -1823,10 +1745,7 @@ export function ClientManagementPanel() {
   }, [
     selectedClientId,
     selectedScheduleId,
-    showLast3BdContent,
-    showLast2BdContent,
-    showLast1BdClientContent,
-    showLastBdTeamContent,
+    showLastBdSchedule,
     requestTypeId,
     portalUsers,
     emailFrom,
@@ -3276,40 +3195,6 @@ export function ClientManagementPanel() {
 
                       const requestWorkflow = (
                         <>
-                          {showLastBdSchedule ? (
-                            <div
-                              className="lookup-section-tabs request-workflow-tabs last-bd-audience-tabs"
-                              role="tablist"
-                              aria-label="Email audience"
-                            >
-                              <button
-                                type="button"
-                                role="tab"
-                                aria-selected={lastBdAudience === "client"}
-                                className={
-                                  lastBdAudience === "client"
-                                    ? "lookup-section-tab active"
-                                    : "lookup-section-tab"
-                                }
-                                onClick={() => setLastBdAudience("client")}
-                              >
-                                Client
-                              </button>
-                              <button
-                                type="button"
-                                role="tab"
-                                aria-selected={lastBdAudience === "team"}
-                                className={
-                                  lastBdAudience === "team"
-                                    ? "lookup-section-tab active"
-                                    : "lookup-section-tab"
-                                }
-                                onClick={() => setLastBdAudience("team")}
-                              >
-                                Team
-                              </button>
-                            </div>
-                          ) : null}
                           {!showBd5Content && !showEndOfMonthEmailOnly ? (
                           <div
                             className={workflowTabsClassName}
@@ -4211,21 +4096,7 @@ export function ClientManagementPanel() {
                                 ? ` (${questionListAttachment.name})`
                                 : ""}.
                             </>
-                          ) : showLast3BdContent ? (
-                            <>
-                              Subject and body are filled from Email Template 5.
-                            </>
-                          ) : showLast2BdContent ? (
-                            <>
-                              Subject and body are filled from Email Template 12.
-                            </>
-                          ) : showLast1BdClientContent ? (
-                            <>
-                              Client email for Last 1 BD — draft freely (no
-                              numbered template yet). Switch to Team for
-                              Template 18.
-                            </>
-                          ) : showLastBdTeamContent ? (
+                          ) : showLastBdSchedule ? (
                             <>
                               Subject and body are filled from Email Template 18
                               (team end-of-month reminder). To is you; BCC is

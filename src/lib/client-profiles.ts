@@ -458,6 +458,16 @@ export type ClientProfileEntry = {
   financialsContact: string;
   financialsEmail: string;
   financialsPhone: string;
+  /** Linked Ignition client slug (cli_…), filled on Ignition sync. */
+  ignitionClientSlug: string;
+  /** Active (accepted) Ignition proposal slug (prop_…). */
+  activeProposalSlug: string;
+  activeProposalName: string;
+  activeProposalReference: string;
+  /** Opens the proposal in Ignition (requires Ignition login). */
+  activeProposalViewUrl: string;
+  /** Opens the proposal PDF in Ignition (requires Ignition login). */
+  activeProposalPdfUrl: string;
   createdAt: string;
 };
 
@@ -634,6 +644,12 @@ export function createEmptyClientProfileForm(
     financialsContact: "",
     financialsEmail: "",
     financialsPhone: "",
+    ignitionClientSlug: "",
+    activeProposalSlug: "",
+    activeProposalName: "",
+    activeProposalReference: "",
+    activeProposalViewUrl: "",
+    activeProposalPdfUrl: "",
   };
 }
 
@@ -707,6 +723,14 @@ export function normalizeClientProfile(
     financialsContact: String(value.financialsContact ?? "").trim(),
     financialsEmail: String(value.financialsEmail ?? "").trim(),
     financialsPhone: String(value.financialsPhone ?? "").trim(),
+    ignitionClientSlug: String(value.ignitionClientSlug ?? "").trim(),
+    activeProposalSlug: String(value.activeProposalSlug ?? "").trim(),
+    activeProposalName: String(value.activeProposalName ?? "").trim(),
+    activeProposalReference: String(
+      value.activeProposalReference ?? "",
+    ).trim(),
+    activeProposalViewUrl: String(value.activeProposalViewUrl ?? "").trim(),
+    activeProposalPdfUrl: String(value.activeProposalPdfUrl ?? "").trim(),
     createdAt:
       typeof value.createdAt === "string" && value.createdAt
         ? value.createdAt

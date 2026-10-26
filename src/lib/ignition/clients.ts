@@ -1,8 +1,26 @@
 import { copyFile, mkdir, readFile, unlink, writeFile } from "fs/promises";
 import path from "path";
-import { getDataDir } from "@/lib/data-store";
+import {
+  getDataDir,
+  readClientProfiles,
+  writeClientProfiles,
+} from "@/lib/data-store";
 import { getIgnitionConfig } from "@/lib/ignition/config";
+import { appendDashboardNotifications } from "@/lib/dashboard-notifications";
+import { appendHistory } from "@/lib/data-store";
+import { syncIgnitionInvoices } from "@/lib/ignition/invoices";
+import {
+  applyActiveProposalsToProfiles,
+  createProfilesForAcceptedIgnitionClients,
+  syncIgnitionEndingSoon,
+  syncIgnitionProposals,
+  type IgnitionAutoCreatedClientProfile,
+} from "@/lib/ignition/proposals";
 import { getValidAccessToken } from "@/lib/ignition/tokens";
+
+export type IgnitionClientsSyncResult = IgnitionClientsStore & {
+  newClientsFromAcceptedProposals: IgnitionAutoCreatedClientProfile[];
+};
 
 export type IgnitionClientRecord = {
   id: string;
@@ -314,12 +332,108 @@ export async function writeIgnitionClientsStore(
   await writeJsonFile(clientsPath(), store);
 }
 
-export async function syncIgnitionClients(): Promise<IgnitionClientsStore> {
+export async function syncIgnitionClients(): Promise<IgnitionClientsSyncResult> {
   const clients = await fetchAllIgnitionClients();
   const store: IgnitionClientsStore = {
     syncedAt: new Date().toISOString(),
     clients,
   };
   await writeIgnitionClientsStore(store);
-  return store;
+
+  let newClientsFromAcceptedProposals: IgnitionAutoCreatedClientProfile[] = [];
+
+  // Also sync accepted proposals and attach active PDF links to Client Profiles.
+  let acceptedProposals: Awaited<
+    ReturnType<typeof syncIgnitionProposals>
+  >["proposals"] = [];
+  try {
+    const proposalsStore = await syncIgnitionProposals();
+    acceptedProposals = proposalsStore.proposals;
+    const matchClients = clients.map((client) => ({
+      id: client.id,
+      name: client.name,
+      email: client.email,
+    }));
+    const profiles = await readClientProfiles();
+
+    // Auto-add Client Info rows for accepted Ignition clients with no profile.
+    const ensured = createProfilesForAcceptedIgnitionClients(
+      profiles,
+      matchClients,
+      proposalsStore.proposals,
+    );
+    newClientsFromAcceptedProposals = ensured.created;
+
+    const nextProfiles = applyActiveProposalsToProfiles(
+      ensured.profiles,
+      matchClients,
+      proposalsStore.proposals,
+    );
+    await writeClientProfiles(nextProfiles);
+
+    if (newClientsFromAcceptedProposals.length > 0) {
+      await appendDashboardNotifications(
+        newClientsFromAcceptedProposals.map((item) => ({
+          kind: "ignition_new_client" as const,
+          title: "New client added from Ignition",
+          message: `${item.legalName} was added to Client Info after an accepted proposal${
+            item.proposalReference ? ` (${item.proposalReference})` : ""
+          }.`,
+          clientName: item.legalName,
+          clientProfileId: item.profileId,
+        })),
+      );
+
+      for (const item of newClientsFromAcceptedProposals) {
+        try {
+          await appendHistory({
+            employeeName: "Ignition sync",
+            employeeEmail: "",
+            project: item.legalName,
+            entityType: "clientProfile",
+            entityLabel: item.legalName,
+            action: "created",
+            summary: `Client profile auto-created from accepted Ignition proposal: ${item.legalName}`,
+            details: [
+              item.uniqueId ? `Unique ID: ${item.uniqueId}` : "",
+              item.proposalReference
+                ? `Proposal: ${item.proposalReference}`
+                : "",
+              item.ignitionClientSlug
+                ? `Ignition client: ${item.ignitionClientSlug}`
+                : "",
+            ]
+              .filter(Boolean)
+              .join("\n"),
+            comment: "Created automatically when an Ignition proposal was accepted.",
+          });
+        } catch (historyError) {
+          console.error("Ignition new-client history failed:", historyError);
+        }
+      }
+    }
+  } catch (error) {
+    // Client sync still succeeds if proposal sync fails; surface on next attempt.
+    console.error("Ignition proposal sync failed:", error);
+  }
+
+  try {
+    await syncIgnitionEndingSoon(
+      acceptedProposals.length > 0 ? acceptedProposals : undefined,
+    );
+  } catch (error) {
+    console.error("Ignition ending-soon sync failed:", error);
+  }
+
+  try {
+    const clientNameBySlug: Record<string, string> = {};
+    for (const client of clients) {
+      clientNameBySlug[client.id] = client.name;
+    }
+    await syncIgnitionInvoices(clientNameBySlug);
+  } catch (error) {
+    console.error("Ignition invoice sync failed:", error);
+  }
+
+  return { ...store, newClientsFromAcceptedProposals };
 }

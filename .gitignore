@@ -22,8 +22,9 @@
 # Ignore only temp write files under data/
 /data/*.tmp
 
-# Ignition OAuth tokens (never commit)
+# Ignition OAuth tokens + webhook signing secret (never commit)
 /data/ignition-tokens.json
+/data/ignition-webhooks.json
 
 # BD8 Excel email attachments (base64 payloads)
 /data/bd8-email-attachments.json
