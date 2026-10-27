@@ -81,6 +81,7 @@ import {
   YEAR_END_MONTHS,
 } from "@/lib/year-end";
 import {
+  addSharePointSiteMembers,
   clientSharePointSiteDisplayName,
   createClientSharePointSite,
   isClientSharePointSite,
@@ -681,9 +682,14 @@ export function ClientProfilePanel() {
     });
   }, [sharePointSites, profiles, form.legalName]);
 
+  const portalLinkTrimmed = form.portalLink.trim();
+  // Edit with an existing link: Portal section is read-only. Empty link (or Add): full setup.
+  const portalAlreadyLinked = Boolean(editingId && portalLinkTrimmed);
+  const canSetupPortal = !portalAlreadyLinked;
+
   useEffect(() => {
-    // Load existing sites for Add (picker) and Edit (link existing site).
-    if (!formOpen || createSharePointSite || !account) {
+    // Load existing sites when the picker is shown (Add, or Edit with no link yet).
+    if (!formOpen || !canSetupPortal || createSharePointSite || !account) {
       return;
     }
     let cancelled = false;
@@ -720,6 +726,7 @@ export function ClientProfilePanel() {
     };
   }, [
     formOpen,
+    canSetupPortal,
     createSharePointSite,
     account,
     instance,
@@ -1479,7 +1486,9 @@ export function ClientProfilePanel() {
 
     let portalLink = form.portalLink.trim();
     let memberWarnings: string[] = [];
-    if (!editingId && createSharePointSite) {
+    const memberEmails = parseMemberEmails(sharePointMemberEmails);
+    // Create only when Portal is editable (Add, or Edit with no existing link).
+    if (canSetupPortal && createSharePointSite) {
       if (!account) {
         setError("Sign in with Microsoft to create a SharePoint site.");
         return;
@@ -1491,7 +1500,7 @@ export function ClientProfilePanel() {
           instance,
           account,
           legalName,
-          parseMemberEmails(sharePointMemberEmails),
+          memberEmails,
         );
         portalLink = created.webUrl;
         memberWarnings = created.memberWarnings;
@@ -1502,6 +1511,30 @@ export function ClientProfilePanel() {
           createError instanceof Error
             ? createError.message
             : "Failed to create SharePoint site.",
+        );
+        return;
+      }
+    } else if (portalAlreadyLinked && memberEmails.length > 0) {
+      if (!account) {
+        setError("Sign in with Microsoft to add SharePoint members.");
+        return;
+      }
+      setSaving(true);
+      setError(null);
+      try {
+        const added = await addSharePointSiteMembers(
+          instance,
+          account,
+          portalLink,
+          memberEmails,
+        );
+        memberWarnings = added.memberWarnings;
+      } catch (addError) {
+        setSaving(false);
+        setError(
+          addError instanceof Error
+            ? addError.message
+            : "Failed to add SharePoint members.",
         );
         return;
       }
@@ -2463,7 +2496,23 @@ export function ClientProfilePanel() {
             title="Portal"
             description="SharePoint site used for document uploads."
           >
-            {!editingId ? (
+            {portalAlreadyLinked ? (
+              <label className="field field--checkbox">
+                <span className="field-label">
+                  <input
+                    type="checkbox"
+                    checked
+                    disabled
+                    readOnly
+                  />{" "}
+                  Create site on SharePoint
+                </span>
+                <span className="lookup-hint">
+                  A SharePoint site is already linked. Create and Portal Link
+                  are read-only; you can still add members below.
+                </span>
+              </label>
+            ) : (
               <label className="field field--checkbox">
                 <span className="field-label">
                   <input
@@ -2488,9 +2537,10 @@ export function ClientProfilePanel() {
                     : "Leave unchecked to pick an existing SharePoint site below."}
                 </span>
               </label>
-            ) : null}
+            )}
 
-            {!editingId && createSharePointSite ? (
+            {(portalAlreadyLinked ||
+              (canSetupPortal && createSharePointSite)) ? (
               <label className="field">
                 <span className="field-label">SharePoint members</span>
                 <textarea
@@ -2504,21 +2554,29 @@ export function ClientProfilePanel() {
                   }
                 />
                 <span className="lookup-hint">
-                  Optional. Comma-separated Fire Fly emails added as site
-                  members. You (signed-in user) are already the owner.
+                  {portalAlreadyLinked
+                    ? "Optional. Comma-separated Fire Fly emails added as site members on save. Does not list current members."
+                    : "Optional. Comma-separated Fire Fly emails added as site members. You (signed-in user) are already the owner."}
                 </span>
               </label>
             ) : null}
 
             <div className="field">
               <span className="field-label">Portal Link</span>
-              {!editingId && createSharePointSite ? (
+              {portalAlreadyLinked ? (
+                <input
+                  className="field-input field-input--readonly"
+                  type="text"
+                  readOnly
+                  value={portalLinkTrimmed}
+                />
+              ) : createSharePointSite ? (
                 <input
                   className="field-input field-input--readonly"
                   type="text"
                   readOnly
                   value={
-                    form.portalLink.trim() ||
+                    portalLinkTrimmed ||
                     `Will create: ${clientSharePointSiteDisplayName(form.legalName || "Client Name")}`
                   }
                 />
@@ -2542,8 +2600,8 @@ export function ClientProfilePanel() {
                   />
                   {editingId ? (
                     <span className="lookup-hint">
-                      Pick the client’s existing SharePoint site (search by
-                      name), then Save.
+                      No portal yet — create a site above, or pick an existing
+                      SharePoint site, then Save.
                     </span>
                   ) : null}
                   {sharePointSitesError ? (
@@ -2551,10 +2609,10 @@ export function ClientProfilePanel() {
                   ) : null}
                 </>
               )}
-              {form.portalLink.trim() ? (
+              {portalLinkTrimmed ? (
                 <a
                   className="table-link client-profile-portal-link"
-                  href={toWebsiteHref(form.portalLink.trim())}
+                  href={toWebsiteHref(portalLinkTrimmed)}
                   target="_blank"
                   rel="noopener noreferrer"
                 >

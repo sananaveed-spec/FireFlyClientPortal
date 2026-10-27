@@ -571,6 +571,161 @@ export async function createClientSharePointSite(
   };
 }
 
+function normalizeSharePointSiteKey(url: string): string {
+  try {
+    const parsed = new URL(
+      /^https?:\/\//i.test(url) ? url : `https://${url}`,
+    );
+    const match = parsed.pathname.match(/^(\/sites\/[^/]+)/i);
+    const path = match?.[1] ?? "";
+    return `${parsed.hostname.toLowerCase()}${path.toLowerCase()}`;
+  } catch {
+    return url.trim().toLowerCase().replace(/\/+$/, "");
+  }
+}
+
+/**
+ * Resolve the Microsoft 365 group id for a client portal SharePoint URL
+ * (sites created via createClientSharePointSite are group-backed).
+ */
+async function resolveGroupIdFromPortalLink(
+  accessToken: string,
+  portalLink: string,
+): Promise<string> {
+  const site = parseSharePointSiteFromPortalLink(portalLink);
+  if (!site) {
+    throw new Error(
+      "Portal Link must be a SharePoint site URL (e.g. https://….sharepoint.com/sites/…).",
+    );
+  }
+
+  const siteName = site.sitePath.replace(/^\/sites\//i, "").trim();
+  if (siteName) {
+    try {
+      const safe = siteName.replace(/'/g, "''");
+      const data = await graphJson<{ value?: { id?: string }[] }>(
+        accessToken,
+        `${GRAPH}/groups?$filter=mailNickname eq '${safe}'&$select=id&$top=1`,
+      );
+      const id = String(data.value?.[0]?.id ?? "").trim();
+      if (id) {
+        return id;
+      }
+    } catch {
+      // Fall through to site / group matching.
+    }
+  }
+
+  const siteLookupPath = `${site.hostname}:${site.sitePath}`;
+  const siteInfo = await graphJson<{
+    id?: string;
+    displayName?: string;
+    webUrl?: string;
+  }>(
+    accessToken,
+    `${GRAPH}/sites/${siteLookupPath}?$select=id,displayName,webUrl`,
+  );
+  const targetKey = normalizeSharePointSiteKey(
+    String(siteInfo.webUrl ?? "").trim() || portalLink,
+  );
+  const displayName = String(siteInfo.displayName ?? "").trim();
+
+  async function groupIdIfSiteMatches(group: GraphGroup): Promise<string | null> {
+    const groupId = String(group.id ?? "").trim();
+    if (!groupId) {
+      return null;
+    }
+    const rooted = await siteFromGroup(accessToken, group);
+    if (!rooted) {
+      return null;
+    }
+    if (normalizeSharePointSiteKey(rooted.webUrl) !== targetKey) {
+      return null;
+    }
+    return groupId;
+  }
+
+  if (displayName) {
+    try {
+      const search = encodeURIComponent(`"displayName:${displayName}"`);
+      const data = await graphJson<{ value?: GraphGroup[] }>(
+        accessToken,
+        `${GRAPH}/groups?$search=${search}&$select=id,displayName,groupTypes&$count=true&$top=25`,
+        { headers: { ConsistencyLevel: "eventual" } },
+      );
+      for (const group of data.value ?? []) {
+        const matched = await groupIdIfSiteMatches(group);
+        if (matched) {
+          return matched;
+        }
+      }
+    } catch {
+      // Fall through to owned/member client groups.
+    }
+  }
+
+  const groups = await listClientGroups(accessToken);
+  for (const group of groups) {
+    const matched = await groupIdIfSiteMatches(group);
+    if (matched) {
+      return matched;
+    }
+  }
+
+  throw new Error(
+    "Could not find the Microsoft 365 group for this Portal Link. Confirm the link is a CLIENT site created in the portal, then try again.",
+  );
+}
+
+function isAlreadyGroupMemberError(message: string): boolean {
+  return /already exist|added object references already exist|one or more added object references already exist/i.test(
+    message,
+  );
+}
+
+/**
+ * Add directory users as members of the SharePoint site's M365 group
+ * (resolved from Portal Link). Skips emails already in the group.
+ */
+export async function addSharePointSiteMembers(
+  instance: IPublicClientApplication,
+  account: AccountInfo,
+  portalLink: string,
+  memberEmails: string[],
+): Promise<{ memberWarnings: string[] }> {
+  const emails = [...new Set(memberEmails.map((e) => e.trim()).filter(Boolean))];
+  if (emails.length === 0) {
+    return { memberWarnings: [] };
+  }
+
+  const accessToken = await acquireSharePointToken(instance, account);
+  const groupId = await resolveGroupIdFromPortalLink(accessToken, portalLink);
+  const creatorEmail = String(
+    account.username || account.name || "",
+  ).toLowerCase();
+
+  const memberWarnings: string[] = [];
+  for (const email of emails) {
+    if (email.toLowerCase() === creatorEmail) {
+      continue;
+    }
+    try {
+      await addGroupMember(accessToken, groupId, email);
+    } catch (memberError) {
+      const detail =
+        memberError instanceof Error
+          ? memberError.message
+          : "Could not add member.";
+      if (isAlreadyGroupMemberError(detail)) {
+        continue;
+      }
+      memberWarnings.push(`${email}: ${detail}`);
+    }
+  }
+
+  return { memberWarnings };
+}
+
 function parseSharePointSiteFromPortalLink(portalLink: string): {
   hostname: string;
   sitePath: string;
