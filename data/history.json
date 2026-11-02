@@ -1,5 +1,18 @@
 [
   {
+    "id": "hist-1793591194867-y4gl9g",
+    "createdAt": "2026-11-02T03:46:34.867Z",
+    "employeeName": "Sana Naveed",
+    "employeeEmail": "sana@fireflyaccountancy.com",
+    "project": "Electrical Power Systems",
+    "entityType": "resourceAllocation",
+    "entityLabel": "Electrical Power Systems",
+    "action": "deleted",
+    "summary": "Resource allocation deleted: Electrical Power Systems",
+    "details": "Bookkeeping Category: ACC1\nClient Name: Electrical Power Systems\nIndustry: Engineering services\nStatus: Onboading\nSupervisor: asad@fireflyaccountancy.com\nBookkeeper/Accountant: ahsan@fireflyaccountancy.com",
+    "comment": "Record removed from Resource Allocation."
+  },
+  {
     "id": "hist-1793589151700-hvwohn",
     "createdAt": "2026-11-02T03:12:31.700Z",
     "employeeName": "Sana Naveed",

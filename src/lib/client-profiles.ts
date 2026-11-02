@@ -413,6 +413,8 @@ export function bd1TemplateToRequestTypeId(
 export type ClientProfileEntry = {
   id: string;
   uniqueId: string;
+  /** External / FFA Group ID (manual). */
+  groupId: string;
   legalName: string;
   operatingName: string;
   website: string;
@@ -600,6 +602,7 @@ export function createEmptyClientProfileForm(
 ): ClientProfileInput {
   return {
     uniqueId: generateUniqueId(existingUniqueIds, country),
+    groupId: "",
     legalName: "",
     operatingName: "",
     website: "",
@@ -669,6 +672,7 @@ export function normalizeClientProfile(
   return {
     id: value.id,
     uniqueId: String(value.uniqueId ?? "").trim(),
+    groupId: String(value.groupId ?? "").trim(),
     legalName: String(value.legalName ?? "").trim(),
     operatingName: String(value.operatingName ?? "").trim(),
     website: String(value.website ?? "").trim(),

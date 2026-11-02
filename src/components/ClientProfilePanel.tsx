@@ -134,6 +134,7 @@ const FALLBACK_ROW_HEIGHT = 40;
 
 const TABLE_COLUMNS: { key: keyof ClientProfileEntry; label: string }[] = [
   { key: "uniqueId", label: "Unique ID" },
+  { key: "groupId", label: "Group ID" },
   { key: "legalName", label: "Legal Name" },
   { key: "operatingName", label: "Operating Name" },
   { key: "industry", label: "Industry" },
@@ -629,6 +630,7 @@ export function ClientProfilePanel() {
     setSharePointSitesError(null);
     setForm({
       uniqueId: profile.uniqueId,
+      groupId: profile.groupId || "",
       legalName: profile.legalName,
       operatingName: profile.operatingName,
       website: profile.website,
@@ -1613,6 +1615,7 @@ export function ClientProfilePanel() {
       id: existing?.id ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       ...form,
       uniqueId,
+      groupId: form.groupId.trim(),
       legalName,
       operatingName: form.operatingName.trim(),
       website: form.website.trim(),
@@ -2004,6 +2007,16 @@ export function ClientProfilePanel() {
                 value={form.uniqueId}
                 readOnly
                 tabIndex={-1}
+              />
+            </label>
+
+            <label className="field">
+              <span className="field-label">Group ID</span>
+              <input
+                className="field-input"
+                value={form.groupId}
+                onChange={(e) => updateField("groupId", e.target.value)}
+                placeholder="e.g. FFA group id"
               />
             </label>
 

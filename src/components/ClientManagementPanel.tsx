@@ -418,8 +418,41 @@ const CLIENT_INFO_FIELDS: { key: string; label: string }[] = [
   { key: "portalLink", label: "Portal Link" },
 ];
 
-/** Fixed Owner CC on BD1/BD7/BD8 schedule emails (User Management / company owner). */
-const SCHEDULE_EMAIL_OWNER_CC = "ayesha@fireflyaccountancy.com";
+/** Fallback if no User Management user has Position = Owner. */
+const SCHEDULE_EMAIL_OWNER_CC_FALLBACK = "ayesha@fireflyaccountancy.com";
+
+/** Extra CC only for Electrical Power Systems (EPS). */
+const EPS_SCHEDULE_EMAIL_CC = "thomas@epsfresno.com";
+
+function resolveOwnerEmailFromPortalUsers(
+  users: ReadonlyArray<{ email?: string; position?: string }>,
+): string {
+  const owner = users.find(
+    (user) => user.position?.trim().toLowerCase() === "owner",
+  );
+  const email = owner?.email?.trim() || "";
+  return email || SCHEDULE_EMAIL_OWNER_CC_FALLBACK;
+}
+
+function isEpsClientProfile(profile: {
+  legalName?: string;
+  operatingName?: string;
+  portalLink?: string;
+} | null | undefined): boolean {
+  if (!profile) {
+    return false;
+  }
+  const legal = profile.legalName?.trim().toLowerCase() || "";
+  const operating = profile.operatingName?.trim().toLowerCase() || "";
+  if (
+    legal.includes("electrical power systems") ||
+    operating.includes("electrical power systems")
+  ) {
+    return true;
+  }
+  const portal = profile.portalLink?.trim().toLowerCase() || "";
+  return /\/sites\/eps(?:\/|$|\?)/i.test(portal);
+}
 
 /** Sidebar order: BD1→…→BD18, then end-of-month by date (Last 3 → Last 2 → Last 1). */
 const CLIENT_SCHEDULE_ITEMS = [
@@ -1007,7 +1040,7 @@ export function ClientManagementPanel() {
   /** BD13: Template 5 — same late Question List Status as BD10 + Email. */
   const showBd13Content = selectedScheduleId === "bd13";
   const showBd10OrBd13Content = showBd10Content || showBd13Content;
-  /** BD1-style To/CC: POC + secondary/owner, readonly (also BD10/13/18). */
+  /** BD1-style To/CC: POC + Owner (UM) + Group ID, readonly (also BD10/13/18). */
   const bd1LikeEmailRecipients =
     scheduleOnlyEmailDay ||
     showBd10Content ||
@@ -1547,23 +1580,20 @@ export function ClientManagementPanel() {
   const selectedPointOfContact =
     selected?.profile?.pointOfContact?.trim() || "";
   const selectedPocEmail = selected?.profile?.pocEmail?.trim() || "";
-  /** Secondary assignees (Resource Management) resolved to User Management emails. */
-  const selectedSecondaryEmails = useMemo(() => {
-    if (!selected) {
-      return [] as string[];
-    }
-    const emails: string[] = [];
-    const seen = new Set<string>();
-    for (const entry of selected.resource.bookkeeperAccountant) {
-      const email = resolveStaffEmail(entry, portalUsers);
-      if (!email || seen.has(email)) {
-        continue;
-      }
-      seen.add(email);
-      emails.push(email);
-    }
-    return emails;
-  }, [selected, portalUsers]);
+  /** Owner email from User Management (Position = Owner). */
+  const scheduleOwnerCcEmail = useMemo(
+    () => resolveOwnerEmailFromPortalUsers(portalUsers),
+    [portalUsers],
+  );
+  /** Client Profile Group ID used as CC (must look like an email). */
+  const selectedGroupIdCc = useMemo(() => {
+    const groupId = selected?.profile?.groupId?.trim() || "";
+    return groupId.includes("@") ? groupId : "";
+  }, [selected]);
+  const selectedIsEpsClient = useMemo(
+    () => isEpsClientProfile(selected?.profile),
+    [selected],
+  );
   const selectedPortalLink = selected?.profile?.portalLink?.trim() || "";
   /** Greeting name for emails — first word of Client Profile POC. */
   const selectedContactFirstName =
@@ -2146,7 +2176,11 @@ export function ClientManagementPanel() {
       setEmailTo(selectedPocEmail);
       const toEmail = selectedPocEmail.trim().toLowerCase();
       const fromEmail = emailFrom.trim().toLowerCase();
-      const ccEmails = [...selectedSecondaryEmails, SCHEDULE_EMAIL_OWNER_CC]
+      const ccEmails = [
+        scheduleOwnerCcEmail,
+        selectedGroupIdCc,
+        selectedIsEpsClient ? EPS_SCHEDULE_EMAIL_CC : "",
+      ]
         .map((email) => email.trim().toLowerCase())
         .filter(
           (email) =>
@@ -2177,7 +2211,9 @@ export function ClientManagementPanel() {
     portalUsers,
     emailFrom,
     selectedPocEmail,
-    selectedSecondaryEmails,
+    scheduleOwnerCcEmail,
+    selectedGroupIdCc,
+    selectedIsEpsClient,
   ]);
 
   const selectedSchedule =
@@ -5100,8 +5136,9 @@ export function ClientManagementPanel() {
                               {bd15Attachments.length > 0
                                 ? ` (${bd15Attachments.length} file${bd15Attachments.length === 1 ? "" : "s"})`
                                 : ""}
-                              . To is the client POC email; CC is Secondary
-                              Assignee and Owner (same as BD1)
+                              . To is the client POC email; CC is Owner (User
+                              Management) and Group ID from Client Profile
+                              (same as BD1)
                               {bd15EmailAlreadySent
                                 ? ". Sending is disabled because this email was already sent."
                                 : "."}
@@ -5121,8 +5158,8 @@ export function ClientManagementPanel() {
                               Subject and body are filled from Email Template 6.
                               Outstanding items are all Late rows from BD9 (BD7
                               Status Check and BD8 Status Check). To is the
-                              client POC email; CC is Secondary Assignee and
-                              Owner (same as BD1).
+                              client POC email; CC is Owner (User Management)
+                              and Group ID from Client Profile (same as BD1).
                             </>
                           ) : showBd8Content ? (
                             <>
@@ -5244,9 +5281,18 @@ export function ClientManagementPanel() {
                             />
                             {bd1LikeEmailRecipients ? (
                               <span className="lookup-hint">
-                                Filled from Secondary Assignee (Resource
-                                Management) and Owner ({SCHEDULE_EMAIL_OWNER_CC}
-                                ).
+                                Filled from Owner in User Management
+                                {scheduleOwnerCcEmail
+                                  ? ` (${scheduleOwnerCcEmail})`
+                                  : ""}
+                                and Group ID on Client Profile
+                                {selectedGroupIdCc
+                                  ? ` (${selectedGroupIdCc})`
+                                  : " (set Group ID if it should appear here)"}
+                                {selectedIsEpsClient
+                                  ? `; EPS also includes ${EPS_SCHEDULE_EMAIL_CC}`
+                                  : ""}
+                                .
                               </span>
                             ) : null}
                           </label>
