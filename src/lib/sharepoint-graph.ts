@@ -908,23 +908,31 @@ export async function addSharePointSiteMembers(
     return { memberWarnings: [] };
   }
 
+  // No Portal Link format requirement — only SharePoint site URLs can add
+  // members; other links are kept as-is and member invite is skipped.
+  if (!parseSharePointSiteFromPortalLink(portalLink)) {
+    return { memberWarnings: [] };
+  }
+
   const accessToken = await acquireSharePointToken(instance, account);
-  const groupId = await resolveGroupIdFromPortalLink(accessToken, portalLink);
-  const inviteRedirectUrl =
-    parseSharePointSiteFromPortalLink(portalLink) != null
-      ? (() => {
-          try {
-            const url = new URL(
-              /^https?:\/\//i.test(portalLink.trim())
-                ? portalLink.trim()
-                : `https://${portalLink.trim()}`,
-            );
-            return `${url.origin}${url.pathname.replace(/\/+$/, "")}` || url.origin;
-          } catch {
-            return `https://${sharePointSiteHost()}`;
-          }
-        })()
-      : `https://${sharePointSiteHost()}`;
+  let groupId: string;
+  try {
+    groupId = await resolveGroupIdFromPortalLink(accessToken, portalLink);
+  } catch {
+    return { memberWarnings: [] };
+  }
+  const inviteRedirectUrl = (() => {
+    try {
+      const url = new URL(
+        /^https?:\/\//i.test(portalLink.trim())
+          ? portalLink.trim()
+          : `https://${portalLink.trim()}`,
+      );
+      return `${url.origin}${url.pathname.replace(/\/+$/, "")}` || url.origin;
+    } catch {
+      return `https://${sharePointSiteHost()}`;
+    }
+  })();
   const creatorEmail = String(
     account.username || account.name || "",
   ).toLowerCase();
