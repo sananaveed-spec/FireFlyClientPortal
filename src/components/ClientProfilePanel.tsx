@@ -80,8 +80,10 @@ import {
   YEAR_END_DAYS,
   YEAR_END_MONTHS,
 } from "@/lib/year-end";
+import { DEFAULT_SHAREPOINT_TEAM_MEMBERS } from "@/lib/sharepoint-default-members";
 import {
   addSharePointSiteMembers,
+  buildSharePointMemberEmails,
   clientSharePointSiteDisplayName,
   createClientSharePointSite,
   isClientSharePointSite,
@@ -403,6 +405,68 @@ async function persistProfiles(profiles: ClientProfileEntry[]) {
     const data = (await response.json()) as { error?: string };
     throw new Error(data.error || "Failed to save client profiles.");
   }
+}
+
+/**
+ * Resource Allocation stores its own clientName copy. When Legal Name changes
+ * on the profile, rename matching resource rows so Client Management stays linked.
+ */
+async function syncResourceClientNameFromProfile(options: {
+  previousLegalName: string;
+  nextLegalName: string;
+  nextIndustry: string;
+}): Promise<number> {
+  const previous = options.previousLegalName.trim();
+  const next = options.nextLegalName.trim();
+  if (!previous || !next || previous.toLowerCase() === next.toLowerCase()) {
+    return 0;
+  }
+
+  const response = await fetch("/api/resource-clients", { cache: "no-store" });
+  const data = (await response.json()) as {
+    clients?: Array<{
+      id: string;
+      clientName?: string;
+      industry?: string;
+      [key: string]: unknown;
+    }>;
+    error?: string;
+  };
+  if (!response.ok) {
+    throw new Error(data.error || "Failed to load resource allocation.");
+  }
+
+  const clients = Array.isArray(data.clients) ? data.clients : [];
+  let changed = 0;
+  const updated = clients.map((client) => {
+    if (String(client.clientName ?? "").trim().toLowerCase() !== previous.toLowerCase()) {
+      return client;
+    }
+    changed += 1;
+    const industry = options.nextIndustry.trim();
+    return {
+      ...client,
+      clientName: next,
+      ...(industry ? { industry } : {}),
+    };
+  });
+
+  if (changed === 0) {
+    return 0;
+  }
+
+  const saveResponse = await portalFetch("/api/resource-clients", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ clients: updated }),
+  });
+  if (!saveResponse.ok) {
+    const saveData = (await saveResponse.json()) as { error?: string };
+    throw new Error(
+      saveData.error || "Failed to update resource allocation client name.",
+    );
+  }
+  return changed;
 }
 
 function profileSnapshot(entry: ClientProfileEntry) {
@@ -1486,7 +1550,12 @@ export function ClientProfilePanel() {
 
     let portalLink = form.portalLink.trim();
     let memberWarnings: string[] = [];
-    const memberEmails = parseMemberEmails(sharePointMemberEmails);
+    // Default Fire Fly team + Owner + POC + any typed extras (guests for externals).
+    const memberEmails = buildSharePointMemberEmails({
+      ownerEmail: form.ownerEmail,
+      pocEmail: form.pocEmail,
+      extraEmails: parseMemberEmails(sharePointMemberEmails),
+    });
     // Create only when Portal is editable (Add, or Edit with no existing link).
     if (canSetupPortal && createSharePointSite) {
       if (!account) {
@@ -1610,6 +1679,14 @@ export function ClientProfilePanel() {
 
     try {
       await persistProfiles(next);
+      let resourceRenameCount = 0;
+      if (existing) {
+        resourceRenameCount = await syncResourceClientNameFromProfile({
+          previousLegalName: existing.legalName,
+          nextLegalName: entry.legalName,
+          nextIndustry: entry.industry,
+        });
+      }
       setProfiles(next);
       setFormOpen(false);
       setEditingId(null);
@@ -1624,6 +1701,10 @@ export function ClientProfilePanel() {
       if (memberWarnings.length > 0) {
         setNotice(
           `Client saved. Some SharePoint members could not be added: ${memberWarnings.join("; ")}`,
+        );
+      } else if (resourceRenameCount > 0) {
+        setNotice(
+          `Client saved. Resource Allocation client name updated to “${entry.legalName}”.`,
         );
       }
 
@@ -2541,24 +2622,55 @@ export function ClientProfilePanel() {
 
             {(portalAlreadyLinked ||
               (canSetupPortal && createSharePointSite)) ? (
-              <label className="field">
+              <div className="field">
                 <span className="field-label">SharePoint members</span>
-                <textarea
-                  className="field-input"
-                  rows={3}
-                  value={sharePointMemberEmails}
-                  disabled={saving}
-                  placeholder="email1@fireflyaccountancy.com, email2@fireflyaccountancy.com"
-                  onChange={(event) =>
-                    setSharePointMemberEmails(event.target.value)
-                  }
-                />
+                <ul className="sharepoint-auto-members">
+                  <li>
+                    <span className="sharepoint-auto-members-role">
+                      Fire Fly team
+                    </span>
+                    <span className="sharepoint-auto-members-emails">
+                      {DEFAULT_SHAREPOINT_TEAM_MEMBERS.join(", ")}
+                    </span>
+                  </li>
+                  <li>
+                    <span className="sharepoint-auto-members-role">
+                      Owner (guest if external)
+                    </span>
+                    <span className="sharepoint-auto-members-emails">
+                      {form.ownerEmail.trim() ||
+                        "Add Owner Email under People below"}
+                    </span>
+                  </li>
+                  <li>
+                    <span className="sharepoint-auto-members-role">
+                      POC (guest if external)
+                    </span>
+                    <span className="sharepoint-auto-members-emails">
+                      {form.pocEmail.trim() ||
+                        "Add POC Email under People below"}
+                    </span>
+                  </li>
+                </ul>
+                <label className="field field--nested">
+                  <span className="field-label">Extra members (optional)</span>
+                  <textarea
+                    className="field-input"
+                    rows={2}
+                    value={sharePointMemberEmails}
+                    disabled={saving}
+                    placeholder="extra@fireflyaccountancy.com"
+                    onChange={(event) =>
+                      setSharePointMemberEmails(event.target.value)
+                    }
+                  />
+                </label>
                 <span className="lookup-hint">
                   {portalAlreadyLinked
-                    ? "Optional. Comma-separated Fire Fly emails added as site members on save. Does not list current members."
-                    : "Optional. Comma-separated Fire Fly emails added as site members. You (signed-in user) are already the owner."}
+                    ? "On save, the Fire Fly team, Owner Email, and POC Email are always added (guests invited for external addresses). Use Extra members only for anyone else."
+                    : "On create, the Fire Fly team, Owner Email, and POC Email are always added (guests invited for external addresses). You remain the site owner. Use Extra members only for anyone else."}
                 </span>
-              </label>
+              </div>
             ) : null}
 
             <div className="field">

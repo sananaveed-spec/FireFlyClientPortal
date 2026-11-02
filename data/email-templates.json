@@ -6,7 +6,7 @@
       "title": "Bank and Credit Card Statements Request",
       "whenSent": "BD1 of each month (automatic). Lists only accounts not covered by a working bank feed.",
       "subject": "[Client Name]: Bank and credit card statements for [Period]",
-      "body": "Hi [Contact First Name],\n\nWe are starting the bookkeeping for [Period] and need the statements for the accounts below:\n• [List of bank and credit card accounts, with last 4 digits]\n\nPlease upload them to the portal by [Due Date]: [Portal Link]\n\nPDF statements downloaded from your online banking are perfect but a CSV is always welcomed. Please send the full statement, including every page, even if some pages have no transactions.\n\nIf an account was closed, or you opened a new account during the month, just let us know in the portal so we can update our records.",
+      "body": "Hi [Contact First Name],\n\nWe are starting the bookkeeping for [Period] and need the statements for the accounts below:\n• [Request List Items]\n\nPlease upload them to the portal by [Due Date]: [Portal Link]\n\nPDF statements downloaded from your online banking will work perfect.",
       "bookkeepingServices": [
         "Monthly Bookkeeping"
       ],
@@ -26,11 +26,11 @@
     },
     {
       "id": "template-3",
-      "label": "Template 3 (BD8)",
-      "title": "Uncategorized Transactions: Questions for the Client",
+      "label": "Template 4 (BD8)",
+      "title": "Questions on Uncategorized Transactions",
       "whenSent": "By BD8, once reconciliations are complete. Transactions are pulled from QBO into the portal question list.",
       "subject": "[Client Name]: A few transactions we need your help with for [Period]",
-      "body": "Hi [Contact First Name],\n\nWe are working through your [Period] books and have [Number] transactions we could not identify from the bank and card details alone. They total [Total Amount].\n\nYou can see the full list in the portal here: [Portal Link]\n\n[Question List]\n\nFor each one, please tell us:\n• What it was for (for example, software subscription, materials for a job, owner personal expense)\n• Whether it relates to a specific customer, job or project\n• A receipt or invoice if you have one (required for anything over [Receipt Threshold])\n\nA short answer is enough. \"Lunch with a client\" or \"Personal, please treat as owner draw\" works fine.\n\nPlease add attachments where necessary\n\nPlease reply by [Due Date] so we can close your books on schedule. Anything still open by then will be recorded as uncategorized and listed in your financial package.",
+      "body": "Hi [Contact First Name],\n\nWe are working through your [Period] books and have [Number] transactions we could not identify from the bank and card details alone. They total [Total Amount]. The full list is attached.\n\nFor each one, please tell us:\n• [Question List Items]\n\nA short answer is enough. \"Lunch with a client\" or \"Personal, please treat as owner draw\" works fine.\n\nPlease add attachments where necessary\n\nTo close your books on schedule, please upload them to the portal by [Due Date]: [Portal Link]\n\nAnything still open by then will be recorded as uncategorized and listed in your financial package.",
       "bookkeepingServices": [
         "Monthly Bookkeeping"
       ],
@@ -38,7 +38,7 @@
     },
     {
       "id": "template-4",
-      "label": "Template 12",
+      "label": "Template 13",
       "title": "Missing Receipts and Bills",
       "whenSent": "Alongside the question list (BD8), for transactions above the receipt threshold with no supporting document.",
       "subject": "[Client Name]: Receipts needed for [Period]",
@@ -50,7 +50,7 @@
     },
     {
       "id": "template-5",
-      "label": "Template 7 (-3BD)",
+      "label": "Template 8 (-3BD)",
       "title": "Month-End Coming (Pre-Close Reminder)",
       "whenSent": "Last 3 business days of the month (automatic).",
       "subject": "[Client Name]: Month-end is coming up, here is what we will need",
@@ -62,7 +62,7 @@
     },
     {
       "id": "template-6",
-      "label": "Template 16",
+      "label": "Template 17",
       "title": "Reminder 1: Missing Documents",
       "whenSent": "BD7, if any items from the document request are still outstanding (automatic).",
       "subject": "Reminder: [Client Name] documents for [Period]",
@@ -74,11 +74,11 @@
     },
     {
       "id": "template-7",
-      "label": "Template 5 (BD10)",
-      "title": "Reminder 2: Final Reminder for Missing Documents",
+      "label": "Template 6 (BD10)",
+      "title": "Reminder : Final Reminder for Missing Documents",
       "whenSent": "BD10, if items are still outstanding. Copied to the business owner / decision-maker (automatic).",
-      "subject": "Second reminder: [Client Name] documents needed to close [Period]",
-      "body": "Hi [Contact First Name],\n\nWe are following up again as the items below for [Period] are still outstanding:\n• [List of outstanding items only]\n\nWithout these, we are unable to complete your reconciliations, and your financial statements will be delayed. Our delivery date moves back by the number of days the documents are late, so the current expected date for your financials is [Revised Delivery Date].\n\nPlease upload what you can here: [Portal Link]. If it is easier, reply to this email with a good time and we will give you a quick call to sort it out together.",
+      "subject": "Reminder: [Client Name] documents needed to close [Period]",
+      "body": "Hi [Contact First Name],\n\nWe are following up again as the items below for [Period] are still outstanding:\n• [List of outstanding items only]\n\nWithout these, we are unable to complete your reconciliations, and your financial statements will be delayed. Our delivery date moves back by the number of days the documents are late.\n\nPlease send what you can by replying to this email. If it is easier, reply with a good time and we will give you a quick call to sort it out together.",
       "bookkeepingServices": [
         "Monthly Bookkeeping"
       ],
@@ -86,11 +86,11 @@
     },
     {
       "id": "template-8",
-      "label": "Template 4 (BD9)",
+      "label": "Template 5 (BD13)",
       "title": "Reminder: Open Questions",
       "whenSent": "3 business days after the question list was sent, if any questions are still unanswered (automatic).",
       "subject": "Reminder: [Number] open questions on your [Period] books",
-      "body": "Hi [Contact First Name],\n\nWe still have [Number] open questions on your [Period] books, totaling [Total Amount]. You can see and answer them here: [Portal Link]\n\n[Question List]\n\nMost of them should only take a few seconds each. If you are unsure about any item, just say so and we will look into it further.\n\nWe plan to close your books on [Close Date]. Anything still open by then will be recorded as uncategorized and listed in your financial package.",
+      "body": "Hi [Contact First Name],\n\nWe still have [Number] open questions on your [Period] books, totaling [Total Amount]. The list is attached again for your convenience.\n\n[Question List]\n\nMost of them should only take a few seconds each. If you are unsure about any item, just say so and we will look into it further.\n\nWe plan to close your books on the 15th. Anything still open by then will be recorded as uncategorized and listed in your financial package.",
       "bookkeepingServices": [
         "Monthly Bookkeeping"
       ],
@@ -98,7 +98,7 @@
     },
     {
       "id": "template-9",
-      "label": "Template 17",
+      "label": "Template 18",
       "title": "Timeline Update: Late Documents",
       "whenSent": "When documents arrive after the due date and the close and delivery dates shift (automatic).",
       "subject": "[Client Name]: Updated delivery date for your [Period] financials",
@@ -110,7 +110,7 @@
     },
     {
       "id": "template-10",
-      "label": "Template 18",
+      "label": "Template 19",
       "title": "Bank Feed Disconnected",
       "whenSent": "When the portal detects that a QBO bank feed has stopped updating for more than a few days.",
       "subject": "Action needed: [Bank Name] connection to QuickBooks has stopped",
@@ -122,11 +122,11 @@
     },
     {
       "id": "template-11",
-      "label": "Template 6 (BD15)",
+      "label": "Template 7 (BD18)",
       "title": "Your Financial Statements Are Ready",
       "whenSent": "When the monthly package is released to the client portal after review.",
       "subject": "[Client Name]: Your financial statements for [Period] are ready",
-      "body": "Hi [Contact First Name],\n\nYour financial statements for [Period] are ready and available in the portal: [Portal Link]\n\nThe package includes:\n• Profit and Loss (month and year to date)\n• Balance Sheet\n• Accounts receivable and accounts payable aging\n\nA few highlights for the month: [if applicable]\n• [Short commentary point 1]\n• [Short commentary point 2]\n• [Short commentary point 3]\n\n[If applicable] There are [Number] open items still waiting on your input, listed at the end of the package.\n\nIf you have any questions, reply to this email or book a time with us here: [Booking Link]",
+      "body": "Hi [Contact First Name],\n\nYour financial statements for [Period] are ready and available in the portal: [Portal Link]\n\nThe package includes:\n• Profit and Loss (month and year to date)\n• Balance Sheet\n• Accounts receivable and accounts payable aging\n\nIf you have any questions, reply to this email and we will be happy to go through them with you.",
       "bookkeepingServices": [
         "Monthly Bookkeeping"
       ],
@@ -134,7 +134,7 @@
     },
     {
       "id": "template-12",
-      "label": "Template 8 (-2BD)",
+      "label": "Template 9 (-2BD)",
       "title": "Review Meeting: Invitation and Agenda",
       "whenSent": "2 business days before the scheduled review meeting (automatic).",
       "subject": "[Client Name]: Agenda for our [Period] review on [Meeting Date]",
@@ -146,7 +146,7 @@
     },
     {
       "id": "template-13",
-      "label": "Template 13",
+      "label": "Template 14",
       "title": "Review Meeting: Recap and Action Items",
       "whenSent": "Same day as the review meeting.",
       "subject": "[Client Name]: Recap of our [Period] review",
@@ -158,7 +158,7 @@
     },
     {
       "id": "template-14",
-      "label": "Template 14",
+      "label": "Template 15",
       "title": "New Client Welcome and Onboarding",
       "whenSent": "When a new bookkeeping client is set up in the portal.",
       "subject": "Welcome to [Firm Name]: getting your bookkeeping set up",
@@ -170,7 +170,7 @@
     },
     {
       "id": "template-15",
-      "label": "Template 15",
+      "label": "Template 16",
       "title": "Year-End Bookkeeping Documents",
       "whenSent": "In the last month of the client's fiscal year, with a reminder after year-end.",
       "subject": "[Client Name]: Year-end bookkeeping items for [Fiscal Year]",
@@ -182,7 +182,7 @@
     },
     {
       "id": "template-16",
-      "label": "Template 10 (Team)",
+      "label": "Template 11 (Team)",
       "title": "Pakistan Holiday Notice (team)",
       "whenSent": "Last weekday before each Pakistan holiday series (9:00 AM Pakistan time; skips Sat/Sun). Multi-day holidays like Eid Day 1–3 share one email. Sent to the whole team in User Management from ayesha@fireflyaccountancy.com or sana@epsfresno.com.",
       "subject": "Reminder: Upcoming Pakistan holiday — [Holiday Name]",
@@ -192,7 +192,7 @@
     },
     {
       "id": "template-17",
-      "label": "Template 11 (Client)",
+      "label": "Template 12 (Client)",
       "title": "Pakistan Holiday Notice (Clients)",
       "whenSent": "7 business days before each Pakistan holiday series (Sat/Sun skipped; 9:00 AM in each client's time zone). Multi-day holidays share one email. Sent to all Client Profile emails from ayesha@fireflyaccountancy.com or sana@epsfresno.com.",
       "subject": "Notice: Upcoming Pakistan holiday — [Holiday Name]",
@@ -202,11 +202,41 @@
     },
     {
       "id": "template-18",
-      "label": "Template 9 (Team Reminder)",
+      "label": "Template 10 (Team Reminder)",
       "title": "End-of-Month Team Reminder",
       "whenSent": "Last 3 / Last 2 / Last 1 BD in Client Management (team reminder to portal users). One template for all three sidebar days.",
       "subject": "Team reminder: [Last BD Label] — complete pending work",
       "body": "Hi team,\n\nThis is a reminder that we are in the [Last BD Label].\n\nPlease complete all pending Client Management work before month-end:\n• Outstanding document requests and late items\n• Open questions and follow-ups\n• Reviews, packages, and status checks still in progress\n\nFinish what you can today so nothing carries into next month unnecessarily.",
+      "bookkeepingServices": [],
+      "starred": true
+    },
+    {
+      "id": "template-19",
+      "label": "Template 20",
+      "title": "Ignition Proposal Ending Soon (Team)",
+      "whenSent": "Two calendar months before the proposal expiry date at 9:00 PM Pakistan time (weekends and holidays count; weekend/holiday → next working day). If the expiry year is after the current year (e.g. 2027), schedule for the next working day at 9:00 PM Pakistan time. Whole team in User Management from ayesha@fireflyaccountancy.com or sana@epsfresno.com.",
+      "subject": "Reminder: [Client Name] proposal [Proposal Reference] expires on [Expiry Date]",
+      "body": "Hi team,\n\nThis proposal is going to expire on [Expiry Date].\n\n• Client: [Client Name]\n• Proposal: [Proposal Name]\n• Reference: [Proposal Reference]\n• Expiry date: [Expiry Date]\n\nPlease review and follow up with the client if needed.\n\nThank you.",
+      "bookkeepingServices": [],
+      "starred": true
+    },
+    {
+      "id": "template-20",
+      "label": "Template 21",
+      "title": "Ignition Proposal Ending Soon (Client)",
+      "whenSent": "One calendar month before the proposal expiry date at 9:00 PM Pakistan time (weekends and holidays count; weekend/holiday → next working day). BCC to that client's profile emails only, from ayesha@fireflyaccountancy.com or sana@epsfresno.com. Status/logic only until live send is enabled.",
+      "subject": "[Client Name]: Your proposal [Proposal Reference] expires on [Expiry Date]",
+      "body": "Hi,\n\nThis proposal is going to expire on [Expiry Date].\n\n• Proposal: [Proposal Name]\n• Reference: [Proposal Reference]\n• Expiry date: [Expiry Date]\n\nPlease reply if you would like to renew or discuss next steps.\n\nThank you.",
+      "bookkeepingServices": [],
+      "starred": true
+    },
+    {
+      "id": "template-1793257350033-4mvctf",
+      "label": "Template 3 (BD7)",
+      "title": "Reminder 1: Missing Documents",
+      "whenSent": "Sent: 7th business day, if anything is still outstanding",
+      "subject": "Reminder: [Client] documents for [Month]",
+      "body": "Hi [Contact First Name],\n\nJust a friendly reminder that we are still waiting on the following for [Month]:\n• [Late Action Items]\n\nThese were due on the 5th business day. Once we have them we can finish reconciling your accounts and get your financials to you.\n\nPlease upload them to the portal by [Due Date]: [Portal Link]\n\nPlease reply to this email with them.\n\nIf anything is difficult to get hold of, let us know and we will help.",
       "bookkeepingServices": [],
       "starred": true
     }

@@ -1,11 +1,11 @@
 [
   {
-    "id": "1792149085784-l1iei5",
-    "uniqueId": "CA-20261016-004",
-    "legalName": "test11",
+    "id": "1793364744453-iz765y",
+    "uniqueId": "CA-20261030-004",
+    "legalName": "SanaSharePointTest",
     "operatingName": "",
     "website": "",
-    "portalLink": "https://fireflyaccountancy.sharepoint.com/sites/CLIENTtest11",
+    "portalLink": "https://fireflyaccountancy.sharepoint.com/sites/CLIENTSanaSharePointTest",
     "industry": "",
     "businessActivity": "",
     "entityType": "",
@@ -15,23 +15,8 @@
     "bd1Template": "template-1",
     "serviceFrequency": "",
     "reportingTier": "",
-    "paymentType": "Cash",
-    "financialAccounts": [
-      {
-        "id": "acct-1792148921848-ip63dx",
-        "accountType": "Bank",
-        "institutionName": "Meezan",
-        "lastFour": "1234",
-        "source": "Bank feed"
-      },
-      {
-        "id": "acct-1792148950616-akbzjj",
-        "accountType": "Credit card",
-        "institutionName": "Al habib",
-        "lastFour": "7890",
-        "source": "Needs statement"
-      }
-    ],
+    "paymentType": "",
+    "financialAccounts": [],
     "hasUsdAndCadAccounts": "",
     "meetingFrequency": "",
     "onCatchUpPlan": "",
@@ -50,10 +35,10 @@
     "payrollReportsNeeded": "",
     "payrollAccountNumbers": "",
     "ownerName": "",
-    "ownerEmail": "",
+    "ownerEmail": "sana@epsfresno.com",
     "ownerPhone": "",
     "pointOfContact": "",
-    "pocEmail": "",
+    "pocEmail": "sana@augmentifyinc.com",
     "pocPhone": "",
     "documentRequestContact": "",
     "documentRequestEmail": "",
@@ -61,7 +46,13 @@
     "financialsContact": "",
     "financialsEmail": "",
     "financialsPhone": "",
-    "createdAt": "2026-10-16T11:11:25.785Z"
+    "ignitionClientSlug": "",
+    "activeProposalSlug": "",
+    "activeProposalName": "",
+    "activeProposalReference": "",
+    "activeProposalViewUrl": "",
+    "activeProposalPdfUrl": "",
+    "createdAt": "2026-10-30T12:52:24.453Z"
   },
   {
     "id": "1792066602997-jt57bb",
@@ -125,6 +116,12 @@
     "financialsContact": "",
     "financialsEmail": "",
     "financialsPhone": "",
+    "ignitionClientSlug": "",
+    "activeProposalSlug": "",
+    "activeProposalName": "",
+    "activeProposalReference": "",
+    "activeProposalViewUrl": "",
+    "activeProposalPdfUrl": "",
     "createdAt": "2026-10-15T12:16:42.997Z"
   },
   {
@@ -182,6 +179,12 @@
     "financialsContact": "",
     "financialsEmail": "",
     "financialsPhone": "",
+    "ignitionClientSlug": "",
+    "activeProposalSlug": "",
+    "activeProposalName": "",
+    "activeProposalReference": "",
+    "activeProposalViewUrl": "",
+    "activeProposalPdfUrl": "",
     "createdAt": "2026-10-15T12:15:20.030Z"
   },
   {
@@ -231,6 +234,12 @@
     "financialsContact": "",
     "financialsEmail": "",
     "financialsPhone": "",
+    "ignitionClientSlug": "",
+    "activeProposalSlug": "",
+    "activeProposalName": "",
+    "activeProposalReference": "",
+    "activeProposalViewUrl": "",
+    "activeProposalPdfUrl": "",
     "createdAt": "2026-10-15T11:12:17.836Z"
   },
   {
@@ -280,6 +289,12 @@
     "financialsContact": "",
     "financialsEmail": "",
     "financialsPhone": "",
+    "ignitionClientSlug": "",
+    "activeProposalSlug": "",
+    "activeProposalName": "",
+    "activeProposalReference": "",
+    "activeProposalViewUrl": "",
+    "activeProposalPdfUrl": "",
     "createdAt": "2026-10-15T08:42:15.211Z"
   },
   {
@@ -329,6 +344,12 @@
     "financialsContact": "",
     "financialsEmail": "",
     "financialsPhone": "",
+    "ignitionClientSlug": "",
+    "activeProposalSlug": "",
+    "activeProposalName": "",
+    "activeProposalReference": "",
+    "activeProposalViewUrl": "",
+    "activeProposalPdfUrl": "",
     "createdAt": "2026-10-15T08:33:37.416Z"
   },
   {
@@ -378,6 +399,12 @@
     "financialsContact": "",
     "financialsEmail": "",
     "financialsPhone": "",
+    "ignitionClientSlug": "",
+    "activeProposalSlug": "",
+    "activeProposalName": "",
+    "activeProposalReference": "",
+    "activeProposalViewUrl": "",
+    "activeProposalPdfUrl": "",
     "createdAt": "2026-10-15T08:12:59.037Z"
   },
   {
@@ -427,56 +454,13 @@
     "financialsContact": "",
     "financialsEmail": "",
     "financialsPhone": "",
+    "ignitionClientSlug": "",
+    "activeProposalSlug": "",
+    "activeProposalName": "",
+    "activeProposalReference": "",
+    "activeProposalViewUrl": "",
+    "activeProposalPdfUrl": "",
     "createdAt": "2026-10-15T08:01:36.985Z"
-  },
-  {
-    "id": "1792048306121-kw1fiv",
-    "uniqueId": "US-20261015-015",
-    "legalName": "SanaTest2",
-    "operatingName": "",
-    "website": "",
-    "portalLink": "https://fireflyaccountancy.sharepoint.com/sites/CLIENTSanaTest2",
-    "industry": "",
-    "businessActivity": "",
-    "entityType": "",
-    "fiscalYearEnd": "",
-    "country": "US",
-    "reportingCurrency": "USD ($)",
-    "bd1Template": "template-1",
-    "serviceFrequency": "",
-    "reportingTier": "",
-    "paymentType": "",
-    "financialAccounts": [],
-    "hasUsdAndCadAccounts": "",
-    "meetingFrequency": "",
-    "onCatchUpPlan": "",
-    "state": "",
-    "streetAddress": "",
-    "businessAccountNumber": "",
-    "timeZone": "",
-    "ssn": "",
-    "doi": "",
-    "ein": "",
-    "ctTaxRegistrationNo": "",
-    "canadianBusinessNumber": "",
-    "gstHst": "",
-    "provincialSalesTaxNumbers": "",
-    "payrollProvider": "",
-    "payrollReportsNeeded": "",
-    "payrollAccountNumbers": "",
-    "ownerName": "",
-    "ownerEmail": "",
-    "ownerPhone": "",
-    "pointOfContact": "",
-    "pocEmail": "",
-    "pocPhone": "",
-    "documentRequestContact": "",
-    "documentRequestEmail": "",
-    "documentRequestPhone": "",
-    "financialsContact": "",
-    "financialsEmail": "",
-    "financialsPhone": "",
-    "createdAt": "2026-10-15T07:11:46.122Z"
   },
   {
     "id": "1791444155511-6dtld8",
@@ -525,6 +509,12 @@
     "financialsContact": "",
     "financialsEmail": "",
     "financialsPhone": "",
+    "ignitionClientSlug": "cli_nkcerv5zxqxaakybamya",
+    "activeProposalSlug": "prop_nkceqzep2pgaaviamvda",
+    "activeProposalName": "Monthly Accounting Services",
+    "activeProposalReference": "PROP-0150",
+    "activeProposalViewUrl": "https://go.ignitionapp.com/clients/cli_nkcerv5zxqxaakybamya/proposals/prop_nkceqzep2pgaaviamvda",
+    "activeProposalPdfUrl": "https://go.ignitionapp.com/clients/cli_nkcerv5zxqxaakybamya/proposals/prop_nkceqzep2pgaaviamvda/pdf",
     "createdAt": "2026-10-08T07:22:35.511Z"
   },
   {
@@ -574,6 +564,12 @@
     "financialsContact": "",
     "financialsEmail": "",
     "financialsPhone": "",
+    "ignitionClientSlug": "cli_ngan4yknshbqavqa2w5q",
+    "activeProposalSlug": "prop_ngan3ovljkvaakibaq2q",
+    "activeProposalName": "PROPOSAL FOR ACCOUNTING & TAX SERVICES",
+    "activeProposalReference": "PROP-0098",
+    "activeProposalViewUrl": "https://go.ignitionapp.com/clients/cli_ngan4yknshbqavqa2w5q/proposals/prop_ngan3ovljkvaakibaq2q",
+    "activeProposalPdfUrl": "https://go.ignitionapp.com/clients/cli_ngan4yknshbqavqa2w5q/proposals/prop_ngan3ovljkvaakibaq2q/pdf",
     "createdAt": "2026-10-08T07:20:34.743Z"
   },
   {
@@ -623,6 +619,12 @@
     "financialsContact": "",
     "financialsEmail": "",
     "financialsPhone": "",
+    "ignitionClientSlug": "cli_nc4du36727eqasiag2da",
+    "activeProposalSlug": "prop_nk2tsz2qyzzqaziahzoq",
+    "activeProposalName": "PROPOSAL FOR ACCOUNTING & TAX SERVICES",
+    "activeProposalReference": "PROP-0159",
+    "activeProposalViewUrl": "https://go.ignitionapp.com/clients/cli_nc4du36727eqasiag2da/proposals/prop_nk2tsz2qyzzqaziahzoq",
+    "activeProposalPdfUrl": "https://go.ignitionapp.com/clients/cli_nc4du36727eqasiag2da/proposals/prop_nk2tsz2qyzzqaziahzoq/pdf",
     "createdAt": "2026-10-06T00:00:00Z"
   },
   {
@@ -672,6 +674,12 @@
     "financialsContact": "",
     "financialsEmail": "",
     "financialsPhone": "",
+    "ignitionClientSlug": "cli_ndabwhzrygoaapqaze6a",
+    "activeProposalSlug": "",
+    "activeProposalName": "",
+    "activeProposalReference": "",
+    "activeProposalViewUrl": "",
+    "activeProposalPdfUrl": "",
     "createdAt": "2026-10-06T00:00:00.001000Z"
   },
   {
@@ -721,6 +729,12 @@
     "financialsContact": "",
     "financialsEmail": "",
     "financialsPhone": "",
+    "ignitionClientSlug": "cli_nge7ytbiu2sqavyaolqq",
+    "activeProposalSlug": "prop_nge7yclduznaaoyabgeq",
+    "activeProposalName": "PROPOSAL FOR ACCOUNTING & TAX SERVICES",
+    "activeProposalReference": "PROP-0104",
+    "activeProposalViewUrl": "https://go.ignitionapp.com/clients/cli_nge7ytbiu2sqavyaolqq/proposals/prop_nge7yclduznaaoyabgeq",
+    "activeProposalPdfUrl": "https://go.ignitionapp.com/clients/cli_nge7ytbiu2sqavyaolqq/proposals/prop_nge7yclduznaaoyabgeq/pdf",
     "createdAt": "2026-10-06T00:00:00.002000Z"
   },
   {
@@ -770,6 +784,12 @@
     "financialsContact": "",
     "financialsEmail": "",
     "financialsPhone": "",
+    "ignitionClientSlug": "cli_nge7ytbiu2sqavyaolqq",
+    "activeProposalSlug": "prop_nge7yclduznaaoyabgeq",
+    "activeProposalName": "PROPOSAL FOR ACCOUNTING & TAX SERVICES",
+    "activeProposalReference": "PROP-0104",
+    "activeProposalViewUrl": "https://go.ignitionapp.com/clients/cli_nge7ytbiu2sqavyaolqq/proposals/prop_nge7yclduznaaoyabgeq",
+    "activeProposalPdfUrl": "https://go.ignitionapp.com/clients/cli_nge7ytbiu2sqavyaolqq/proposals/prop_nge7yclduznaaoyabgeq/pdf",
     "createdAt": "2026-10-06T00:00:00.003000Z"
   },
   {
@@ -819,6 +839,12 @@
     "financialsContact": "",
     "financialsEmail": "",
     "financialsPhone": "",
+    "ignitionClientSlug": "cli_ndfmu5r73xrqaiyazcpa",
+    "activeProposalSlug": "prop_ndfmvv4f3yiqamabarva",
+    "activeProposalName": "PROPOSAL FOR ACCOUNTING & TAX SERVICES",
+    "activeProposalReference": "PROP-0063",
+    "activeProposalViewUrl": "https://go.ignitionapp.com/clients/cli_ndfmu5r73xrqaiyazcpa/proposals/prop_ndfmvv4f3yiqamabarva",
+    "activeProposalPdfUrl": "https://go.ignitionapp.com/clients/cli_ndfmu5r73xrqaiyazcpa/proposals/prop_ndfmvv4f3yiqamabarva/pdf",
     "createdAt": "2026-10-06T00:00:00.004000Z"
   },
   {
@@ -868,6 +894,12 @@
     "financialsContact": "",
     "financialsEmail": "",
     "financialsPhone": "",
+    "ignitionClientSlug": "cli_ncuj4ffgkofaavya6i7q",
+    "activeProposalSlug": "prop_nkgz3vlofoyqa2yabagq",
+    "activeProposalName": "PROPOSAL FOR ACCOUNTING & TAX SERVICES",
+    "activeProposalReference": "PROP-0151",
+    "activeProposalViewUrl": "https://go.ignitionapp.com/clients/cli_ncuj4ffgkofaavya6i7q/proposals/prop_nkgz3vlofoyqa2yabagq",
+    "activeProposalPdfUrl": "https://go.ignitionapp.com/clients/cli_ncuj4ffgkofaavya6i7q/proposals/prop_nkgz3vlofoyqa2yabagq/pdf",
     "createdAt": "2026-10-06T00:00:00.005000Z"
   },
   {
@@ -917,6 +949,12 @@
     "financialsContact": "",
     "financialsEmail": "",
     "financialsPhone": "",
+    "ignitionClientSlug": "cli_ncuh7n7tygpaakabat3q",
+    "activeProposalSlug": "prop_njzyn4fb43jqawaaqgsa",
+    "activeProposalName": "PROPOSAL FOR ACCOUNTING & TAX SERVICES",
+    "activeProposalReference": "PROP-0140",
+    "activeProposalViewUrl": "https://go.ignitionapp.com/clients/cli_ncuh7n7tygpaakabat3q/proposals/prop_njzyn4fb43jqawaaqgsa",
+    "activeProposalPdfUrl": "https://go.ignitionapp.com/clients/cli_ncuh7n7tygpaakabat3q/proposals/prop_njzyn4fb43jqawaaqgsa/pdf",
     "createdAt": "2026-10-06T00:00:00.006000Z"
   },
   {
@@ -966,6 +1004,12 @@
     "financialsContact": "",
     "financialsEmail": "",
     "financialsPhone": "",
+    "ignitionClientSlug": "cli_ndkay3dr5khqasqa5asq",
+    "activeProposalSlug": "prop_ndkazqbjxa5qamya4noq",
+    "activeProposalName": "PROPOSAL FOR ACCOUNTING & TAX SERVICES",
+    "activeProposalReference": "PROP-0069",
+    "activeProposalViewUrl": "https://go.ignitionapp.com/clients/cli_ndkay3dr5khqasqa5asq/proposals/prop_ndkazqbjxa5qamya4noq",
+    "activeProposalPdfUrl": "https://go.ignitionapp.com/clients/cli_ndkay3dr5khqasqa5asq/proposals/prop_ndkazqbjxa5qamya4noq/pdf",
     "createdAt": "2026-10-06T00:00:00.007000Z"
   },
   {
@@ -1015,6 +1059,12 @@
     "financialsContact": "",
     "financialsEmail": "",
     "financialsPhone": "",
+    "ignitionClientSlug": "cli_nklvpcycvvkqavaa6ppa",
+    "activeProposalSlug": "prop_nklvmw6esqjaaoyawouq",
+    "activeProposalName": "PROPOSAL FOR ACCOUNTING & TAX SERVICES",
+    "activeProposalReference": "PROP-0154",
+    "activeProposalViewUrl": "https://go.ignitionapp.com/clients/cli_nklvpcycvvkqavaa6ppa/proposals/prop_nklvmw6esqjaaoyawouq",
+    "activeProposalPdfUrl": "https://go.ignitionapp.com/clients/cli_nklvpcycvvkqavaa6ppa/proposals/prop_nklvmw6esqjaaoyawouq/pdf",
     "createdAt": "2026-10-06T00:00:00.008000Z"
   },
   {
@@ -1064,6 +1114,12 @@
     "financialsContact": "",
     "financialsEmail": "",
     "financialsPhone": "",
+    "ignitionClientSlug": "cli_nd7uzj2qoiraajyanxya",
+    "activeProposalSlug": "prop_nd7uyzfqhwaqasybd34q",
+    "activeProposalName": "PROPOSAL FOR ACCOUNTING & TAX SERVICES",
+    "activeProposalReference": "PROP-0075",
+    "activeProposalViewUrl": "https://go.ignitionapp.com/clients/cli_nd7uzj2qoiraajyanxya/proposals/prop_nd7uyzfqhwaqasybd34q",
+    "activeProposalPdfUrl": "https://go.ignitionapp.com/clients/cli_nd7uzj2qoiraajyanxya/proposals/prop_nd7uyzfqhwaqasybd34q/pdf",
     "createdAt": "2026-10-06T00:00:00.009000Z"
   },
   {
@@ -1113,6 +1169,12 @@
     "financialsContact": "",
     "financialsEmail": "",
     "financialsPhone": "",
+    "ignitionClientSlug": "cli_ngbabcfvoylaakyaezoa",
+    "activeProposalSlug": "",
+    "activeProposalName": "",
+    "activeProposalReference": "",
+    "activeProposalViewUrl": "",
+    "activeProposalPdfUrl": "",
     "createdAt": "2026-10-06T00:00:00.010000Z"
   },
   {
@@ -1162,6 +1224,12 @@
     "financialsContact": "",
     "financialsEmail": "",
     "financialsPhone": "",
+    "ignitionClientSlug": "",
+    "activeProposalSlug": "",
+    "activeProposalName": "",
+    "activeProposalReference": "",
+    "activeProposalViewUrl": "",
+    "activeProposalPdfUrl": "",
     "createdAt": "2026-10-06T00:00:00.011000Z"
   },
   {
@@ -1211,6 +1279,12 @@
     "financialsContact": "",
     "financialsEmail": "",
     "financialsPhone": "",
+    "ignitionClientSlug": "cli_nc7o26emr37qalya5ilq",
+    "activeProposalSlug": "prop_njyomoeauwsaanaa2npa",
+    "activeProposalName": "PROPOSAL FOR ACCOUNTING & TAX SERVICES",
+    "activeProposalReference": "PROP-0134",
+    "activeProposalViewUrl": "https://go.ignitionapp.com/clients/cli_nc7o26emr37qalya5ilq/proposals/prop_njyomoeauwsaanaa2npa",
+    "activeProposalPdfUrl": "https://go.ignitionapp.com/clients/cli_nc7o26emr37qalya5ilq/proposals/prop_njyomoeauwsaanaa2npa/pdf",
     "createdAt": "2026-10-06T00:00:00.012000Z"
   },
   {
@@ -1260,6 +1334,12 @@
     "financialsContact": "",
     "financialsEmail": "",
     "financialsPhone": "",
+    "ignitionClientSlug": "cli_nc42cvsgat5qaaibtfga",
+    "activeProposalSlug": "prop_njy7lyohkqwqasyakp2a",
+    "activeProposalName": "PROPOSAL FOR ACCOUNTING & TAX SERVICES",
+    "activeProposalReference": "PROP-0135",
+    "activeProposalViewUrl": "https://go.ignitionapp.com/clients/cli_nc42cvsgat5qaaibtfga/proposals/prop_njy7lyohkqwqasyakp2a",
+    "activeProposalPdfUrl": "https://go.ignitionapp.com/clients/cli_nc42cvsgat5qaaibtfga/proposals/prop_njy7lyohkqwqasyakp2a/pdf",
     "createdAt": "2026-10-06T00:00:00.013000Z"
   },
   {
@@ -1309,6 +1389,12 @@
     "financialsContact": "",
     "financialsEmail": "",
     "financialsPhone": "",
+    "ignitionClientSlug": "cli_nc42cvsgat5qaaibtfga",
+    "activeProposalSlug": "prop_njy7lyohkqwqasyakp2a",
+    "activeProposalName": "PROPOSAL FOR ACCOUNTING & TAX SERVICES",
+    "activeProposalReference": "PROP-0135",
+    "activeProposalViewUrl": "https://go.ignitionapp.com/clients/cli_nc42cvsgat5qaaibtfga/proposals/prop_njy7lyohkqwqasyakp2a",
+    "activeProposalPdfUrl": "https://go.ignitionapp.com/clients/cli_nc42cvsgat5qaaibtfga/proposals/prop_njy7lyohkqwqasyakp2a/pdf",
     "createdAt": "2026-10-06T00:00:00.014000Z"
   },
   {
@@ -1358,13 +1444,19 @@
     "financialsContact": "",
     "financialsEmail": "",
     "financialsPhone": "",
+    "ignitionClientSlug": "cli_nc42cvsgat5qaaibtfga",
+    "activeProposalSlug": "prop_njy7lyohkqwqasyakp2a",
+    "activeProposalName": "PROPOSAL FOR ACCOUNTING & TAX SERVICES",
+    "activeProposalReference": "PROP-0135",
+    "activeProposalViewUrl": "https://go.ignitionapp.com/clients/cli_nc42cvsgat5qaaibtfga/proposals/prop_njy7lyohkqwqasyakp2a",
+    "activeProposalPdfUrl": "https://go.ignitionapp.com/clients/cli_nc42cvsgat5qaaibtfga/proposals/prop_njy7lyohkqwqasyakp2a/pdf",
     "createdAt": "2026-10-06T00:00:00.015000Z"
   },
   {
     "id": "import-17-us-20261006-010",
     "uniqueId": "US-20261006-010",
-    "legalName": "EPS",
-    "operatingName": "EPS",
+    "legalName": "Electrical Power Systems",
+    "operatingName": "Electrical Power Systems",
     "website": "",
     "portalLink": "https://fireflyaccountancy.sharepoint.com/sites/EPS",
     "industry": "Engineering services",
@@ -1396,7 +1488,7 @@
     "payrollReportsNeeded": "",
     "payrollAccountNumbers": "",
     "ownerName": "",
-    "ownerEmail": "",
+    "ownerEmail": "sana@epsfresno.com",
     "ownerPhone": "",
     "pointOfContact": "Abdur Rehman & Samir",
     "pocEmail": "abdur@epsfresno.com, samir@epsfresno.com",
@@ -1407,6 +1499,12 @@
     "financialsContact": "",
     "financialsEmail": "",
     "financialsPhone": "",
+    "ignitionClientSlug": "",
+    "activeProposalSlug": "",
+    "activeProposalName": "",
+    "activeProposalReference": "",
+    "activeProposalViewUrl": "",
+    "activeProposalPdfUrl": "",
     "createdAt": "2026-10-06T00:00:00.016000Z"
   }
 ]

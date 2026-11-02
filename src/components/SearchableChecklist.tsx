@@ -10,10 +10,17 @@ import {
 } from "react";
 import { formatMultiValue } from "@/lib/resource-clients";
 
+export type ChecklistOption = {
+  value: string;
+  label: string;
+  meta?: string;
+  keywords?: string;
+};
+
 type SearchableChecklistProps = {
   label: string;
   values: string[];
-  options: readonly string[];
+  options: readonly string[] | readonly ChecklistOption[];
   placeholder?: string;
   allowCreate?: boolean;
   /** When this option is selected, no other options can be selected. */
@@ -21,6 +28,16 @@ type SearchableChecklistProps = {
   onChange: (values: string[]) => void;
   onCreateOption?: (label: string) => void | Promise<void>;
 };
+
+function normalizeOptions(
+  options: readonly string[] | readonly ChecklistOption[],
+): ChecklistOption[] {
+  return options.map((option) =>
+    typeof option === "string"
+      ? { value: option, label: option }
+      : option,
+  );
+}
 
 function isSameOption(a: string, b: string) {
   return a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -41,9 +58,18 @@ export function SearchableChecklist({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
+  const normalized = useMemo(() => normalizeOptions(options), [options]);
+
   const displayText =
     values.length > 0
-      ? formatMultiValue(values)
+      ? formatMultiValue(
+          values.map((value) => {
+            const match = normalized.find((option) =>
+              isSameOption(option.value, value),
+            );
+            return match?.label ?? value;
+          }),
+        )
       : (placeholder ?? "Search/Select from the list");
 
   const exclusiveSelected = Boolean(
@@ -65,22 +91,27 @@ export function SearchableChecklist({
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    let next = options;
-    // When NIL (or other exclusive option) is selected, hide the remaining choices.
+    let next = normalized;
     if (exclusiveSelected && exclusiveOption) {
-      next = options.filter((option) =>
-        isSameOption(option, exclusiveOption),
+      next = normalized.filter((option) =>
+        isSameOption(option.value, exclusiveOption),
       );
     }
     if (!q) {
       return next;
     }
-    return next.filter((option) => option.toLowerCase().includes(q));
-  }, [options, query, exclusiveSelected, exclusiveOption]);
+    return next.filter((option) => {
+      const haystack =
+        `${option.label} ${option.value} ${option.keywords ?? ""}`.toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [normalized, query, exclusiveSelected, exclusiveOption]);
 
   const trimmedQuery = query.trim();
-  const exactExists = options.some(
-    (option) => option.trim().toLowerCase() === trimmedQuery.toLowerCase(),
+  const exactExists = normalized.some(
+    (option) =>
+      option.label.trim().toLowerCase() === trimmedQuery.toLowerCase() ||
+      option.value.trim().toLowerCase() === trimmedQuery.toLowerCase(),
   );
   const canCreate =
     allowCreate &&
@@ -89,14 +120,14 @@ export function SearchableChecklist({
     !creating &&
     !exclusiveSelected;
 
-  function toggleOption(option: string) {
-    if (values.some((value) => isSameOption(value, option))) {
-      onChange(values.filter((value) => !isSameOption(value, option)));
+  function toggleOption(optionValue: string) {
+    if (values.some((value) => isSameOption(value, optionValue))) {
+      onChange(values.filter((value) => !isSameOption(value, optionValue)));
       return;
     }
 
-    if (exclusiveOption && isSameOption(option, exclusiveOption)) {
-      onChange([option]);
+    if (exclusiveOption && isSameOption(optionValue, exclusiveOption)) {
+      onChange([optionValue]);
       return;
     }
 
@@ -104,7 +135,7 @@ export function SearchableChecklist({
       return;
     }
 
-    onChange([...values, option]);
+    onChange([...values, optionValue]);
   }
 
   function clearSelection(event: MouseEvent<HTMLButtonElement>) {
@@ -189,16 +220,24 @@ export function SearchableChecklist({
           <div className="checklist-box" role="group" aria-label={label}>
             {filtered.map((option) => {
               const checked = values.some((value) =>
-                isSameOption(value, option),
+                isSameOption(value, option.value),
               );
               return (
-                <label key={option} className="checklist-option">
+                <label key={option.value} className="checklist-option">
                   <input
                     type="checkbox"
                     checked={checked}
-                    onChange={() => toggleOption(option)}
+                    onChange={() => toggleOption(option.value)}
                   />
-                  <span>{option}</span>
+                  <span>
+                    {option.label}
+                    {option.meta ? (
+                      <span className="checklist-option-meta">
+                        {" "}
+                        ({option.meta})
+                      </span>
+                    ) : null}
+                  </span>
                 </label>
               );
             })}

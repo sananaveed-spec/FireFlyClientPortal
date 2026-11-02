@@ -16,8 +16,8 @@ import { useAccess } from "@/auth/accessContext";
 import { getAccountEmail } from "@/auth/organization";
 import {
   formatBusinessDayLabel,
-  getBd7DeadlineDate,
   getScheduleBusinessDate,
+  getUpcomingScheduleBusinessDate,
 } from "@/lib/business-days";
 import {
   CLIENT_MANAGEMENT_DEMO_MONTH_EVENT,
@@ -27,10 +27,14 @@ import {
 } from "@/lib/repeated-tasks";
 import {
   ASSIGNMENT_ROLE_LABELS,
-  getClientsAssignedToUser,
-  staffNameAliases,
+  getClientsForManagement,
   type AssignedClient,
 } from "@/lib/client-management";
+import {
+  formatStaffAssignmentLabel,
+  resolveStaffEmail,
+  userMatchKeys,
+} from "@/lib/staff-assign";
 import {
   BD1_TEMPLATE_OPTIONS,
   bd1TemplateToRequestTypeId,
@@ -41,7 +45,8 @@ import {
 } from "@/lib/client-profiles";
 import {
   addRequestBulletToList,
-  completeActionItem,
+  BD9_EXCEL_SOURCE_PREFIX,
+  BD13_LATE_SOURCE_PREFIX,
   createEmptyRequestListsStore,
   currentMonthKey,
   findListContainingActionItem,
@@ -52,6 +57,8 @@ import {
   reopenActionItem,
   requestItemsForMonth,
   setActionItemStatus,
+  syncBd9ExcelRowsToActionItems,
+  syncBd13LateItemsFromSources,
   updateRequestBulletLabel,
   upsertClientRequestList,
   type ActionWorkflowItem,
@@ -89,7 +96,7 @@ import {
 import {
   applyPeriodPlaceholder,
   createDefaultEmailTemplates,
-  formatCurrentPeriod,
+  emailTemplateLabelNumber,
   normalizeEmailTemplates,
   type EmailTemplate,
   type EmailTemplatesStore,
@@ -100,12 +107,18 @@ import {
   type HolidaysStore,
 } from "@/lib/holidays";
 import { portalFetch } from "@/lib/portal-api";
-import type { PortalUser } from "@/lib/portal-users";
+import { normalizeEmail, type PortalUser } from "@/lib/portal-users";
 import type { ResourceClientEntry } from "@/lib/resource-clients";
 import {
   sendGraphMail,
   type GraphMailAttachment,
 } from "@/lib/send-graph-mail";
+import {
+  formatBd8TotalAmount,
+  getBd8AttachmentSpreadsheetStats,
+  parseBd8AttachmentTable,
+  sumLateActionLabelAmounts,
+} from "@/lib/spreadsheet-row-count";
 import {
   CLIENT_TIME_ZONE_REQUIRED_MESSAGE,
   getClientNineAmSchedule,
@@ -405,6 +418,9 @@ const CLIENT_INFO_FIELDS: { key: string; label: string }[] = [
   { key: "portalLink", label: "Portal Link" },
 ];
 
+/** Fixed Owner CC on BD1/BD7/BD8 schedule emails (User Management / company owner). */
+const SCHEDULE_EMAIL_OWNER_CC = "ayesha@fireflyaccountancy.com";
+
 /** Sidebar order: BD1→…→BD18, then end-of-month by date (Last 3 → Last 2 → Last 1). */
 const CLIENT_SCHEDULE_ITEMS = [
   { id: "bd1", label: "BD1" },
@@ -413,12 +429,65 @@ const CLIENT_SCHEDULE_ITEMS = [
   { id: "bd8", label: "BD8" },
   { id: "bd9", label: "BD9" },
   { id: "bd10", label: "BD10" },
+  { id: "bd13", label: "BD13" },
   { id: "bd15", label: "BD15" },
   { id: "bd18", label: "BD18" },
   { id: "last-3-bd", label: "Last 3 BD" },
   { id: "last-2-bd", label: "Last 2 BD" },
   { id: "last-1-bd", label: "Last 1 BD" },
 ] as const;
+
+type ClientScheduleItem = (typeof CLIENT_SCHEDULE_ITEMS)[number];
+type ScheduleFamilyId = "documents" | "questions";
+
+/** BD1 chain = document request; BD8 chain = question list. */
+const SCHEDULE_FAMILY_BY_ID: Record<
+  string,
+  { family: ScheduleFamilyId; role: "main" | "followup" }
+> = {
+  bd1: { family: "documents", role: "main" },
+  bd5: { family: "documents", role: "followup" },
+  bd7: { family: "documents", role: "followup" },
+  bd8: { family: "questions", role: "main" },
+  bd9: { family: "questions", role: "followup" },
+  bd10: { family: "questions", role: "followup" },
+  bd13: { family: "questions", role: "followup" },
+};
+
+const SCHEDULE_FAMILY_META: Record<
+  ScheduleFamilyId,
+  { label: string; hint: string }
+> = {
+  documents: { label: "Document request", hint: "BD1 → BD5 / BD7" },
+  questions: { label: "Question list", hint: "BD8 → BD9 / BD10 / BD13" },
+};
+
+type ScheduleSidebarGroup = {
+  family: ScheduleFamilyId | null;
+  items: ClientScheduleItem[];
+};
+
+function groupScheduleItemsForSidebar(
+  items: readonly ClientScheduleItem[],
+): ScheduleSidebarGroup[] {
+  const groups: ScheduleSidebarGroup[] = [];
+  const familyGroupIndex = new Map<ScheduleFamilyId, number>();
+  for (const item of items) {
+    const family = SCHEDULE_FAMILY_BY_ID[item.id]?.family ?? null;
+    if (family == null) {
+      groups.push({ family: null, items: [item] });
+      continue;
+    }
+    const existingIndex = familyGroupIndex.get(family);
+    if (existingIndex != null) {
+      groups[existingIndex]?.items.push(item);
+      continue;
+    }
+    familyGroupIndex.set(family, groups.length);
+    groups.push({ family, items: [item] });
+  }
+  return groups;
+}
 
 const CLIENT_SCHEDULE_ORDER = new Map<string, number>(
   CLIENT_SCHEDULE_ITEMS.map((item, index) => [item.id, index]),
@@ -516,8 +585,10 @@ function requestTypeScheduleIds(subMenuId: Bd1SubMenuId): string[] {
     : ["bd1", "bd5"];
 }
 
-/** BD8 Question List + BD9/BD10 review share the same action items. */
-const BD8_QUESTION_SCHEDULE_IDS = ["bd8", "bd9", "bd10"] as const;
+/** BD9 Excel rows from BD8 attachment; BD10 uses Late from this list. */
+const BD9_EXCEL_SCHEDULE_IDS = ["bd9"] as const;
+/** BD13 local mirrors of BD10 late items (Completed/Late stay on BD13 only). */
+const BD13_LATE_SCHEDULE_IDS = ["bd13"] as const;
 
 function getActionItemsForSchedules(
   store: ClientRequestListsStore,
@@ -559,6 +630,56 @@ function getActionItemsForRequestType(
   );
 }
 
+/** BD5 Late items across both request types (what BD7 / BD9 BD7 Status Check list). */
+function getBd5LateActionItemsForMonth(
+  store: ClientRequestListsStore,
+  clientId: string,
+  monthKey: string,
+): ActionWorkflowItem[] {
+  const month = monthKey.trim();
+  if (!clientId.trim() || !month) {
+    return [];
+  }
+  const lateById = new Map<string, ActionWorkflowItem>();
+  for (const subMenu of BD1_SUB_MENUS) {
+    for (const item of getActionItemsForRequestType(
+      store,
+      clientId,
+      subMenu.id,
+    )) {
+      if (item.monthKey !== month || item.status !== "late") {
+        continue;
+      }
+      lateById.set(item.id, item);
+    }
+  }
+  return Array.from(lateById.values()).sort((a, b) => {
+    const aTime = Date.parse(a.completedAt) || 0;
+    const bTime = Date.parse(b.completedAt) || 0;
+    return bTime - aTime;
+  });
+}
+
+/** Merge Late lists for BD10 (BD7 Status Check + BD8 Excel Status Check). */
+function mergeLateActionItems(
+  ...groups: ReadonlyArray<ReadonlyArray<ActionWorkflowItem>>
+): ActionWorkflowItem[] {
+  const byId = new Map<string, ActionWorkflowItem>();
+  for (const group of groups) {
+    for (const item of group) {
+      if (item.status !== "late") {
+        continue;
+      }
+      byId.set(item.id, item);
+    }
+  }
+  return Array.from(byId.values()).sort((a, b) => {
+    const aTime = Date.parse(a.completedAt) || 0;
+    const bTime = Date.parse(b.completedAt) || 0;
+    return bTime - aTime;
+  });
+}
+
 function bd1EmailTemplateId(subMenuId: Bd1SubMenuId): string {
   return subMenuId === "other-statements" ? "template-2" : "template-1";
 }
@@ -569,6 +690,18 @@ function findEmailTemplateById(
 ): EmailTemplate | null {
   return (
     store.templates.find((template) => template.id === templateId) ?? null
+  );
+}
+
+/** Match by sidebar label number, e.g. 4 → "Template 4 (BD7)". */
+function findEmailTemplateByLabelNumber(
+  store: EmailTemplatesStore,
+  labelNumber: number,
+): EmailTemplate | null {
+  return (
+    store.templates.find(
+      (template) => emailTemplateLabelNumber(template) === labelNumber,
+    ) ?? null
   );
 }
 
@@ -718,11 +851,11 @@ function buildClientInfoRows(selected: AssignedClient) {
 
 export function ClientManagementPanel() {
   const { instance, accounts } = useMsal();
-  const { email, canEdit } = useAccess();
+  const { email, canEdit, role } = useAccess();
   const msalAccount = accounts[0] ?? null;
   const msalName = msalAccount?.name ?? "";
-  const emailFrom =
-    getAccountEmail(msalAccount) || email.trim().toLowerCase() || "";
+  const signedInEmail =
+    getAccountEmail(msalAccount) || normalizeEmail(email) || "";
 
   const [resources, setResources] = useState<ResourceClientEntry[]>([]);
   const [profiles, setProfiles] = useState<ClientProfileEntry[]>([]);
@@ -859,30 +992,44 @@ export function ClientManagementPanel() {
   const showBd5Content = selectedScheduleId === "bd5";
   const showBd7Content = selectedScheduleId === "bd7";
   const showBd8Content = selectedScheduleId === "bd8";
+  /** BD1 / BD7 / BD8: Schedule only (supervisor); Admin view-only. */
+  const scheduleOnlyEmailDay =
+    showBd1TypeContent || showBd7Content || showBd8Content;
   const showBd15Content = selectedScheduleId === "bd15";
   /** BD18 is the status check for BD15 books-closed email/files. */
   const showBd18Content = selectedScheduleId === "bd18";
   /** Last 3 / 2 / 1 BD: Template 18 team email only (portal users). */
   const showLastBdSchedule = isLastBdSchedule(selectedScheduleId);
   const showEndOfMonthEmailOnly = showLastBdSchedule;
-  /** BD9/BD10 review BD8 questions (Completed/Late) + reminder email. */
+  /** BD9/BD10 review BD8 questions (Completed/Late). Email is BD10 only. */
   const showBd9Content = selectedScheduleId === "bd9";
   const showBd10Content = selectedScheduleId === "bd10";
-  const showBd9LikeContent = showBd9Content || showBd10Content;
+  /** BD13: Template 5 — same late Question List Status as BD10 + Email. */
+  const showBd13Content = selectedScheduleId === "bd13";
+  const showBd10OrBd13Content = showBd10Content || showBd13Content;
+  /** BD1-style To/CC: POC + secondary/owner, readonly (also BD10/13/18). */
+  const bd1LikeEmailRecipients =
+    scheduleOnlyEmailDay ||
+    showBd10Content ||
+    showBd13Content ||
+    showBd18Content;
+  const showBd9LikeContent =
+    showBd9Content || showBd10Content || showBd13Content;
   const showReviewActionTable = showBd5Content || showBd9LikeContent;
-  /** BD1/BD8/BD15/BD18 share Request/Attachments + Email (no Action Items tab). */
+  /** BD1/BD8/BD15/BD18 share Request/Attachments + Email tabs. */
   const showBd1LikeRequestList =
     showBd1TypeContent ||
     showBd8Content ||
     showBd15Content ||
     showBd18Content;
-  /** BD15 and BD18 share the same Template 11 email + attachments. */
+  /** BD15/BD18 share Attachments + Email tabs; templates differ (11 vs 7). */
   const showBd15Email = showBd15Content || showBd18Content;
   const showBd1LikeWorkflow =
     showBd1TypeContent ||
     showBd7Content ||
     showBd8Content ||
-    showBd9LikeContent ||
+    showBd10Content ||
+    showBd13Content ||
     showBd15Email ||
     showEndOfMonthEmailOnly;
   const showRequestTypeChooser =
@@ -903,10 +1050,14 @@ export function ClientManagementPanel() {
     setSharePointCheckMessage(null);
   }, [selectedId, selectedScheduleId, workflowTab, requestTypeId]);
 
-  // Load saved BD8 Excel attachment for this client + current month.
+  // Load saved BD8 Excel attachment for BD8 (email) and BD9/BD10 (review rows).
   // Prior-month files are pruned server-side once when the month changes.
   useEffect(() => {
-    if (!selectedId || selectedScheduleId !== "bd8") {
+    const needsBd8Attachment =
+      selectedScheduleId === "bd8" ||
+      selectedScheduleId === "bd9" ||
+      selectedScheduleId === "bd10";
+    if (!selectedId || !needsBd8Attachment) {
       setQuestionListAttachment(null);
       if (questionListFileRef.current) {
         questionListFileRef.current.value = "";
@@ -918,7 +1069,7 @@ export function ClientManagementPanel() {
     void (async () => {
       try {
         const response = await portalFetch(
-          `/api/bd8-email-attachments?clientId=${encodeURIComponent(selectedId)}&monthKey=${encodeURIComponent(currentMonthKey(scheduleNow))}`,
+          `/api/bd8-email-attachments?clientId=${encodeURIComponent(selectedId)}&monthKey=${encodeURIComponent(currentMonthKey(scheduleNow))}&scheduleId=bd8`,
           { cache: "no-store" },
         );
         const data = (await response.json()) as {
@@ -1137,7 +1288,7 @@ export function ClientManagementPanel() {
     setRequestTypeId("bank-credit-card");
   }, [showRequestTypeChooser, selectedScheduleId]);
 
-  // BD5 is status-only (no tabs). BD9/BD10 have Question List Status + Email.
+  // BD5 / BD9 are status-only (no tabs). BD10/BD13 have Question List Status + Email.
   useEffect(() => {
     if (showBd5Content && workflowTab !== "action") {
       setWorkflowTab("action");
@@ -1145,14 +1296,20 @@ export function ClientManagementPanel() {
   }, [showBd5Content, workflowTab]);
 
   useEffect(() => {
+    if (showBd9Content && workflowTab !== "action") {
+      setWorkflowTab("action");
+    }
+  }, [showBd9Content, workflowTab]);
+
+  useEffect(() => {
     if (
-      showBd9LikeContent &&
+      showBd10OrBd13Content &&
       workflowTab !== "action" &&
       workflowTab !== "email"
     ) {
       setWorkflowTab("action");
     }
-  }, [showBd9LikeContent, workflowTab]);
+  }, [showBd10OrBd13Content, workflowTab]);
 
   const load = useCallback(async () => {
     setError(null);
@@ -1165,7 +1322,6 @@ export function ClientManagementPanel() {
         scheduleSettingsRes,
         holidaysRes,
         emailTemplatesRes,
-        signatureRes,
       ] = await Promise.all([
         fetch("/api/resource-clients", { cache: "no-store" }),
         fetch("/api/client-profiles", { cache: "no-store" }),
@@ -1174,7 +1330,6 @@ export function ClientManagementPanel() {
         fetch("/api/client-schedule-settings", { cache: "no-store" }),
         fetch("/api/holidays", { cache: "no-store" }),
         fetch("/api/email-templates", { cache: "no-store" }),
-        portalFetch("/api/email-signature", { cache: "no-store" }),
       ]);
       const resourcesData = (await resourcesRes.json()) as ResourcesResponse;
       const profilesData = (await profilesRes.json()) as ProfilesResponse;
@@ -1183,10 +1338,6 @@ export function ClientManagementPanel() {
       const scheduleSettingsData = await scheduleSettingsRes.json();
       const holidaysData = await holidaysRes.json();
       const emailTemplatesData = await emailTemplatesRes.json();
-      const signatureData = (await signatureRes.json()) as {
-        signature?: EmailSignature;
-        error?: string;
-      };
 
       if (!resourcesRes.ok) {
         throw new Error(
@@ -1229,11 +1380,6 @@ export function ClientManagementPanel() {
         emailTemplatesRes.ok
           ? normalizeEmailTemplates(emailTemplatesData)
           : createDefaultEmailTemplates(),
-      );
-      setEmailSignature(
-        signatureRes.ok
-          ? normalizeEmailSignature(signatureData.signature)
-          : createEmptyEmailSignature(),
       );
       setSelectedId((current) =>
         current && nextResources.some((entry) => entry.id === current)
@@ -1285,14 +1431,95 @@ export function ClientManagementPanel() {
   }, [scheduleMonthKeyForLists]);
 
   const aliases = useMemo(
-    () => staffNameAliases(portalName, msalName),
-    [portalName, msalName],
+    () => userMatchKeys(signedInEmail, portalName, msalName),
+    [signedInEmail, portalName, msalName],
   );
 
   const assignedClients = useMemo(
-    () => getClientsAssignedToUser(resources, profiles, aliases),
-    [resources, profiles, aliases],
+    () =>
+      getClientsForManagement(resources, profiles, aliases, {
+        seeAll: role === "admin",
+      }),
+    [resources, profiles, aliases, role],
   );
+
+  const selectedSupervisorEmail = useMemo(() => {
+    const selectedResource =
+      assignedClients.find((entry) => entry.resource.id === selectedId) ??
+      assignedClients[0] ??
+      null;
+    if (!selectedResource) {
+      return "";
+    }
+    return resolveStaffEmail(selectedResource.resource.supervisor, portalUsers);
+  }, [assignedClients, selectedId, portalUsers]);
+
+  const selectedSupervisorLabel = useMemo(() => {
+    const selectedResource =
+      assignedClients.find((entry) => entry.resource.id === selectedId) ??
+      assignedClients[0] ??
+      null;
+    if (!selectedResource) {
+      return "";
+    }
+    return (
+      formatStaffAssignmentLabel(
+        selectedResource.resource.supervisor,
+        portalUsers,
+      ) || selectedResource.resource.supervisor.trim()
+    );
+  }, [assignedClients, selectedId, portalUsers]);
+
+  /** Schedule email From = supervisor mailbox; only that account may send. */
+  const emailFrom = selectedSupervisorEmail;
+  const canSendAsSupervisor =
+    role !== "admin" &&
+    Boolean(selectedSupervisorEmail) &&
+    signedInEmail === selectedSupervisorEmail;
+  const emailSendBlockedReason = !selectedSupervisorEmail
+    ? "Assign a Supervisor (Primary) in Resource Management before sending."
+    : role === "admin"
+      ? `Admins can view schedules. Emails send only from the supervisor account (${selectedSupervisorLabel || selectedSupervisorEmail}).`
+      : signedInEmail !== selectedSupervisorEmail
+        ? `Only the supervisor can send. Sign in as ${selectedSupervisorLabel || selectedSupervisorEmail}.`
+        : null;
+
+  // Email body signature always follows the supervisor (From), not the viewer.
+  useEffect(() => {
+    let cancelled = false;
+    async function loadSupervisorSignature() {
+      if (!selectedSupervisorEmail) {
+        setEmailSignature(createEmptyEmailSignature());
+        return;
+      }
+      try {
+        const response = await portalFetch(
+          `/api/email-signature?email=${encodeURIComponent(selectedSupervisorEmail)}`,
+          { cache: "no-store" },
+        );
+        const data = (await response.json()) as {
+          signature?: EmailSignature;
+          error?: string;
+        };
+        if (cancelled) {
+          return;
+        }
+        if (!response.ok) {
+          setEmailSignature(createEmptyEmailSignature());
+          return;
+        }
+        setEmailSignature(normalizeEmailSignature(data.signature));
+      } catch {
+        if (!cancelled) {
+          setEmailSignature(createEmptyEmailSignature());
+        }
+      }
+    }
+    void loadSupervisorSignature();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSupervisorEmail]);
 
   useEffect(() => {
     if (assignedClients.length === 0) {
@@ -1319,7 +1546,28 @@ export function ClientManagementPanel() {
     "";
   const selectedPointOfContact =
     selected?.profile?.pointOfContact?.trim() || "";
+  const selectedPocEmail = selected?.profile?.pocEmail?.trim() || "";
+  /** Secondary assignees (Resource Management) resolved to User Management emails. */
+  const selectedSecondaryEmails = useMemo(() => {
+    if (!selected) {
+      return [] as string[];
+    }
+    const emails: string[] = [];
+    const seen = new Set<string>();
+    for (const entry of selected.resource.bookkeeperAccountant) {
+      const email = resolveStaffEmail(entry, portalUsers);
+      if (!email || seen.has(email)) {
+        continue;
+      }
+      seen.add(email);
+      emails.push(email);
+    }
+    return emails;
+  }, [selected, portalUsers]);
   const selectedPortalLink = selected?.profile?.portalLink?.trim() || "";
+  /** Greeting name for emails — first word of Client Profile POC. */
+  const selectedContactFirstName =
+    selectedPointOfContact.split(/\s+/)[0]?.trim() || "";
   const selectedBd1Template = normalizeBd1Template(
     selected?.profile?.bd1Template ?? "template-1",
   );
@@ -1340,14 +1588,14 @@ export function ClientManagementPanel() {
       const country = selected?.profile?.country;
       const state = selected?.profile?.state ?? "";
       return [...items].sort((a, b) => {
-        const dateA = getScheduleBusinessDate(
+        const dateA = getUpcomingScheduleBusinessDate(
           a.id,
           holidays,
           country,
           state,
           scheduleNow,
         );
-        const dateB = getScheduleBusinessDate(
+        const dateB = getUpcomingScheduleBusinessDate(
           b.id,
           holidays,
           country,
@@ -1430,27 +1678,19 @@ export function ClientManagementPanel() {
       (selectedScheduleId !== "bd1" &&
         selectedScheduleId !== "bd7" &&
         selectedScheduleId !== "bd8" &&
-        selectedScheduleId !== "bd9" &&
-        selectedScheduleId !== "bd10")
+        selectedScheduleId !== "bd10" &&
+        selectedScheduleId !== "bd13")
     ) {
       return "";
     }
-    // BD1 → BD4; BD7 → BD8 (or BD7 if weekend between); BD8/9/10 → same day.
-    const dueDate =
-      selectedScheduleId === "bd7"
-        ? getBd7DeadlineDate(
-            holidays,
-            selected?.profile?.country,
-            selected?.profile?.state ?? "",
-            scheduleNow,
-          )
-        : getScheduleBusinessDate(
-            selectedScheduleId === "bd1" ? "bd4" : selectedScheduleId,
-            holidays,
-            selected?.profile?.country,
-            selected?.profile?.state ?? "",
-            scheduleNow,
-          );
+    // BD1 → BD4; BD7 → same BD7 date; BD8/BD10/BD13 → same day.
+    const dueDate = getUpcomingScheduleBusinessDate(
+      selectedScheduleId === "bd1" ? "bd4" : selectedScheduleId,
+      holidays,
+      selected?.profile?.country,
+      selected?.profile?.state ?? "",
+      scheduleNow,
+    );
     if (!dueDate) {
       return "";
     }
@@ -1491,8 +1731,8 @@ export function ClientManagementPanel() {
       (selectedScheduleId !== "bd1" &&
         selectedScheduleId !== "bd7" &&
         selectedScheduleId !== "bd8" &&
-        selectedScheduleId !== "bd9" &&
         selectedScheduleId !== "bd10" &&
+        selectedScheduleId !== "bd13" &&
         selectedScheduleId !== "bd15" &&
         selectedScheduleId !== "bd18" &&
         !showLastBdSchedule)
@@ -1501,96 +1741,216 @@ export function ClientManagementPanel() {
     }
     const template = showLastBdSchedule
       ? findEmailTemplateById(emailTemplates, "template-18")
-      : selectedScheduleId === "bd15" || selectedScheduleId === "bd18"
+      : selectedScheduleId === "bd15"
         ? findEmailTemplateById(emailTemplates, "template-11")
-        : selectedScheduleId === "bd10"
-          ? findEmailTemplateById(emailTemplates, "template-7")
-          : selectedScheduleId === "bd9"
-            ? findEmailTemplateById(emailTemplates, "template-8")
-            : selectedScheduleId === "bd8"
-              ? findEmailTemplateById(emailTemplates, "template-3")
-              : findBd1EmailTemplate(emailTemplates, requestTypeId);
+        : selectedScheduleId === "bd18"
+          ? // Sidebar label "Template 7".
+            findEmailTemplateByLabelNumber(emailTemplates, 7)
+          : selectedScheduleId === "bd13"
+            ? // Sidebar label "Template 5 (BD13)" (id may not be template-5).
+              findEmailTemplateByLabelNumber(emailTemplates, 5)
+            : selectedScheduleId === "bd10"
+              ? // Sidebar label "Template 6 (BD10)".
+                findEmailTemplateByLabelNumber(emailTemplates, 6)
+              : selectedScheduleId === "bd8"
+                ? findEmailTemplateByLabelNumber(emailTemplates, 4)
+                : selectedScheduleId === "bd7"
+                  ? findEmailTemplateByLabelNumber(emailTemplates, 3)
+                  : findBd1EmailTemplate(emailTemplates, requestTypeId);
     const clientName =
       selectedOperatingName.replace(/[.:]+$/g, "").trim() ||
       selectedOperatingName.trim() ||
       "[Client Name]";
-    const contactName = selectedPointOfContact || "[Contact First Name]";
+    const contactName =
+      selectedContactFirstName ||
+      selectedPointOfContact ||
+      "[Contact First Name]";
     const portalLink = selectedPortalLink || "[Portal Link]";
-    const periodDate = scheduleNow;
-    const period = formatCurrentPeriod(periodDate);
-    const periodPortalHref = resolvePortalHref(portalLink, periodDate);
-    const nextMonthAnchor = new Date(
-      scheduleNow.getFullYear(),
-      scheduleNow.getMonth() + 1,
-      15,
+    // [Period] = scheduled BD month − 1 (e.g. BD1 on 2 Nov → "October").
+    const scheduleBdDate =
+      getUpcomingScheduleBusinessDate(
+        selectedScheduleId,
+        holidays,
+        selected?.profile?.country,
+        selected?.profile?.state ?? "",
+        scheduleNow,
+      ) ?? scheduleNow;
+    const periodDate = new Date(
+      scheduleBdDate.getFullYear(),
+      scheduleBdDate.getMonth() - 1,
+      1,
     );
-    const nextBd1Date = getScheduleBusinessDate(
+    const periodPortalHref = resolvePortalHref(portalLink, periodDate);
+    const bd1ForPeriod = getScheduleBusinessDate(
       "bd1",
       holidays,
       selected?.profile?.country,
       selected?.profile?.state ?? "",
-      nextMonthAnchor,
+      scheduleBdDate,
     );
-    const bd1DateLabel = nextBd1Date
-      ? formatBusinessDayLabel(nextBd1Date)
+    const bd1DateLabel = bd1ForPeriod
+      ? formatBusinessDayLabel(bd1ForPeriod)
       : "[BD1 Date]";
     const dueDate = emailDeadlineLabel;
     const emailMonthKey = currentMonthKey(periodDate);
-    const typeActionItems = getActionItemsForRequestType(
+    const workingMonthKey = currentMonthKey(scheduleNow);
+    const typeActionItemsForMonth = (monthKey: string) =>
+      getActionItemsForRequestType(
+        requestLists,
+        selectedClientId,
+        requestTypeId,
+      ).filter((item) => item.monthKey === monthKey);
+    // Prefer period month; fall back to calendar/demo month (where BD5 Late lives).
+    const typeActionItemsPeriod = typeActionItemsForMonth(emailMonthKey);
+    const typeActionItemsWorking = typeActionItemsForMonth(workingMonthKey);
+    const typeActionItems =
+      typeActionItemsPeriod.length > 0
+        ? typeActionItemsPeriod
+        : typeActionItemsWorking;
+    const bd9ExcelEmailItemsRaw = getActionItemsForSchedules(
       requestLists,
       selectedClientId,
-      requestTypeId,
-    ).filter((item) => item.monthKey === emailMonthKey);
-    const bd8QuestionActionItems = getActionItemsForSchedules(
+      BD9_EXCEL_SCHEDULE_IDS,
+    );
+    const bd9ExcelEmailItemsPeriod = bd9ExcelEmailItemsRaw.filter(
+      (item) => item.monthKey === emailMonthKey,
+    );
+    const bd9ExcelEmailItemsWorking = bd9ExcelEmailItemsRaw.filter(
+      (item) => item.monthKey === workingMonthKey,
+    );
+    const bd9ExcelEmailItems =
+      bd9ExcelEmailItemsPeriod.length > 0
+        ? bd9ExcelEmailItemsPeriod
+        : bd9ExcelEmailItemsWorking;
+    const bd9Bd7LateEmailPeriod = getBd5LateActionItemsForMonth(
       requestLists,
       selectedClientId,
-      BD8_QUESTION_SCHEDULE_IDS,
-    ).filter((item) => item.monthKey === emailMonthKey);
+      emailMonthKey,
+    );
+    const bd9Bd7LateEmailWorking = getBd5LateActionItemsForMonth(
+      requestLists,
+      selectedClientId,
+      workingMonthKey,
+    );
+    const bd9Bd7LateEmailItems =
+      bd9Bd7LateEmailPeriod.length > 0
+        ? bd9Bd7LateEmailPeriod
+        : bd9Bd7LateEmailWorking;
+    const bd13LateEmailItemsRaw = getActionItemsForSchedules(
+      requestLists,
+      selectedClientId,
+      BD13_LATE_SCHEDULE_IDS,
+    ).filter(
+      (item) =>
+        item.status === "late" &&
+        item.sourceRequestId.startsWith(BD13_LATE_SOURCE_PREFIX),
+    );
+    const bd13LateEmailItemsPeriod = bd13LateEmailItemsRaw.filter(
+      (item) => item.monthKey === emailMonthKey,
+    );
+    const bd13LateEmailItemsWorking = bd13LateEmailItemsRaw.filter(
+      (item) => item.monthKey === workingMonthKey,
+    );
+    const bd13LateEmailItems =
+      bd13LateEmailItemsPeriod.length > 0
+        ? bd13LateEmailItemsPeriod
+        : bd13LateEmailItemsWorking;
     const requestListScheduleId =
       selectedScheduleId === "bd8"
         ? "bd8"
         : requestTypeScheduleId("bd1", requestTypeId);
-    const requestListItems = requestItemsForMonth(
-      getClientRequestList(
-        requestLists,
-        selectedClientId,
-        requestListScheduleId,
-      ).requestItems,
+    const allRequestListItems = getClientRequestList(
+      requestLists,
+      selectedClientId,
+      requestListScheduleId,
+    ).requestItems;
+    // Prefer period-month bullets; fall back to working month, then any
+    // bullets on this Request List Template (inline in the body — never attached).
+    const periodRequestItems = requestItemsForMonth(
+      allRequestListItems,
       emailMonthKey,
     );
+    const workingRequestItems = requestItemsForMonth(
+      allRequestListItems,
+      workingMonthKey,
+    );
+    const requestListItems =
+      periodRequestItems.length > 0
+        ? periodRequestItems
+        : workingRequestItems.length > 0
+          ? workingRequestItems
+          : allRequestListItems.filter((item) => item.label.trim());
     // BD1/BD8 email uses Request List Template bullets directly.
-    // BD7 email still uses items marked Late on BD5.
-    // BD9 reminder uses open + late BD8 questions; BD10 uses only Late from BD9.
+    // BD7 email uses Late Action Items (BD5 Late for the request type).
+    // BD10 uses all Late items from BD9 (BD7 Status Check + BD8 Excel).
+    // BD13 uses BD13-local late mirrors (Complete on BD13 does not clear BD10).
     const emailListItems =
       selectedScheduleId === "bd7"
         ? typeActionItems.filter((item) => item.status === "late")
         : selectedScheduleId === "bd10"
-          ? bd8QuestionActionItems.filter((item) => item.status === "late")
-          : selectedScheduleId === "bd9"
-            ? bd8QuestionActionItems.filter(
-                (item) =>
-                  item.status === "action" || item.status === "late",
-              )
+          ? mergeLateActionItems(
+              bd9Bd7LateEmailItems,
+              bd9ExcelEmailItems.filter((item) => item.status === "late"),
+            )
+          : selectedScheduleId === "bd13"
+            ? bd13LateEmailItems
             : requestListItems;
     const bankListPlaceholder =
       "• [List of bank and credit card accounts, with last 4 digits]";
     const otherListPlaceholder =
       "• [List of loan, line of credit, lease, investment or other accounts]";
     const outstandingListPlaceholder = "• [List of outstanding items only]";
+    const lateActionItemsPlaceholder = "• [Late Action Items]";
+    const requestListItemsPlaceholder = "• [Request List Items]";
+    const toBulletList = (items: { label: string }[]) =>
+      items
+        .map((item) => item.label.trim())
+        .filter(Boolean)
+        .map((label) => `• ${label}`)
+        .join("\n");
     const actionListText =
       emailListItems.length > 0
-        ? emailListItems.map((item) => `• ${item.label}`).join("\n")
-        : selectedScheduleId === "bd9" || selectedScheduleId === "bd10"
-          ? outstandingListPlaceholder
-          : requestTypeId === "other-statements"
-            ? otherListPlaceholder
-            : bankListPlaceholder;
-    const openQuestionCount = emailListItems.length;
+        ? toBulletList(emailListItems)
+        : selectedScheduleId === "bd7"
+          ? lateActionItemsPlaceholder
+          : selectedScheduleId === "bd9" || selectedScheduleId === "bd10"
+            ? outstandingListPlaceholder
+            : selectedScheduleId === "bd1" || selectedScheduleId === "bd8"
+              ? requestListItemsPlaceholder
+              : requestTypeId === "other-statements"
+                ? otherListPlaceholder
+                : bankListPlaceholder;
+    // BD8: [Number] = filled Excel/CSV rows − 1; [Total Amount] = sum(Amount).
+    // BD13: [Total Amount] = sum of Amount values on Late items.
+    const bd8SheetStats =
+      selectedScheduleId === "bd8" && questionListAttachment
+        ? getBd8AttachmentSpreadsheetStats(
+            questionListAttachment.name,
+            questionListAttachment.contentType,
+            questionListAttachment.contentBytes,
+          )
+        : null;
+    const bd13LateTotalAmount =
+      selectedScheduleId === "bd13"
+        ? sumLateActionLabelAmounts(emailListItems)
+        : null;
+    const openQuestionCount =
+      selectedScheduleId === "bd8"
+        ? (bd8SheetStats?.dataRowCount ?? 0)
+        : emailListItems.length;
     const questionCount =
       openQuestionCount > 0 ? String(openQuestionCount) : "[Number]";
+    const totalAmountLabel =
+      selectedScheduleId === "bd8" &&
+      bd8SheetStats &&
+      bd8SheetStats.totalAmount != null
+        ? formatBd8TotalAmount(bd8SheetStats.totalAmount)
+        : selectedScheduleId === "bd13" && bd13LateTotalAmount != null
+          ? formatBd8TotalAmount(bd13LateTotalAmount)
+          : "[Total Amount]";
     const questionListText =
       emailListItems.length > 0
-        ? emailListItems.map((item) => `• ${item.label}`).join("\n")
+        ? toBulletList(emailListItems)
         : "• [Question List]";
 
     function fillPlaceholders(text: string) {
@@ -1598,6 +1958,7 @@ export function ClientManagementPanel() {
         applyPortalLinkPlaceholders(
           text
             .replace(/\[Client Name\]/gi, clientName)
+            .replace(/\[Client\]/gi, clientName)
             .replace(/\[Contact First Name\]/gi, contactName)
             .replace(/\[Due Date\]/gi, dueDate)
             .replace(/\[Deadline\]/gi, dueDate)
@@ -1607,7 +1968,24 @@ export function ClientManagementPanel() {
               lastBdLabel(selectedScheduleId),
             )
             .replace(/\[Number\]/gi, questionCount)
+            .replace(/\[Total Amount\]/gi, totalAmountLabel)
+            .replace(
+              /(?:•\t*\s*)?\[Question List Items\]/gi,
+              questionListText,
+            )
             .replace(/(?:•\s*)?\[Question List\]/gi, questionListText)
+            .replace(
+              /(?:•\t*\s*)?\[Request List Items\]/gi,
+              actionListText,
+            )
+            .replace(
+              /(?:•\t*\s*)?\[Late Action Items\]/gi,
+              actionListText,
+            )
+            .replace(
+              /(?:•\t*\s*)?\[Outstanding items\]/gi,
+              actionListText,
+            )
             .replace(
               /(?:•\s*)?\[List of statements and reports for this client\]/gi,
               actionListText,
@@ -1635,12 +2013,50 @@ export function ClientManagementPanel() {
     let body = fillPlaceholders(
       stripLegacySignatureClosing(template?.body ?? "").trimEnd(),
     );
-    // BD8/BD9/BD10: ensure the question list bullets appear in the email body
-    // (same idea as Template 7's outstanding-items list on BD10).
+    // BD1: Request List Template items must appear as body bullets (never as
+    // an attachment / leftover [Request List Items] chip).
+    if (
+      selectedScheduleId === "bd1" &&
+      emailListItems.length > 0 &&
+      (!emailListItems.every((item) => body.includes(item.label)) ||
+        /\[Request List Items\]/i.test(body) ||
+        /\[List of bank and credit card accounts/i.test(body) ||
+        /\[List of loan, line of credit/i.test(body))
+    ) {
+      const withList = body
+        .replace(/(?:•\t*\s*)?\[Request List Items\]/gi, actionListText)
+        .replace(
+          /(?:•\t*\s*)?\[List of bank and credit card accounts, with last 4 digits\]/gi,
+          actionListText,
+        )
+        .replace(
+          /(?:•\t*\s*)?\[List of loan, line of credit, lease, investment or other accounts\]/gi,
+          actionListText,
+        );
+      if (
+        withList !== body &&
+        emailListItems.every((item) => withList.includes(item.label))
+      ) {
+        body = withList;
+      } else if (
+        !emailListItems.every((item) => body.includes(item.label))
+      ) {
+        body = body.replace(
+          /(need the statements(?: for the accounts)? below:|statements below for \[Period\] so we can reconcile[^\n]*:)\s*/i,
+          `$1\n${actionListText}\n\n`,
+        );
+        if (!emailListItems.every((item) => body.includes(item.label))) {
+          body = `${body.trimEnd()}\n\n${actionListText}`;
+        }
+      } else {
+        body = withList;
+      }
+    }
+    // BD8/BD10/BD13: ensure the question list bullets appear in the email body.
     const isQuestionEmailDay =
       selectedScheduleId === "bd8" ||
-      selectedScheduleId === "bd9" ||
-      selectedScheduleId === "bd10";
+      selectedScheduleId === "bd10" ||
+      selectedScheduleId === "bd13";
     if (
       isQuestionEmailDay &&
       emailListItems.length > 0 &&
@@ -1659,6 +2075,10 @@ export function ClientManagementPanel() {
           /(?:•\s*)?\[List of outstanding items only\]/i,
           questionListText,
         )
+        .replace(
+          /(?:•\t*\s*)?\[Question List Items\]/i,
+          questionListText,
+        )
         .replace(/(?:•\s*)?\[Question List\]/i, questionListText);
       if (withList !== body) {
         body = withList;
@@ -1666,31 +2086,11 @@ export function ClientManagementPanel() {
         body = `${body.trimEnd()}\n\n${questionListText}`;
       }
     }
-    const lastBdLabelText = lastBdLabel(selectedScheduleId);
-    const highlights = [
-      clientName,
-      contactName,
-      period,
-      dueDate,
-      bd1DateLabel !== "[BD1 Date]" ? bd1DateLabel : "",
-      lastBdLabelText !== "[Last BD Label]" ? lastBdLabelText : "",
-      questionCount !== "[Number]" ? questionCount : "",
-      ...emailListItems.map((item) => item.label),
-    ].filter(
-      (value) =>
-        value &&
-        value !== "[Client Name]" &&
-        value !== "[Contact First Name]" &&
-        value !== "[Due Date]" &&
-        value !== "[Deadline]" &&
-        value !== "[Portal Link]" &&
-        value !== "[Number]",
-    );
-
     setEmailSubject(subject);
     setEmailBody(body);
     setEmailPortalHref(periodPortalHref);
-    setEmailAutofillHighlights(highlights);
+    // Do not bold auto-filled placeholders in preview or outbound mail.
+    setEmailAutofillHighlights([]);
   }, [
     selectedClientId,
     selectedScheduleId,
@@ -1698,6 +2098,7 @@ export function ClientManagementPanel() {
     requestTypeId,
     selectedOperatingName,
     selectedPointOfContact,
+    selectedContactFirstName,
     selectedPortalLink,
     emailDeadlineLabel,
     requestLists,
@@ -1706,6 +2107,7 @@ export function ClientManagementPanel() {
     holidays,
     selected?.profile?.country,
     selected?.profile?.state,
+    questionListAttachment,
   ]);
 
   useEffect(() => {
@@ -1714,16 +2116,16 @@ export function ClientManagementPanel() {
       (selectedScheduleId !== "bd1" &&
         selectedScheduleId !== "bd7" &&
         selectedScheduleId !== "bd8" &&
-        selectedScheduleId !== "bd9" &&
         selectedScheduleId !== "bd10" &&
+        selectedScheduleId !== "bd13" &&
         selectedScheduleId !== "bd15" &&
         selectedScheduleId !== "bd18" &&
         !showLastBdSchedule)
     ) {
       return;
     }
-    // Leave To empty on load; From always follows the signed-in account.
-    // Last N BD team reminder: To = sender, BCC = all portal users.
+    // From is the supervisor mailbox. BD1 To = client POC email (schedule only).
+    // Last N BD team reminder: To = supervisor, BCC = all portal users.
     if (showLastBdSchedule) {
       const teamEmails = portalUsers
         .map((user) => user.email.trim().toLowerCase())
@@ -1733,6 +2135,25 @@ export function ClientManagementPanel() {
       setEmailTo(sender || teamEmails[0] || "");
       setEmailCc("");
       setEmailBcc(bccList.join(", "));
+    } else if (
+      showBd1TypeContent ||
+      showBd7Content ||
+      showBd8Content ||
+      showBd10Content ||
+      showBd13Content ||
+      showBd18Content
+    ) {
+      setEmailTo(selectedPocEmail);
+      const toEmail = selectedPocEmail.trim().toLowerCase();
+      const fromEmail = emailFrom.trim().toLowerCase();
+      const ccEmails = [...selectedSecondaryEmails, SCHEDULE_EMAIL_OWNER_CC]
+        .map((email) => email.trim().toLowerCase())
+        .filter(
+          (email) =>
+            Boolean(email) && email !== toEmail && email !== fromEmail,
+        );
+      setEmailCc([...new Set(ccEmails)].join(", "));
+      setEmailBcc("");
     } else {
       setEmailTo("");
       setEmailCc("");
@@ -1746,9 +2167,17 @@ export function ClientManagementPanel() {
     selectedClientId,
     selectedScheduleId,
     showLastBdSchedule,
+    showBd1TypeContent,
+    showBd7Content,
+    showBd8Content,
+    showBd10Content,
+    showBd13Content,
+    showBd18Content,
     requestTypeId,
     portalUsers,
     emailFrom,
+    selectedPocEmail,
+    selectedSecondaryEmails,
   ]);
 
   const selectedSchedule =
@@ -1759,7 +2188,7 @@ export function ClientManagementPanel() {
     if (!selected) {
       return null;
     }
-    return getScheduleBusinessDate(
+    return getUpcomingScheduleBusinessDate(
       selectedScheduleId,
       holidays,
       selected.profile?.country,
@@ -1768,7 +2197,7 @@ export function ClientManagementPanel() {
     );
   }, [selected, selectedScheduleId, holidays, scheduleNow]);
 
-  // BD date at 9am client TZ → Pakistan (default; editable override in state).
+  // BD date at 9am client TZ → Pakistan (read-only; fixed from BD schedule).
   const clientTimeZoneMissing = !selected?.profile?.timeZone?.trim();
   const clientTimeZoneInvalid =
     !clientTimeZoneMissing &&
@@ -1787,6 +2216,7 @@ export function ClientManagementPanel() {
     [selectedScheduleBusinessDate, selected?.profile?.timeZone],
   );
   const emailSendAtClientLabel = defaultEmailSendSchedule?.clientLabel ?? "";
+  const emailSendAtPakistanLabel = defaultEmailSendSchedule?.userLabel ?? "";
   const effectiveEmailSendAt =
     emailSendAt || defaultEmailSendSchedule?.userDateTimeLocal || "";
 
@@ -1798,7 +2228,7 @@ export function ClientManagementPanel() {
     const country = selected.profile?.country;
     const state = selected.profile?.state ?? "";
     for (const item of CLIENT_SCHEDULE_ITEMS) {
-      const date = getScheduleBusinessDate(
+      const date = getUpcomingScheduleBusinessDate(
         item.id,
         holidays,
         country,
@@ -1836,32 +2266,169 @@ export function ClientManagementPanel() {
   const sharedActionItems = selected
     ? getClientActionItems(requestLists, selected.resource.id)
     : [];
-  const questionScheduleActionItems =
+  const bd9ExcelActionItems =
     showBd9LikeContent && selected
       ? getActionItemsForSchedules(
           requestLists,
           selected.resource.id,
-          BD8_QUESTION_SCHEDULE_IDS,
+          BD9_EXCEL_SCHEDULE_IDS,
         )
       : [];
+  const bd9ExcelTable = useMemo(() => {
+    if (
+      !showBd9LikeContent ||
+      !questionListAttachment?.contentBytes ||
+      !questionListAttachment.name
+    ) {
+      return null;
+    }
+    return parseBd8AttachmentTable(
+      questionListAttachment.name,
+      questionListAttachment.contentType,
+      questionListAttachment.contentBytes,
+    );
+  }, [showBd9LikeContent, questionListAttachment]);
   const monthScopedActionItems = (
     items: ActionWorkflowItem[],
   ): ActionWorkflowItem[] =>
     items.filter((item) => item.monthKey === scheduleMonthKey);
-  const scopedActionItems = monthScopedActionItems(
-    showBd10Content
-      ? // BD10 only surfaces items marked Late on BD9 (not Completed).
-        questionScheduleActionItems.filter((item) => item.status === "late")
-      : showBd9Content
-        ? questionScheduleActionItems
-        : showRequestTypeChooser && selected
-          ? getActionItemsForRequestType(
-              requestLists,
-              selected.resource.id,
-              requestTypeId,
-            )
-          : sharedActionItems,
+  /** BD9 BD7 Status Check (+ BD10/BD13 upstream): BD5 Late items for the month. */
+  const bd9Bd7StatusLateItems = useMemo(() => {
+    if ((!showBd9Content && !showBd10OrBd13Content) || !selected) {
+      return [];
+    }
+    return getBd5LateActionItemsForMonth(
+      requestLists,
+      selected.resource.id,
+      scheduleMonthKey,
+    );
+  }, [
+    showBd9Content,
+    showBd10OrBd13Content,
+    selected,
+    requestLists,
+    scheduleMonthKey,
+  ]);
+  /** Upstream late rows that BD10 shows (and BD13 mirrors locally). */
+  const bd10UpstreamLateItems = useMemo(
+    () =>
+      mergeLateActionItems(
+        bd9Bd7StatusLateItems,
+        monthScopedActionItems(
+          bd9ExcelActionItems.filter((item) => item.status === "late"),
+        ),
+      ),
+    [
+      bd9Bd7StatusLateItems,
+      bd9ExcelActionItems,
+      scheduleMonthKey,
+    ],
   );
+  const bd13LocalActionItems =
+    showBd13Content && selected
+      ? getActionItemsForSchedules(
+          requestLists,
+          selected.resource.id,
+          BD13_LATE_SCHEDULE_IDS,
+        )
+      : [];
+  const scopedActionItems = monthScopedActionItems(
+    showBd13Content
+      ? // BD13 uses local mirrors only — Complete/Late do not change BD9/BD10.
+        bd13LocalActionItems.filter((item) =>
+          item.sourceRequestId.startsWith(BD13_LATE_SOURCE_PREFIX),
+        )
+      : showBd10Content
+        ? bd10UpstreamLateItems
+        : showBd9Content
+          ? bd9ExcelActionItems.filter((item) =>
+              item.sourceRequestId.startsWith(BD9_EXCEL_SOURCE_PREFIX),
+            )
+          : showRequestTypeChooser && selected
+            ? getActionItemsForRequestType(
+                requestLists,
+                selected.resource.id,
+                requestTypeId,
+              )
+            : sharedActionItems,
+  );
+
+  // Sync BD8 Excel rows onto the BD9 action list for Completed/Late review.
+  useEffect(() => {
+    if (
+      !showBd9Content ||
+      !selected ||
+      !questionListAttachment ||
+      !bd9ExcelTable
+    ) {
+      return;
+    }
+    const list = getClientRequestList(
+      requestLists,
+      selected.resource.id,
+      "bd9",
+    );
+    const synced = syncBd9ExcelRowsToActionItems(
+      list,
+      bd9ExcelTable.rows,
+      scheduleMonthKey,
+    );
+    if (synced === list) {
+      return;
+    }
+    const before = JSON.stringify(list.actionItems);
+    const after = JSON.stringify(synced.actionItems);
+    if (before === after) {
+      return;
+    }
+    void persistList(synced);
+    // persistList is stable enough for this sync; avoid re-running on identity churn.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
+  }, [
+    showBd9Content,
+    selected?.resource.id,
+    questionListAttachment,
+    bd9ExcelTable,
+    scheduleMonthKey,
+    requestLists,
+  ]);
+
+  // Mirror BD10 late items onto BD13 so Complete/Late stay local to BD13.
+  useEffect(() => {
+    if (!showBd13Content || !selected) {
+      return;
+    }
+    const list = getClientRequestList(
+      requestLists,
+      selected.resource.id,
+      "bd13",
+    );
+    const synced = syncBd13LateItemsFromSources(
+      list,
+      bd10UpstreamLateItems.map((item) => ({
+        id: item.id,
+        label: item.label,
+        completedAt: item.completedAt,
+      })),
+      scheduleMonthKey,
+    );
+    if (synced === list) {
+      return;
+    }
+    const before = JSON.stringify(list.actionItems);
+    const after = JSON.stringify(synced.actionItems);
+    if (before === after) {
+      return;
+    }
+    void persistList(synced);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
+  }, [
+    showBd13Content,
+    selected?.resource.id,
+    bd10UpstreamLateItems,
+    scheduleMonthKey,
+    requestLists,
+  ]);
   const actionItems = scopedActionItems.filter(
     (item) => item.status === "action",
   );
@@ -1887,6 +2454,18 @@ export function ClientManagementPanel() {
           return bTime - aTime;
         });
     }
+    // BD13: keep Late and Completed visible after marking Complete.
+    if (showBd13Content) {
+      const late = scopedActionItems.filter((item) => item.status === "late");
+      const completed = scopedActionItems
+        .filter((item) => item.status === "completed")
+        .sort((a, b) => {
+          const aTime = Date.parse(a.completedAt) || 0;
+          const bTime = Date.parse(b.completedAt) || 0;
+          return bTime - aTime;
+        });
+      return [...late, ...completed];
+    }
     const open = scopedActionItems.filter((item) => item.status === "action");
     const resolved = scopedActionItems
       .filter((item) => item.status === "completed" || item.status === "late")
@@ -1896,12 +2475,46 @@ export function ClientManagementPanel() {
         return bTime - aTime;
       });
     return [...open, ...resolved];
-  }, [scopedActionItems, showBd10Content]);
-
+  }, [scopedActionItems, showBd10Content, showBd13Content]);
   const bd7EmailDisabled =
     showBd7Content && bd7LateItems.length === 0;
+  const bd8EmailDisabled =
+    showBd8Content && !questionListAttachment;
   const bd10EmailDisabled =
     showBd10Content && bd5ActionTableItems.length === 0;
+  const bd13EmailDisabled =
+    showBd13Content &&
+    !scopedActionItems.some((item) => item.status === "late");
+  const bd10LateStatusHint = useMemo(() => {
+    if (showBd13Content) {
+      return "BD10 Late appear here. Completed on BD13 stays on BD13 only.";
+    }
+    if (!showBd10Content) {
+      return "";
+    }
+    const hasBd7Late = bd9Bd7StatusLateItems.length > 0;
+    const hasBd8Late = monthScopedActionItems(bd9ExcelActionItems).some(
+      (item) =>
+        item.status === "late" &&
+        item.sourceRequestId.startsWith(BD9_EXCEL_SOURCE_PREFIX),
+    );
+    if (!hasBd7Late && !hasBd8Late) {
+      return "No late status found for BD7 and BD8.";
+    }
+    if (hasBd7Late && hasBd8Late) {
+      return "BD7 and BD8 late status automatically appear here.";
+    }
+    if (hasBd7Late) {
+      return "BD7 late status automatically appears here. No late status found for BD8.";
+    }
+    return "BD8 late status automatically appears here. No late status found for BD7.";
+  }, [
+    showBd13Content,
+    showBd10Content,
+    bd9Bd7StatusLateItems,
+    bd9ExcelActionItems,
+    scheduleMonthKey,
+  ]);
   const bd15MissingReports = useMemo(
     () =>
       showBd15Content || showBd18Content
@@ -1919,7 +2532,9 @@ export function ClientManagementPanel() {
   /** Tab stays available after send so the email can still be viewed. */
   const reminderEmailTabDisabled =
     bd7EmailDisabled ||
+    bd8EmailDisabled ||
     bd10EmailDisabled ||
+    bd13EmailDisabled ||
     (showBd15Email &&
       !bd15EmailStatus.emailSent &&
       bd15MissingReports.length > 0);
@@ -1930,11 +2545,15 @@ export function ClientManagementPanel() {
     ? `Email sent on ${formatActionResolvedAt(bd15EmailStatus.emailSentAt) || "—"}`
     : bd7EmailDisabled
       ? "No late action items for BD5 found."
-      : bd10EmailDisabled
-        ? "No late BD9 questions found."
-        : bd15ReportsMissingForSend
-          ? `These files are missing: ${bd15MissingReports.join(", ")}`
-          : undefined;
+      : bd8EmailDisabled
+        ? "Add one Excel/CSV attachment on Question List Template before scheduling."
+        : bd10EmailDisabled
+          ? "No late BD9 items found."
+          : bd13EmailDisabled
+            ? "No late BD10 question list items found."
+            : bd15ReportsMissingForSend
+              ? `These files are missing: ${bd15MissingReports.join(", ")}`
+              : undefined;
 
   useEffect(() => {
     if (reminderEmailTabDisabled && workflowTab === "email") {
@@ -2129,6 +2748,7 @@ export function ClientManagementPanel() {
         body: JSON.stringify({
           clientId: selected.resource.id,
           monthKey: currentMonthKey(scheduleNow),
+          scheduleId: "bd8",
           ...attachment,
         }),
       });
@@ -2152,6 +2772,40 @@ export function ClientManagementPanel() {
       );
       setQuestionListAttachment(null);
       event.target.value = "";
+    } finally {
+      setUploadingQuestionList(false);
+      event.target.value = "";
+    }
+  }
+
+  async function handleClearQuestionListAttachment() {
+    if (!selected) {
+      return;
+    }
+    if (!requireActiveSchedule("clear the Excel attachment")) {
+      return;
+    }
+    setUploadingQuestionList(true);
+    setError(null);
+    try {
+      const response = await portalFetch(
+        `/api/bd8-email-attachments?clientId=${encodeURIComponent(selected.resource.id)}&monthKey=${encodeURIComponent(currentMonthKey(scheduleNow))}&scheduleId=bd8`,
+        { method: "DELETE" },
+      );
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to clear Excel attachment.");
+      }
+      setQuestionListAttachment(null);
+      if (questionListFileRef.current) {
+        questionListFileRef.current.value = "";
+      }
+    } catch (clearError) {
+      setError(
+        clearError instanceof Error
+          ? clearError.message
+          : "Failed to clear Excel attachment.",
+      );
     } finally {
       setUploadingQuestionList(false);
     }
@@ -2382,7 +3036,8 @@ export function ClientManagementPanel() {
         selected.resource.id,
         itemId,
       ) ?? activeList;
-    await persistList(completeActionItem(owner, itemId, status));
+    // Allow Completed/Late on already-resolved rows (e.g. BD13 late review).
+    await persistList(setActionItemStatus(owner, itemId, status));
   }
 
   async function handleCheckInSharePoint() {
@@ -2721,6 +3376,26 @@ export function ClientManagementPanel() {
   }
 
   async function handleSendEmailNow() {
+    if (scheduleOnlyEmailDay) {
+      const scheduleOnlyLabel = showBd8Content
+        ? "BD8"
+        : showBd7Content
+          ? "BD7"
+          : "BD1";
+      setEmailSendError(
+        `${scheduleOnlyLabel} is schedule-only. Use Schedule for the upcoming ${scheduleOnlyLabel} send time.`,
+      );
+      setEmailSendMessage(null);
+      return;
+    }
+    if (!canSendAsSupervisor) {
+      setEmailSendError(
+        emailSendBlockedReason ||
+          "Only the assigned supervisor can send this email.",
+      );
+      setEmailSendMessage(null);
+      return;
+    }
     if (reminderEmailDisabled) {
       setEmailSendError(
         reminderEmailDisabledTitle || "No late items found for email.",
@@ -2785,6 +3460,14 @@ export function ClientManagementPanel() {
   }
 
   async function handleScheduleEmail() {
+    if (!canSendAsSupervisor) {
+      setEmailSendError(
+        emailSendBlockedReason ||
+          "Only the assigned supervisor can schedule this email.",
+      );
+      setEmailSendMessage(null);
+      return;
+    }
     if (reminderEmailDisabled) {
       setEmailSendError(
         reminderEmailDisabledTitle || "No late items found for email.",
@@ -2882,7 +3565,9 @@ export function ClientManagementPanel() {
         <p className="table-empty">Loading…</p>
       ) : assignedClients.length === 0 ? (
         <p className="table-empty">
-          No clients are assigned to you in Resource Allocation yet.
+          {role === "admin"
+            ? "No clients in Resource Allocation yet."
+            : "No clients are assigned to you in Resource Allocation yet."}
         </p>
       ) : (
         <div className="client-management-stack">
@@ -3055,47 +3740,101 @@ export function ClientManagementPanel() {
                           activate.
                         </p>
                       ) : (
-                        activeScheduleItems.map((item) => {
-                          const businessDate = scheduleDateById.get(item.id);
-                          const isSelected = selectedSchedule.id === item.id;
-                          return (
-                            <div
-                              key={item.id}
-                              className={
-                                isSelected
-                                  ? "schedule-row schedule-row--on schedule-row--selected"
-                                  : "schedule-row schedule-row--on"
-                              }
-                            >
-                              <button
-                                type="button"
-                                className="schedule-star schedule-star--filled"
-                                aria-label={`Deactivate ${item.label}`}
-                                title="Move to Inactive"
-                                disabled={!canEdit || savingScheduleSettings}
-                                onClick={(event) =>
-                                  void handleToggleScheduleStar(item.id, event)
-                                }
+                        groupScheduleItemsForSidebar(activeScheduleItems).map(
+                          (group, groupIndex) => {
+                            const familyMeta = group.family
+                              ? SCHEDULE_FAMILY_META[group.family]
+                              : null;
+                            const rows = group.items.map((item) => {
+                              const businessDate = scheduleDateById.get(
+                                item.id,
+                              );
+                              const isSelected =
+                                selectedSchedule.id === item.id;
+                              const role =
+                                SCHEDULE_FAMILY_BY_ID[item.id]?.role ?? null;
+                              const rowClass = [
+                                "schedule-row",
+                                "schedule-row--on",
+                                isSelected ? "schedule-row--selected" : "",
+                                role === "main" ? "schedule-row--main" : "",
+                                role === "followup"
+                                  ? "schedule-row--followup"
+                                  : "",
+                              ]
+                                .filter(Boolean)
+                                .join(" ");
+                              return (
+                                <div key={item.id} className={rowClass}>
+                                  <button
+                                    type="button"
+                                    className="schedule-star schedule-star--filled"
+                                    aria-label={`Deactivate ${item.label}`}
+                                    title="Move to Inactive"
+                                    disabled={
+                                      !canEdit || savingScheduleSettings
+                                    }
+                                    onClick={(event) =>
+                                      void handleToggleScheduleStar(
+                                        item.id,
+                                        event,
+                                      )
+                                    }
+                                  >
+                                    ★
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="schedule-day-link"
+                                    onClick={() =>
+                                      setSelectedScheduleId(item.id)
+                                    }
+                                  >
+                                    <span className="client-schedule-link-label">
+                                      {item.label}
+                                      {role === "main" ? (
+                                        <span className="schedule-role-pill">
+                                          Main
+                                        </span>
+                                      ) : null}
+                                    </span>
+                                    {businessDate ? (
+                                      <span className="client-schedule-link-date">
+                                        {businessDate}
+                                      </span>
+                                    ) : null}
+                                  </button>
+                                </div>
+                              );
+                            });
+                            if (!group.family || !familyMeta) {
+                              return (
+                                <div
+                                  key={`solo-${group.items[0]?.id ?? groupIndex}`}
+                                  className="schedule-family schedule-family--solo"
+                                >
+                                  {rows}
+                                </div>
+                              );
+                            }
+                            return (
+                              <div
+                                key={group.family}
+                                className={`schedule-family schedule-family--${group.family}`}
                               >
-                                ★
-                              </button>
-                              <button
-                                type="button"
-                                className="schedule-day-link"
-                                onClick={() => setSelectedScheduleId(item.id)}
-                              >
-                                <span className="client-schedule-link-label">
-                                  {item.label}
-                                </span>
-                                {businessDate ? (
-                                  <span className="client-schedule-link-date">
-                                    {businessDate}
-                                  </span>
-                                ) : null}
-                              </button>
-                            </div>
-                          );
-                        })
+                                <div className="schedule-family-heading">
+                                  <p className="schedule-family-label">
+                                    {familyMeta.label}
+                                  </p>
+                                  <p className="schedule-family-hint">
+                                    {familyMeta.hint}
+                                  </p>
+                                </div>
+                                {rows}
+                              </div>
+                            );
+                          },
+                        )
                       )}
                     </div>
 
@@ -3124,52 +3863,98 @@ export function ClientManagementPanel() {
 
                       {inactiveExpanded && inactiveScheduleItems.length > 0 ? (
                         <div className="schedule-pane-list schedule-pane-list--inactive">
-                          {inactiveScheduleItems.map((item) => {
-                            const businessDate = scheduleDateById.get(item.id);
-                            const isSelected =
-                              selectedSchedule.id === item.id;
+                          {groupScheduleItemsForSidebar(
+                            inactiveScheduleItems,
+                          ).map((group, groupIndex) => {
+                            const familyMeta = group.family
+                              ? SCHEDULE_FAMILY_META[group.family]
+                              : null;
+                            const rows = group.items.map((item) => {
+                              const businessDate = scheduleDateById.get(
+                                item.id,
+                              );
+                              const isSelected =
+                                selectedSchedule.id === item.id;
+                              const role =
+                                SCHEDULE_FAMILY_BY_ID[item.id]?.role ?? null;
+                              const rowClass = [
+                                "schedule-row",
+                                "schedule-row--off",
+                                isSelected ? "schedule-row--selected" : "",
+                                role === "main" ? "schedule-row--main" : "",
+                                role === "followup"
+                                  ? "schedule-row--followup"
+                                  : "",
+                              ]
+                                .filter(Boolean)
+                                .join(" ");
+                              return (
+                                <div key={item.id} className={rowClass}>
+                                  <button
+                                    type="button"
+                                    className="schedule-star"
+                                    aria-label={`Activate ${item.label}`}
+                                    title="Move to Active"
+                                    disabled={
+                                      !canEdit || savingScheduleSettings
+                                    }
+                                    onClick={(event) =>
+                                      void handleToggleScheduleStar(
+                                        item.id,
+                                        event,
+                                      )
+                                    }
+                                  >
+                                    ☆
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="schedule-day-link"
+                                    onClick={() =>
+                                      setSelectedScheduleId(item.id)
+                                    }
+                                  >
+                                    <span className="client-schedule-link-label">
+                                      {item.label}
+                                      {role === "main" ? (
+                                        <span className="schedule-role-pill">
+                                          Main
+                                        </span>
+                                      ) : null}
+                                    </span>
+                                    {businessDate ? (
+                                      <span className="client-schedule-link-date">
+                                        {businessDate}
+                                      </span>
+                                    ) : null}
+                                  </button>
+                                </div>
+                              );
+                            });
+                            if (!group.family || !familyMeta) {
+                              return (
+                                <div
+                                  key={`solo-off-${group.items[0]?.id ?? groupIndex}`}
+                                  className="schedule-family schedule-family--solo"
+                                >
+                                  {rows}
+                                </div>
+                              );
+                            }
                             return (
                               <div
-                                key={item.id}
-                                className={
-                                  isSelected
-                                    ? "schedule-row schedule-row--off schedule-row--selected"
-                                    : "schedule-row schedule-row--off"
-                                }
+                                key={`${group.family}-off`}
+                                className={`schedule-family schedule-family--${group.family}`}
                               >
-                                <button
-                                  type="button"
-                                  className="schedule-star"
-                                  aria-label={`Activate ${item.label}`}
-                                  title="Move to Active"
-                                  disabled={
-                                    !canEdit || savingScheduleSettings
-                                  }
-                                  onClick={(event) =>
-                                    void handleToggleScheduleStar(
-                                      item.id,
-                                      event,
-                                    )
-                                  }
-                                >
-                                  ☆
-                                </button>
-                                <button
-                                  type="button"
-                                  className="schedule-day-link"
-                                  onClick={() =>
-                                    setSelectedScheduleId(item.id)
-                                  }
-                                >
-                                  <span className="client-schedule-link-label">
-                                    {item.label}
-                                  </span>
-                                  {businessDate ? (
-                                    <span className="client-schedule-link-date">
-                                      {businessDate}
-                                    </span>
-                                  ) : null}
-                                </button>
+                                <div className="schedule-family-heading">
+                                  <p className="schedule-family-label">
+                                    {familyMeta.label}
+                                  </p>
+                                  <p className="schedule-family-hint">
+                                    {familyMeta.hint}
+                                  </p>
+                                </div>
+                                {rows}
                               </div>
                             );
                           })}
@@ -3195,7 +3980,9 @@ export function ClientManagementPanel() {
 
                       const requestWorkflow = (
                         <>
-                          {!showBd5Content && !showEndOfMonthEmailOnly ? (
+                          {!showBd5Content &&
+                          !showBd9Content &&
+                          !showEndOfMonthEmailOnly ? (
                           <div
                             className={workflowTabsClassName}
                             role="tablist"
@@ -3220,8 +4007,11 @@ export function ClientManagementPanel() {
                               : "Request List Template"}
                         </button>
                       ) : null}
-                      {showBd9LikeContent ||
-                      (!showBd1LikeRequestList && !showBd5Content) ? (
+                      {showBd10OrBd13Content ||
+                      showBd7Content ||
+                      (!showBd1LikeRequestList &&
+                        !showBd5Content &&
+                        !showBd9Content) ? (
                       <button
                         type="button"
                         role="tab"
@@ -3233,7 +4023,7 @@ export function ClientManagementPanel() {
                         }
                         onClick={() => setWorkflowTab("action")}
                       >
-                        {showBd9LikeContent
+                        {showBd10OrBd13Content
                           ? "Question List Status"
                           : showBd7Content
                             ? "Late Action Items"
@@ -3267,7 +4057,9 @@ export function ClientManagementPanel() {
                           Email
                         </button>
                       ) : null}
-                      {!showBd1LikeWorkflow && !showBd5Content ? (
+                      {!showBd1LikeWorkflow &&
+                      !showBd5Content &&
+                      !showBd9Content ? (
                         <button
                           type="button"
                           role="tab"
@@ -3288,6 +4080,11 @@ export function ClientManagementPanel() {
                             <p className="bd1-workflow-kicker">
                               Late Action Items shows only items marked Late on
                               BD5 for the selected request type.
+                            </p>
+                          ) : null}
+                          {showBd10OrBd13Content && bd10LateStatusHint ? (
+                            <p className="bd1-workflow-kicker">
+                              {bd10LateStatusHint}
                             </p>
                           ) : null}
                     {showRequestListTab && workflowTab === "request" ? (
@@ -3511,14 +4308,14 @@ export function ClientManagementPanel() {
                           <>
                         <p className="lookup-hint">
                           {showBd8Content
-                            ? "Add questions as text below. Excel is saved as the email attachment for this month (kept when you switch tabs; cleared automatically next month)."
+                            ? "Add questions as text below. One Excel/CSV file is required as the email attachment ([Number] = filled rows − 1; [Total Amount] = sum of Amount column; Email stays disabled until attached)."
                             : "Add items here. The Email tab uses these bullets directly for this request type."}
                         </p>
                         {showBd8Content ? (
                           <div className="question-list-upload">
                             <label className="field field--wide">
-                              <span className="sr-only">
-                                Question list Excel file
+                              <span className="field-label">
+                                Email attachment (one file)
                               </span>
                               <input
                                 ref={questionListFileRef}
@@ -3535,13 +4332,31 @@ export function ClientManagementPanel() {
                                 }
                               />
                             </label>
-                            <p className="lookup-hint">
-                              {uploadingQuestionList
-                                ? "Loading…"
-                                : questionListAttachment
-                                  ? `Email attachment: ${questionListAttachment.name}`
-                                  : "Accepts .xlsx, .xls, or .csv. Saved until replaced or the month changes."}
-                            </p>
+                            <div className="bd5-action-toolbar">
+                              <p className="lookup-hint">
+                                {uploadingQuestionList
+                                  ? "Loading…"
+                                  : questionListAttachment
+                                    ? `Attached: ${questionListAttachment.name}`
+                                    : "No attachment yet. Add .xlsx, .xls, or .csv to enable Email."}
+                              </p>
+                              {questionListAttachment ? (
+                                <button
+                                  type="button"
+                                  className="button secondary"
+                                  disabled={
+                                    uploadingQuestionList ||
+                                    savingRequestList ||
+                                    !isSelectedScheduleActive
+                                  }
+                                  onClick={() =>
+                                    void handleClearQuestionListAttachment()
+                                  }
+                                >
+                                  Clear attachment
+                                </button>
+                              ) : null}
+                            </div>
                           </div>
                         ) : null}
                         <div className="request-list-add">
@@ -3731,34 +4546,267 @@ export function ClientManagementPanel() {
 
                     {workflowTab === "action" ? (
                       <div className="request-list-panel">
-                        {showReviewActionTable ? (
+                        {showBd9Content ? (
+                          <>
+                            <section className="bd9-status-section">
+                              <h3 className="bd9-status-section-title">
+                                BD7 Status Check
+                              </h3>
+                              <p className="lookup-hint">
+                                List items marked Late on BD5 (same items that
+                                appear on BD7).
+                              </p>
+                              {bd9Bd7StatusLateItems.length === 0 ? (
+                                <p className="lookup-hint">
+                                  No late action items from BD7 found.
+                                </p>
+                              ) : (
+                                <div className="table-wrap bd5-action-table-wrap">
+                                  <table className="projects-table bd5-action-table">
+                                    <thead>
+                                      <tr>
+                                        <th scope="col">List</th>
+                                        <th scope="col">Date Time</th>
+                                        <th scope="col">Status</th>
+                                        <th scope="col">Action</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {bd9Bd7StatusLateItems.map((item) => {
+                                        const resolvedAt =
+                                          formatActionResolvedAt(
+                                            item.completedAt,
+                                          );
+                                        return (
+                                          <tr
+                                            key={item.id}
+                                            className="bd5-action-row bd5-action-row--late"
+                                          >
+                                            <td className="bd5-action-list-cell">
+                                              {item.label}
+                                            </td>
+                                            <td className="bd5-action-datetime-cell">
+                                              {resolvedAt || "—"}
+                                            </td>
+                                            <td>
+                                              <span className="bd5-action-status bd5-action-status--late">
+                                                Late
+                                              </span>
+                                            </td>
+                                            <td>
+                                              <button
+                                                type="button"
+                                                className="button secondary"
+                                                disabled={savingRequestList}
+                                                onClick={() =>
+                                                  void handleReopenActionItem(
+                                                    item.id,
+                                                  )
+                                                }
+                                              >
+                                                Reopen
+                                              </button>
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </section>
+
+                            <section className="bd9-status-section">
+                              <h3 className="bd9-status-section-title">
+                                BD8 Status Check
+                              </h3>
+                              <p className="lookup-hint">
+                                All rows from the BD8 Excel/CSV attachment,
+                                whether Open, Completed, or Late. Mark Open
+                                rows Completed or Late — Late rows appear on
+                                BD10.
+                                {!questionListAttachment
+                                  ? " Attach a file on BD8 Question List Template first."
+                                  : ""}
+                              </p>
+                              {bd5ActionTableItems.length === 0 ? (
+                                <p className="lookup-hint">
+                                  {questionListAttachment
+                                    ? "No data rows found in the BD8 Excel/CSV attachment."
+                                    : "No BD8 Excel/CSV attachment for this month yet."}
+                                </p>
+                              ) : (
+                                <div className="table-wrap bd5-action-table-wrap">
+                                  <table className="projects-table bd5-action-table">
+                                    <thead>
+                                      <tr>
+                                        {bd9ExcelTable &&
+                                        bd9ExcelTable.headers.length > 0
+                                          ? bd9ExcelTable.headers.map(
+                                              (header, index) => (
+                                                <th
+                                                  key={`bd9-h-${index}-${header}`}
+                                                  scope="col"
+                                                >
+                                                  {header.trim() ||
+                                                    `Column ${index + 1}`}
+                                                </th>
+                                              ),
+                                            )
+                                          : (
+                                            <th scope="col">List</th>
+                                          )}
+                                        <th scope="col">Date Time</th>
+                                        <th scope="col">Status</th>
+                                        <th scope="col">Action</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {bd5ActionTableItems.map((item) => {
+                                        const resolvedAt =
+                                          formatActionResolvedAt(
+                                            item.completedAt,
+                                          );
+                                        const isOpen =
+                                          item.status === "action";
+                                        const statusLabel = isOpen
+                                          ? "Open"
+                                          : item.status === "late"
+                                            ? "Late"
+                                            : "Completed";
+                                        const statusClass = isOpen
+                                          ? "bd5-action-status bd5-action-status--open"
+                                          : item.status === "late"
+                                            ? "bd5-action-status bd5-action-status--late"
+                                            : "bd5-action-status bd5-action-status--completed";
+                                        const excelFingerprint =
+                                          item.sourceRequestId.startsWith(
+                                            BD9_EXCEL_SOURCE_PREFIX,
+                                          )
+                                            ? item.sourceRequestId.slice(
+                                                BD9_EXCEL_SOURCE_PREFIX.length,
+                                              )
+                                            : "";
+                                        const excelRow = bd9ExcelTable
+                                          ? bd9ExcelTable.rows.find(
+                                              (row) =>
+                                                row.fingerprint ===
+                                                excelFingerprint,
+                                            )
+                                          : undefined;
+                                        return (
+                                          <tr
+                                            key={item.id}
+                                            className={
+                                              item.status === "late"
+                                                ? "bd5-action-row bd5-action-row--late"
+                                                : item.status === "completed"
+                                                  ? "bd5-action-row bd5-action-row--completed"
+                                                  : "bd5-action-row"
+                                            }
+                                          >
+                                            {bd9ExcelTable &&
+                                            bd9ExcelTable.headers.length >
+                                              0 ? (
+                                              bd9ExcelTable.headers.map(
+                                                (_header, index) => (
+                                                  <td
+                                                    key={`${item.id}-c-${index}`}
+                                                    className="bd5-action-list-cell"
+                                                  >
+                                                    {excelRow?.cells[index] ??
+                                                      "—"}
+                                                  </td>
+                                                ),
+                                              )
+                                            ) : (
+                                              <td className="bd5-action-list-cell">
+                                                {item.label}
+                                              </td>
+                                            )}
+                                            <td className="bd5-action-datetime-cell">
+                                              {resolvedAt || "—"}
+                                            </td>
+                                            <td>
+                                              <span className={statusClass}>
+                                                {statusLabel}
+                                              </span>
+                                            </td>
+                                            <td>
+                                              {isOpen ? (
+                                                <div className="bd5-action-row-actions">
+                                                  <button
+                                                    type="button"
+                                                    className="button secondary-solid bd5-action-btn bd5-action-btn--completed"
+                                                    disabled={
+                                                      savingRequestList
+                                                    }
+                                                    onClick={() =>
+                                                      void handleCompleteActionItem(
+                                                        item.id,
+                                                        "completed",
+                                                      )
+                                                    }
+                                                  >
+                                                    Completed
+                                                  </button>
+                                                  <button
+                                                    type="button"
+                                                    className="button secondary-solid bd5-action-btn bd5-action-btn--late"
+                                                    disabled={
+                                                      savingRequestList
+                                                    }
+                                                    onClick={() =>
+                                                      void handleCompleteActionItem(
+                                                        item.id,
+                                                        "late",
+                                                      )
+                                                    }
+                                                  >
+                                                    Late
+                                                  </button>
+                                                </div>
+                                              ) : (
+                                                <button
+                                                  type="button"
+                                                  className="button secondary"
+                                                  disabled={savingRequestList}
+                                                  onClick={() =>
+                                                    void handleReopenActionItem(
+                                                      item.id,
+                                                    )
+                                                  }
+                                                >
+                                                  Reopen
+                                                </button>
+                                              )}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </section>
+                          </>
+                        ) : showReviewActionTable ? (
                           <>
                             {showBd5Content ? (
                               <>
                                 <div className="bd5-action-toolbar">
                                   <p className="lookup-hint">
-                                    Checks the same SharePoint month folder as
-                                    the BD1 email portal link for files named
-                                    Bank Statement / Credit Card Statement, then
-                                    marks matching action rows Completed or Late.
+                                    SharePoint auto-check is paused until search
+                                    logic is defined for this client’s folder
+                                    files.
                                   </p>
                                   <button
                                     type="button"
                                     className="button secondary-solid"
-                                    disabled={
-                                      !isSelectedScheduleActive ||
-                                      checkingSharePoint ||
-                                      savingRequestList ||
-                                      !canEdit ||
-                                      !selectedPortalLink
-                                    }
-                                    onClick={() =>
-                                      void handleCheckInSharePoint()
-                                    }
+                                    disabled
+                                    title="Search logic needed before SharePoint check can run"
                                   >
-                                    {checkingSharePoint
-                                      ? "Checking SharePoint…"
-                                      : "Check in SharePoint"}
+                                    Search Logic Needed
                                   </button>
                                 </div>
                                 {sharePointCheckMessage ? (
@@ -3767,19 +4815,13 @@ export function ClientManagementPanel() {
                                   </p>
                                 ) : null}
                               </>
-                            ) : showBd9Content ? (
-                              <p className="lookup-hint">
-                                BD8 question list items. Mark each row Completed
-                                or Late. Late items automatically appear on
-                                BD10.
-                              </p>
                             ) : null}
                             {bd5ActionTableItems.length === 0 ? (
                               <p className="lookup-hint">
                                 {showBd10Content
-                                  ? "No late BD9 questions found."
-                                  : showBd9Content
-                                    ? "No BD8 question action items yet."
+                                  ? "No late BD9 items found."
+                                  : showBd13Content
+                                    ? "No late or completed BD13 items found."
                                     : "No action items for this type yet."}
                               </p>
                             ) : (
@@ -3790,7 +4832,9 @@ export function ClientManagementPanel() {
                                       <th scope="col">List</th>
                                       <th scope="col">Date Time</th>
                                       <th scope="col">Status</th>
-                                      <th scope="col">Action</th>
+                                      {showBd10Content ? null : (
+                                        <th scope="col">Action</th>
+                                      )}
                                     </tr>
                                   </thead>
                                   <tbody>
@@ -3832,8 +4876,9 @@ export function ClientManagementPanel() {
                                               {statusLabel}
                                             </span>
                                           </td>
+                                          {showBd10Content ? null : (
                                           <td>
-                                            {isOpen ? (
+                                            {showBd13Content || isOpen ? (
                                               <div className="bd5-action-row-actions">
                                                 <button
                                                   type="button"
@@ -3862,35 +4907,6 @@ export function ClientManagementPanel() {
                                                   Late
                                                 </button>
                                               </div>
-                                            ) : showBd10Content &&
-                                              item.status === "late" ? (
-                                              <div className="bd5-action-row-actions">
-                                                <button
-                                                  type="button"
-                                                  className="button secondary-solid bd5-action-btn bd5-action-btn--completed"
-                                                  disabled={savingRequestList}
-                                                  onClick={() =>
-                                                    void handleCompleteActionItem(
-                                                      item.id,
-                                                      "completed",
-                                                    )
-                                                  }
-                                                >
-                                                  Completed
-                                                </button>
-                                                <button
-                                                  type="button"
-                                                  className="button secondary"
-                                                  disabled={savingRequestList}
-                                                  onClick={() =>
-                                                    void handleReopenActionItem(
-                                                      item.id,
-                                                    )
-                                                  }
-                                                >
-                                                  Reopen
-                                                </button>
-                                              </div>
                                             ) : (
                                               <button
                                                 type="button"
@@ -3906,6 +4922,7 @@ export function ClientManagementPanel() {
                                               </button>
                                             )}
                                           </td>
+                                          )}
                                         </tr>
                                       );
                                     })}
@@ -4062,7 +5079,7 @@ export function ClientManagementPanel() {
                           </p>
                         ) : null}
                         <p className="lookup-hint">
-                          {showBd15Email ? (
+                          {showBd15Content ? (
                             <>
                               Subject and body are filled from Email Template 11.
                               All required report files from Attachments are
@@ -4074,27 +5091,51 @@ export function ClientManagementPanel() {
                                 ? ". Sending is disabled because this email was already sent."
                                 : "."}
                             </>
+                          ) : showBd18Content ? (
+                            <>
+                              Subject and body are filled from Email Template 7
+                              (BD18) — Your Financial Statements Are Ready.
+                              Required report files from Attachments are sent
+                              with the email
+                              {bd15Attachments.length > 0
+                                ? ` (${bd15Attachments.length} file${bd15Attachments.length === 1 ? "" : "s"})`
+                                : ""}
+                              . To is the client POC email; CC is Secondary
+                              Assignee and Owner (same as BD1)
+                              {bd15EmailAlreadySent
+                                ? ". Sending is disabled because this email was already sent."
+                                : "."}
+                            </>
+                          ) : showBd13Content ? (
+                            <>
+                              Subject and body are filled from Email Template 5
+                              (BD13) — Reminder: Open Questions. Late items
+                              mirrored from BD10 fill [Question List]; [Total
+                              Amount] sums Amount values on Late rows. Marking
+                              Completed here does not change BD9/BD10. Email is
+                              available only when at least one Late item remains
+                              on BD13. To is the client POC email.
+                            </>
                           ) : showBd10Content ? (
                             <>
-                              Subject and body are filled from Email Template 7.
-                              Outstanding items are only questions marked Late
-                              on BD9.
-                            </>
-                          ) : showBd9Content ? (
-                            <>
-                              Subject and body are filled from Email Template 8.
-                              [Number] uses open and late BD8 questions from
-                              Question List Status.
+                              Subject and body are filled from Email Template 6.
+                              Outstanding items are all Late rows from BD9 (BD7
+                              Status Check and BD8 Status Check). To is the
+                              client POC email; CC is Secondary Assignee and
+                              Owner (same as BD1).
                             </>
                           ) : showBd8Content ? (
                             <>
-                              Subject and body are filled from Email Template 3.
-                              [Number] and [Question List] come from questions
-                              you add as text. The Excel file is email
-                              attachment only
+                              Subject and body are filled from Email Template 4
+                              (BD8). [Number] is filled Excel/CSV rows minus the
+                              header row; [Total Amount] sums the Amount column
                               {questionListAttachment
                                 ? ` (${questionListAttachment.name})`
-                                : ""}.
+                                : " — add the attachment on Question List Template"}
+                              . [Question List Items] comes from questions you
+                              add on Question List Template. To is the client
+                              POC email. Schedule only from the supervisor
+                              account (Admins view only; no Send Now).
                             </>
                           ) : showLastBdSchedule ? (
                             <>
@@ -4102,12 +5143,20 @@ export function ClientManagementPanel() {
                               (team end-of-month reminder). To is you; BCC is
                               everyone in User Management.
                             </>
+                          ) : showBd7Content ? (
+                            <>
+                              Subject and body are filled from Email Template 3
+                              (BD7). Late Action Items come from BD5 for the
+                              selected request type. To is the client POC email.
+                              Schedule only from the supervisor account (Admins
+                              view only; no Send Now).
+                            </>
                           ) : (
                             <>
                               Subject and body are filled from Email Template{" "}
                               {requestTypeId === "other-statements" ? "2" : "1"}
                               {showBd1TypeContent
-                                ? ". The account list comes from the Request List Template."
+                                ? ". To is the client POC email. Schedule only (no Send Now). Request list comes from the Request List Template."
                                 : "."}
                             </>
                           )}
@@ -4116,42 +5165,90 @@ export function ClientManagementPanel() {
                           <label className="field">
                             <span className="field-label">To</span>
                             <input
-                              className="field-input"
+                              className={`field-input${
+                                bd1LikeEmailRecipients
+                                  ? " field-input--readonly"
+                                  : ""
+                              }`}
                               type="text"
                               inputMode="email"
                               value={emailTo}
+                              readOnly={bd1LikeEmailRecipients}
                               disabled={bd15EmailAlreadySent}
-                              onChange={(event) =>
-                                setEmailTo(event.target.value)
-                              }
+                              onChange={(event) => {
+                                if (bd1LikeEmailRecipients) {
+                                  return;
+                                }
+                                setEmailTo(event.target.value);
+                              }}
                               placeholder="email@example.com, email2@example.com"
                             />
+                            {bd1LikeEmailRecipients ? (
+                              <span className="lookup-hint">
+                                {selectedPocEmail
+                                  ? `Filled from Client Profile POC${
+                                      selectedPointOfContact
+                                        ? ` (${selectedPointOfContact})`
+                                        : ""
+                                    }.`
+                                  : "No POC Email on Client Profile — add it under People."}
+                              </span>
+                            ) : null}
                           </label>
                           <label className="field">
                             <span className="field-label">From</span>
                             <input
                               className="field-input field-input--readonly"
-                              type="email"
-                              value={emailFrom}
+                              type="text"
+                              value={
+                                emailFrom
+                                  ? selectedSupervisorLabel || emailFrom
+                                  : "No supervisor assigned"
+                              }
                               readOnly
                               tabIndex={-1}
                               aria-readonly="true"
-                              title="From is the Microsoft account you signed in with"
+                              title="From is the Supervisor (Primary) mailbox from Resource Management"
                             />
+                            {emailSendBlockedReason ? (
+                              <span className="lookup-hint">
+                                {emailSendBlockedReason}
+                              </span>
+                            ) : (
+                              <span className="lookup-hint">
+                                Sends from the supervisor Microsoft account
+                                only.
+                              </span>
+                            )}
                           </label>
                           <label className="field">
                             <span className="field-label">CC</span>
                             <input
-                              className="field-input"
+                              className={`field-input${
+                                bd1LikeEmailRecipients
+                                  ? " field-input--readonly"
+                                  : ""
+                              }`}
                               type="text"
                               inputMode="email"
                               value={emailCc}
+                              readOnly={bd1LikeEmailRecipients}
                               disabled={bd15EmailAlreadySent}
-                              onChange={(event) =>
-                                setEmailCc(event.target.value)
-                              }
+                              onChange={(event) => {
+                                if (bd1LikeEmailRecipients) {
+                                  return;
+                                }
+                                setEmailCc(event.target.value);
+                              }}
                               placeholder="email@example.com, email2@example.com"
                             />
+                            {bd1LikeEmailRecipients ? (
+                              <span className="lookup-hint">
+                                Filled from Secondary Assignee (Resource
+                                Management) and Owner ({SCHEDULE_EMAIL_OWNER_CC}
+                                ).
+                              </span>
+                            ) : null}
                           </label>
                           <label className="field">
                             <span className="field-label">BCC</span>
@@ -4170,14 +5267,25 @@ export function ClientManagementPanel() {
                           <label className="field">
                             <span className="field-label">Deadline</span>
                             <input
-                              className="field-input"
+                              className={`field-input${
+                                showBd7Content ? " field-input--readonly" : ""
+                              }`}
                               type="date"
                               value={effectiveEmailDeadline}
+                              readOnly={showBd7Content}
                               disabled={bd15EmailAlreadySent}
-                              onChange={(event) =>
-                                setEmailDeadline(event.target.value)
-                              }
+                              onChange={(event) => {
+                                if (showBd7Content) {
+                                  return;
+                                }
+                                setEmailDeadline(event.target.value);
+                              }}
                             />
+                            {showBd7Content ? (
+                              <span className="lookup-hint">
+                                Same as BD7 schedule date.
+                              </span>
+                            ) : null}
                           </label>
                           <div className="field">
                             <span className="field-label">
@@ -4197,26 +5305,20 @@ export function ClientManagementPanel() {
                               </span>
                             )}
                           </div>
-                          <label className="field">
+                          <div className="field">
                             <span className="field-label">
                               Scheduled send (Pakistan)
                             </span>
-                            <input
-                              className="field-input"
-                              type="datetime-local"
-                              value={effectiveEmailSendAt}
-                              disabled={
-                                bd15EmailAlreadySent ||
-                                Boolean(clientTimeZoneError)
-                              }
-                              onChange={(event) =>
-                                setEmailSendAt(event.target.value)
-                              }
-                            />
+                            <div className="field-input field-input--readonly">
+                              {emailSendAtPakistanLabel ||
+                                effectiveEmailSendAt ||
+                                "—"}
+                            </div>
                             <span className="lookup-hint">
-                              Same moment in Pakistan — matches Outlook drafts
+                              Same moment as Send at, shown in Pakistan time
+                              for the scheduled send
                             </span>
-                          </label>
+                          </div>
                           <div className="field field--wide">
                             <span className="field-label">Subject</span>
                             <div className="field-input field-input--readonly client-schedule-email-rich">
@@ -4246,8 +5348,9 @@ export function ClientManagementPanel() {
                                     />
                                   ) : (
                                     <p className="lookup-hint email-signature-hint">
-                                      Set your email signature under My Profile
-                                      to show it after Thank you.
+                                      {selectedSupervisorEmail
+                                        ? `No signature for supervisor (${selectedSupervisorLabel || selectedSupervisorEmail}). They should set it under My Profile while signed in as that account.`
+                                        : "Assign a Supervisor in Resource Management to show their signature."}
                                     </p>
                                   )}
                                 </>
@@ -4258,25 +5361,33 @@ export function ClientManagementPanel() {
                           </div>
                         </div>
                         <div className="client-schedule-email-actions">
+                          {scheduleOnlyEmailDay ? null : (
+                            <button
+                              type="button"
+                              className="button primary"
+                              disabled={
+                                !canSendAsSupervisor ||
+                                reminderEmailDisabled ||
+                                !isSelectedScheduleActive ||
+                                sendingEmail ||
+                                schedulingEmail ||
+                                !emailTo.trim() ||
+                                !emailSubject.trim()
+                              }
+                              onClick={() => void handleSendEmailNow()}
+                            >
+                              {sendingEmail ? "Sending…" : "Send Now"}
+                            </button>
+                          )}
                           <button
                             type="button"
-                            className="button primary"
-                            disabled={
-                              reminderEmailDisabled ||
-                              !isSelectedScheduleActive ||
-                              sendingEmail ||
-                              schedulingEmail ||
-                              !emailTo.trim() ||
-                              !emailSubject.trim()
+                            className={
+                              scheduleOnlyEmailDay
+                                ? "button primary"
+                                : "button secondary-solid"
                             }
-                            onClick={() => void handleSendEmailNow()}
-                          >
-                            {sendingEmail ? "Sending…" : "Send Now"}
-                          </button>
-                          <button
-                            type="button"
-                            className="button secondary-solid"
                             disabled={
+                              !canSendAsSupervisor ||
                               reminderEmailDisabled ||
                               !isSelectedScheduleActive ||
                               sendingEmail ||
@@ -4290,6 +5401,17 @@ export function ClientManagementPanel() {
                           >
                             {schedulingEmail ? "Scheduling…" : "Schedule"}
                           </button>
+                          {scheduleOnlyEmailDay ? (
+                            <span className="lookup-hint">
+                              {`${
+                                showBd8Content
+                                  ? "BD8"
+                                  : showBd7Content
+                                    ? "BD7"
+                                    : "BD1"
+                              } is schedule-only — sends at the upcoming BD (9:00 am client time) from the supervisor account.`}
+                            </span>
+                          ) : null}
                         </div>
                         {emailSendMessage ? (
                           <p className="form-message success">
@@ -4314,15 +5436,19 @@ export function ClientManagementPanel() {
                         return requestWorkflow;
                       }
 
-                      const requestBodyTitle = showBd15Email
+                      const requestBodyTitle = showBd15Content
                         ? "Books Closed."
-                        : showBd10Content
-                          ? "SECOND REMINDER: Uncategorized Transactions: Questions for the Client"
-                          : showBd9Content
-                            ? "FIRST REMINDER: Uncategorized Transactions: Questions for the Client"
-                            : showBd8Content
-                              ? "Uncategorized Transactions: Questions for the Client"
-                              : activeRequestType.label;
+                        : showBd18Content
+                          ? "Your Financial Statements Are Ready"
+                          : showBd13Content
+                            ? "Reminder: Open Questions"
+                            : showBd10Content
+                              ? "Reminder: Final Reminder for Missing Documents"
+                              : showBd9Content
+                                ? "Manual Check: Uncategorized Transactions: Questions for the Client"
+                                : showBd8Content
+                                  ? "Uncategorized Transactions: Questions for the Client"
+                                  : activeRequestType.label;
 
                       return (
                         <div className="bd1-request-type-block">

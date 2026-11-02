@@ -59,7 +59,7 @@ const TEMPLATE_META: {
     body: `Hi [Contact First Name],
 
 We are starting the bookkeeping for [Period] and need the statements for the accounts below:
-• [List of bank and credit card accounts, with last 4 digits]
+• [Request List Items]
 
 Please upload them to the [portal] by [Due Date]
 
@@ -568,16 +568,17 @@ export function formatPeriodYear(date: Date = new Date()): string {
 /**
  * Replace [Period] / [Month] / [Year] using the given date
  * (Client Management active / demo month when provided).
+ * [Period] and [Month] are the month name only (e.g. "November"), not year.
+ * Use [Year] when the year is needed.
  */
 export function applyPeriodPlaceholder(
   text: string,
   date: Date = new Date(),
 ): string {
-  const period = formatCurrentPeriod(date);
   const month = formatPeriodMonth(date);
   const year = formatPeriodYear(date);
   return text
-    .replace(/\[Period\]/gi, period)
+    .replace(/\[Period\]/gi, month)
     .replace(/\[Month\]/gi, month)
     .replace(/\[Year\]/gi, year);
 }

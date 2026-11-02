@@ -1,0 +1,150 @@
+{
+  "dryRun": true,
+  "entries": [
+    {
+      "proposalSlug": "prop_nd7uyzfqhwaqasybd34q",
+      "audience": "team",
+      "clientName": "Mahida Global LLC",
+      "referenceNumber": "PROP-0075",
+      "endsOn": "2026-11-01",
+      "status": "scheduled",
+      "scheduledFor": "2026-10-26T13:59:14.197Z",
+      "sentAt": "",
+      "recipients": [
+        "ayesha@fireflyaccountancy.com",
+        "sana@epsfresno.com",
+        "sana@fireflyaccountancy.com",
+        "test@fireflyaccountancy.com"
+      ]
+    },
+    {
+      "proposalSlug": "prop_nd7uyzfqhwaqasybd34q",
+      "audience": "client",
+      "clientName": "Mahida Global LLC",
+      "referenceNumber": "PROP-0075",
+      "endsOn": "2026-11-01",
+      "status": "scheduled",
+      "scheduledFor": "2026-10-26T16:00:00.000Z",
+      "sentAt": "",
+      "recipients": [
+        "thaichiliclovis@gmail.com"
+      ]
+    },
+    {
+      "proposalSlug": "prop_njzyn4fb43jqawaaqgsa",
+      "audience": "team",
+      "clientName": "Clearview Merchant Ltd",
+      "referenceNumber": "PROP-0140",
+      "endsOn": "2026-12-01",
+      "status": "scheduled",
+      "scheduledFor": "2026-10-26T16:00:00.000Z",
+      "sentAt": "",
+      "recipients": [
+        "ayesha@fireflyaccountancy.com",
+        "sana@epsfresno.com",
+        "sana@fireflyaccountancy.com",
+        "test@fireflyaccountancy.com"
+      ]
+    },
+    {
+      "proposalSlug": "prop_njzyn4fb43jqawaaqgsa",
+      "audience": "client",
+      "clientName": "Clearview Merchant Ltd",
+      "referenceNumber": "PROP-0140",
+      "endsOn": "2026-12-01",
+      "status": "scheduled",
+      "scheduledFor": "2026-11-02T16:00:00.000Z",
+      "sentAt": "",
+      "recipients": [
+        "jasonsommerfeld@clearviewmerchants.com"
+      ]
+    },
+    {
+      "proposalSlug": "prop_njgk2b2r3zrqasaa6p7q",
+      "audience": "team",
+      "clientName": "Gregory L Nickel",
+      "referenceNumber": "PROP-0124",
+      "endsOn": "2027-01-01",
+      "status": "scheduled",
+      "scheduledFor": "2026-10-26T16:00:00.000Z",
+      "sentAt": "",
+      "recipients": [
+        "ayesha@fireflyaccountancy.com",
+        "sana@epsfresno.com",
+        "sana@fireflyaccountancy.com",
+        "test@fireflyaccountancy.com"
+      ]
+    },
+    {
+      "proposalSlug": "prop_njgk2b2r3zrqasaa6p7q",
+      "audience": "client",
+      "clientName": "Gregory L Nickel",
+      "referenceNumber": "PROP-0124",
+      "endsOn": "2027-01-01",
+      "status": "scheduled",
+      "scheduledFor": "2026-12-01T16:00:00.000Z",
+      "sentAt": "",
+      "recipients": [
+        "greg@apexbti.com"
+      ]
+    },
+    {
+      "proposalSlug": "prop_nklvmw6esqjaaoyawouq",
+      "audience": "team",
+      "clientName": "Halal Inc",
+      "referenceNumber": "PROP-0154",
+      "endsOn": "2027-01-01",
+      "status": "scheduled",
+      "scheduledFor": "2026-10-26T16:00:00.000Z",
+      "sentAt": "",
+      "recipients": [
+        "ayesha@fireflyaccountancy.com",
+        "sana@epsfresno.com",
+        "sana@fireflyaccountancy.com",
+        "test@fireflyaccountancy.com"
+      ]
+    },
+    {
+      "proposalSlug": "prop_nklvmw6esqjaaoyawouq",
+      "audience": "client",
+      "clientName": "Halal Inc",
+      "referenceNumber": "PROP-0154",
+      "endsOn": "2027-01-01",
+      "status": "scheduled",
+      "scheduledFor": "2026-12-01T16:00:00.000Z",
+      "sentAt": "",
+      "recipients": [
+        "amar.yusaf@gmail.com"
+      ]
+    },
+    {
+      "proposalSlug": "prop_ndfmvv4f3yiqamabarva",
+      "audience": "team",
+      "clientName": "LASH & CO.",
+      "referenceNumber": "PROP-0063",
+      "endsOn": "2027-01-26",
+      "status": "scheduled",
+      "scheduledFor": "2026-10-26T16:00:00.000Z",
+      "sentAt": "",
+      "recipients": [
+        "ayesha@fireflyaccountancy.com",
+        "sana@epsfresno.com",
+        "sana@fireflyaccountancy.com",
+        "test@fireflyaccountancy.com"
+      ]
+    },
+    {
+      "proposalSlug": "prop_ndfmvv4f3yiqamabarva",
+      "audience": "client",
+      "clientName": "LASH & CO.",
+      "referenceNumber": "PROP-0063",
+      "endsOn": "2027-01-26",
+      "status": "scheduled",
+      "scheduledFor": "2026-12-28T16:00:00.000Z",
+      "sentAt": "",
+      "recipients": [
+        "aliceincalgary@gmail.com"
+      ]
+    }
+  ]
+}

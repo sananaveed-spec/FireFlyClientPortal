@@ -544,11 +544,11 @@ export function EmailTemplatesPanel() {
             {canEdit ? (
               <button
                 type="button"
-                className="lookup-field-link lookup-field-link--add"
+                className="button primary email-template-add-button"
                 onClick={openAddTemplate}
                 disabled={saving}
               >
-                <span>Add New Template</span>
+                Add New Template
               </button>
             ) : null}
 

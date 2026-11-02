@@ -173,12 +173,14 @@ export const LOOKUP_FIELD_META: {
   {
     id: "primaryAssignee",
     name: "Primary Assignee",
-    defaults: ["Asad", "Abdul"],
+    // Options come from User Management (Lookup UI is read-only).
+    defaults: [],
   },
   {
     id: "secondaryAssignee",
     name: "Secondary Assignee",
-    defaults: ["Ishaq", "Ahsan", "Ali", "Khizer"],
+    // Options come from User Management (Lookup UI is read-only).
+    defaults: [],
   },
   {
     id: "bookkeeping",

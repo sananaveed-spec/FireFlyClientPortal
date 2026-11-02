@@ -1,11 +1,11 @@
 [
   {
-    "id": "1792056572924-ckt14x",
-    "bookkeepingCategory": "ACC1",
-    "clientName": "Test6",
-    "industry": "",
+    "id": "1793589151668-ej73v0",
+    "bookkeepingCategory": "ACC2",
+    "clientName": "Crestview Environmental services ltd",
+    "industry": "Dismantling services",
     "status": "Onboading",
-    "supervisor": "Sana",
+    "supervisor": "abdul@fireflyaccountancy.com",
     "bookkeeperAccountant": [],
     "bookkeeping": [],
     "payroll": "",
@@ -19,22 +19,19 @@
     "payrollTaxesDeadlines": "",
     "deliverablesTimelines": "",
     "yearlyComplianceTimelines": "",
-    "createdAt": "2026-10-15T09:29:32.924Z"
+    "createdAt": "2026-11-02T03:12:31.668Z"
   },
   {
-    "id": "1791531789814-vfjh5v",
+    "id": "1793250981231-tf2bev",
     "bookkeepingCategory": "ACC1",
-    "clientName": "2 Jacked Guyz",
-    "industry": "Home Moving",
+    "clientName": "Electrical Power Systems",
+    "industry": "Engineering services",
     "status": "Onboading",
-    "supervisor": "Abdul",
+    "supervisor": "asad@fireflyaccountancy.com",
     "bookkeeperAccountant": [
-      "Ahsan",
-      "Ali"
+      "ahsan@fireflyaccountancy.com"
     ],
-    "bookkeeping": [
-      "Monthly Bookkeeping"
-    ],
+    "bookkeeping": [],
     "payroll": "",
     "payrollAndSalesTaxes": [],
     "deliverables": [],
@@ -46,71 +43,6 @@
     "payrollTaxesDeadlines": "",
     "deliverablesTimelines": "",
     "yearlyComplianceTimelines": "",
-    "createdAt": "2026-10-09T07:43:09.815Z"
-  },
-  {
-    "id": "1791349853419-ajpy9g",
-    "bookkeepingCategory": "ACC2",
-    "clientName": "Lash & Co",
-    "industry": "Parlour",
-    "status": "Onboading",
-    "supervisor": "Abdul",
-    "bookkeeperAccountant": [
-      "Ali",
-      "Khizer"
-    ],
-    "bookkeeping": [
-      "Monthly Bookkeeping"
-    ],
-    "payroll": "Bi-Weekly",
-    "payrollAndSalesTaxes": [
-      "NIL"
-    ],
-    "deliverables": [
-      "P&L and BS - Quarterly",
-      "A/R Report Weekly"
-    ],
-    "yearlyCompliance": [
-      "1120",
-      "1120S"
-    ],
-    "meetingRequirements": "Yes",
-    "meetingFrequency": "Bi-Weekly",
-    "bookkeepingDeadline": "NIL",
-    "payrollDeadline": "NIL",
-    "payrollTaxesDeadlines": "NIL",
-    "deliverablesTimelines": "NIL",
-    "yearlyComplianceTimelines": "1120 - 30th April\n1120S - 15th March",
-    "createdAt": "2026-10-07T05:10:53.419Z"
-  },
-  {
-    "id": "1791349452403-02arxm",
-    "bookkeepingCategory": "ACC1",
-    "clientName": "The Pantry",
-    "industry": "Food",
-    "status": "Onboading",
-    "supervisor": "Sana",
-    "bookkeeperAccountant": [
-      "Ishaq",
-      "Ahsan"
-    ],
-    "bookkeeping": [
-      "Monthly Bookkeeping"
-    ],
-    "payroll": "",
-    "payrollAndSalesTaxes": [],
-    "deliverables": [],
-    "yearlyCompliance": [
-      "1120",
-      "1120S"
-    ],
-    "meetingRequirements": "",
-    "meetingFrequency": "",
-    "bookkeepingDeadline": "",
-    "payrollDeadline": "",
-    "payrollTaxesDeadlines": "",
-    "deliverablesTimelines": "",
-    "yearlyComplianceTimelines": "1120 - 30th April\n1120S - 15th March",
-    "createdAt": "2026-10-07T05:04:12.403Z"
+    "createdAt": "2026-10-29T05:16:21.231Z"
   }
 ]

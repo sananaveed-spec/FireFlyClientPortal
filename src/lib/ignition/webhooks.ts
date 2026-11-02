@@ -24,7 +24,13 @@ import {
   type IgnitionProposalRecord,
 } from "@/lib/ignition/proposals";
 import { getValidAccessToken } from "@/lib/ignition/tokens";
+import { isGraphAppOnlyConfigured } from "@/lib/azure-graph-app";
+import {
+  buildSharePointMemberEmails,
+  createClientSharePointSiteAppOnly,
+} from "@/lib/sharepoint-graph";
 import { normalizeEmail, isValidEmail } from "@/lib/portal-users";
+import type { ClientProfileEntry } from "@/lib/client-profiles";
 
 export const IGNITION_WEBHOOK_EVENTS = ["proposal.accepted"] as const;
 
@@ -449,6 +455,71 @@ export type IgnitionWebhookProcessResult = {
 };
 
 /**
+ * When a proposal is accepted: if the matched client has no Portal Link yet,
+ * create the SharePoint site (app-only), invite Owner + POC as guests, and
+ * add default Fire Fly team members.
+ */
+async function ensureSharePointForAcceptedClient(
+  profiles: ClientProfileEntry[],
+  ignitionClientId: string,
+): Promise<{ profiles: ClientProfileEntry[]; summary: string }> {
+  const index = profiles.findIndex(
+    (profile) => profile.ignitionClientSlug.trim() === ignitionClientId,
+  );
+  if (index < 0) {
+    return { profiles, summary: "" };
+  }
+
+  const profile = profiles[index]!;
+  if (profile.portalLink.trim()) {
+    return { profiles, summary: "Portal Link already set." };
+  }
+
+  if (!isGraphAppOnlyConfigured()) {
+    console.warn(
+      "Ignition webhook: skipped SharePoint create — set AZURE_CLIENT_SECRET and grant Application Graph permissions.",
+    );
+    return {
+      profiles,
+      summary:
+        "SharePoint not created (AZURE_CLIENT_SECRET / app permissions missing).",
+    };
+  }
+
+  try {
+    const memberEmails = buildSharePointMemberEmails({
+      ownerEmail: profile.ownerEmail,
+      pocEmail: profile.pocEmail,
+    });
+    const created = await createClientSharePointSiteAppOnly(
+      profile.legalName,
+      memberEmails,
+    );
+    const next = [...profiles];
+    next[index] = {
+      ...profile,
+      portalLink: created.webUrl,
+    };
+    const warn =
+      created.memberWarnings.length > 0
+        ? ` Member notes: ${created.memberWarnings.slice(0, 3).join("; ")}`
+        : "";
+    return {
+      profiles: next,
+      summary: `SharePoint created (${created.webUrl}). Owner/POC invited; Fire Fly team added.${warn}`,
+    };
+  } catch (error) {
+    const detail =
+      error instanceof Error ? error.message : "SharePoint create failed.";
+    console.error("Ignition webhook SharePoint create failed:", error);
+    return {
+      profiles,
+      summary: `SharePoint create failed: ${detail}`,
+    };
+  }
+}
+
+/**
  * Process a verified Ignition webhook event (proposal.accepted).
  */
 export async function processIgnitionWebhookEvent(event: {
@@ -505,13 +576,19 @@ export async function processIgnitionWebhookEvent(event: {
   );
   // Only update this Ignition client — do not clear other profiles' proposal links.
   const activeByClient = pickActiveProposalByClient([proposal]);
-  const nextProfiles = ensured.profiles.map((profile) => {
+  let nextProfiles = ensured.profiles.map((profile) => {
     const matched = matchIgnitionClientToProfile(profile, [clientMatch]);
     if (!matched || matched.id !== clientMatch.id) {
       return profile;
     }
     return applyActiveProposalToProfile(profile, [clientMatch], activeByClient);
   });
+
+  const sharePointNotes = await ensureSharePointForAcceptedClient(
+    nextProfiles,
+    clientMatch.id,
+  );
+  nextProfiles = sharePointNotes.profiles;
   await writeClientProfiles(nextProfiles);
 
   if (ensured.created.length > 0) {
@@ -521,7 +598,7 @@ export async function processIgnitionWebhookEvent(event: {
         title: "New client added from Ignition",
         message: `${item.legalName} was added to Client Info after an accepted proposal${
           item.proposalReference ? ` (${item.proposalReference})` : ""
-        }.`,
+        }.${sharePointNotes.summary ? ` ${sharePointNotes.summary}` : ""}`,
         clientName: item.legalName,
         clientProfileId: item.profileId,
       })),
@@ -567,7 +644,9 @@ export async function processIgnitionWebhookEvent(event: {
           title: "Ignition proposal accepted",
           message: `${matchedProfile.legalName}: proposal ${
             proposal.referenceNumber || proposal.name || proposal.slug
-          } was accepted. Client Info is up to date.`,
+          } was accepted. Client Info is up to date.${
+            sharePointNotes.summary ? ` ${sharePointNotes.summary}` : ""
+          }`,
           clientName: matchedProfile.legalName,
           clientProfileId: matchedProfile.id,
         },

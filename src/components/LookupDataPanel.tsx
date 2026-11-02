@@ -11,6 +11,7 @@ import {
 import { EmailTemplatesPanel } from "@/components/EmailTemplatesPanel";
 import { HolidaysPanel } from "@/components/HolidaysPanel";
 import { RepeatedTasksPanel } from "@/components/RepeatedTasksPanel";
+import { SearchableSelect } from "@/components/SearchableSelect";
 import {
   createLookupItem,
   type LookupDataStore,
@@ -18,6 +19,14 @@ import {
   type LookupItem,
 } from "@/lib/lookup-data";
 import { portalFetch } from "@/lib/portal-api";
+import type { PortalUser } from "@/lib/portal-users";
+import {
+  findPortalUserByStoredLabel,
+  formatStaffAssignmentLabel,
+  isUserManagedLookupField,
+  portalUserSelectOptions,
+} from "@/lib/staff-assign";
+import { normalizeEmail } from "@/lib/portal-users";
 
 type LookupSection =
   | "dropdown"
@@ -26,7 +35,7 @@ type LookupSection =
   | "repeatedTasks";
 
 type EditorState = {
-  mode: "add" | "edit";
+  mode: "add" | "edit" | "addUser";
   fieldId: LookupFieldId;
   itemId?: string;
   label: string;
@@ -53,6 +62,7 @@ export function LookupDataPanel() {
   const actor = getActorFromAccount(accounts[0]);
   const [section, setSection] = useState<LookupSection>("emailTemplates");
   const [store, setStore] = useState<LookupDataStore>({ fields: [] });
+  const [portalUsers, setPortalUsers] = useState<PortalUser[]>([]);
   const [activeFieldId, setActiveFieldId] =
     useState<LookupFieldId>("industry");
   const [parentSearch, setParentSearch] = useState("");
@@ -82,15 +92,27 @@ export function LookupDataPanel() {
 
     async function load() {
       try {
-        const response = await fetch("/api/lookup-data", { cache: "no-store" });
-        const data = (await response.json()) as LookupDataStore & {
+        const [lookupRes, usersRes] = await Promise.all([
+          fetch("/api/lookup-data", { cache: "no-store" }),
+          fetch("/api/portal-users", { cache: "no-store" }),
+        ]);
+        const data = (await lookupRes.json()) as LookupDataStore & {
           error?: string;
         };
-        if (!response.ok) {
+        const usersData = (await usersRes.json()) as {
+          users?: PortalUser[];
+          error?: string;
+        };
+        if (!lookupRes.ok) {
           throw new Error(data.error || "Failed to load lookup data.");
         }
         if (!cancelled) {
           setStore({ fields: data.fields ?? [] });
+          setPortalUsers(
+            usersRes.ok && Array.isArray(usersData.users)
+              ? usersData.users
+              : [],
+          );
           if (data.fields?.[0]?.id) {
             setActiveFieldId(data.fields[0].id);
           }
@@ -134,6 +156,25 @@ export function LookupDataPanel() {
       null,
     [store.fields, activeFieldId],
   );
+
+  const activeFieldUserManaged = Boolean(
+    activeField && isUserManagedLookupField(activeField.id),
+  );
+
+  const usersAvailableToAdd = useMemo(() => {
+    if (!activeField || !isUserManagedLookupField(activeField.id)) {
+      return [];
+    }
+    const taken = new Set(
+      activeField.items.map((item) => {
+        const user = findPortalUserByStoredLabel(item.label, portalUsers);
+        return user?.email ?? normalizeEmail(item.label);
+      }),
+    );
+    return portalUserSelectOptions(portalUsers).filter(
+      (option) => !taken.has(option.value),
+    );
+  }, [activeField, portalUsers]);
 
   useEffect(() => {
     if (
@@ -181,6 +222,14 @@ export function LookupDataPanel() {
       return;
     }
     setError(null);
+    if (isUserManagedLookupField(activeField.id)) {
+      setEditor({
+        mode: "addUser",
+        fieldId: activeField.id,
+        label: "",
+      });
+      return;
+    }
     setEditor({
       mode: "add",
       fieldId: activeField.id,
@@ -189,7 +238,7 @@ export function LookupDataPanel() {
   }
 
   function openEditItem(item: LookupItem) {
-    if (!activeField) {
+    if (!activeField || isUserManagedLookupField(activeField.id)) {
       return;
     }
     setError(null);
@@ -205,7 +254,11 @@ export function LookupDataPanel() {
     if (!activeField) {
       return;
     }
-    if (!window.confirm(`Delete "${item.label}"?`)) {
+    const display =
+      isUserManagedLookupField(activeField.id)
+        ? formatStaffAssignmentLabel(item.label, portalUsers) || item.label
+        : item.label;
+    if (!window.confirm(`Delete "${display}" from ${activeField.name}?`)) {
       return;
     }
     updateFieldItems(activeField.id, (items) =>
@@ -215,11 +268,13 @@ export function LookupDataPanel() {
       actor,
       project: activeField.name,
       entityType: "lookupData",
-      entityLabel: `${activeField.name} / ${item.label}`,
+      entityLabel: `${activeField.name} / ${display}`,
       action: "deleted",
-      summary: `Lookup item deleted: ${item.label}`,
+      summary: `Lookup item deleted: ${display}`,
       details: `Field: ${activeField.name}\nItem: ${item.label}`,
-      comment: "Lookup sub-item removed.",
+      comment: isUserManagedLookupField(activeField.id)
+        ? "Assignee removed from lookup list (User Management user unchanged)."
+        : "Lookup sub-item removed.",
     });
   }
 
@@ -238,13 +293,46 @@ export function LookupDataPanel() {
 
     const label = editor.label.trim();
     if (!label) {
-      setError("Label is required.");
+      setError(
+        editor.mode === "addUser"
+          ? "Select a user from User Management."
+          : "Label is required.",
+      );
       return;
     }
 
     const fieldName =
       store.fields.find((field) => field.id === editor.fieldId)?.name ??
       editor.fieldId;
+
+    if (editor.mode === "addUser") {
+      const email = normalizeEmail(label);
+      const already = store.fields
+        .find((field) => field.id === editor.fieldId)
+        ?.items.some((item) => {
+          const user = findPortalUserByStoredLabel(item.label, portalUsers);
+          return (user?.email ?? normalizeEmail(item.label)) === email;
+        });
+      if (already) {
+        setError("That user is already on this list.");
+        return;
+      }
+      const display =
+        formatStaffAssignmentLabel(email, portalUsers) || email;
+      const item = createLookupItem(email);
+      updateFieldItems(editor.fieldId, (items) => [...items, item]);
+      void logPortalAction({
+        actor,
+        project: fieldName,
+        entityType: "lookupData",
+        entityLabel: `${fieldName} / ${display}`,
+        action: "created",
+        summary: `Assignee added: ${display}`,
+        details: `Field: ${fieldName}\nUser: ${display}`,
+        comment: "Picked from User Management into assignee lookup list.",
+      });
+      return;
+    }
 
     if (editor.mode === "add") {
       const item = createLookupItem(label);
@@ -365,9 +453,15 @@ export function LookupDataPanel() {
                 type="button"
                 className="button primary"
                 onClick={openAddItem}
-                disabled={!activeField || saving}
+                disabled={
+                  !activeField ||
+                  saving ||
+                  (activeFieldUserManaged && usersAvailableToAdd.length === 0)
+                }
               >
-                Add sub-item
+                {activeFieldUserManaged
+                  ? "Add from User Management"
+                  : "Add sub-item"}
               </button>
             ) : null}
           </div>
@@ -413,43 +507,58 @@ export function LookupDataPanel() {
                         <h3 className="section-title">{activeField.name}</h3>
                       </div>
                       <p className="lookup-hint">
-                        Add, edit, or delete sub-items for this dropdown.
-                        Sub-items cannot have children.
+                        {activeFieldUserManaged
+                          ? "Add people from User Management, or delete them from this list. This does not remove the user from User Management."
+                          : "Add, edit, or delete sub-items for this dropdown. Sub-items cannot have children."}
                       </p>
                     </div>
 
                     {activeField.items.length === 0 ? (
                       <p className="table-empty">
-                        No sub-items yet. Click Add sub-item to create one.
+                        {activeFieldUserManaged
+                          ? usersAvailableToAdd.length === 0
+                            ? "No users in User Management yet. Add users there first."
+                            : "No assignees yet. Click Add from User Management to pick a name."
+                          : "No sub-items yet. Click Add sub-item to create one."}
                       </p>
                     ) : (
                       <div className="lookup-item-list">
-                        {activeField.items.map((item) => (
-                          <div
-                            key={item.id}
-                            className="lookup-child-row lookup-sub-row"
-                          >
-                            <span>{item.label}</span>
-                            {canEdit ? (
-                              <div className="lookup-actions">
-                                <button
-                                  type="button"
-                                  className="button secondary"
-                                  onClick={() => openEditItem(item)}
-                                >
-                                  Edit
-                                </button>
-                                <button
-                                  type="button"
-                                  className="button secondary"
-                                  onClick={() => deleteItem(item)}
-                                >
-                                  Delete
-                                </button>
-                              </div>
-                            ) : null}
-                          </div>
-                        ))}
+                        {activeField.items.map((item) => {
+                          const display = activeFieldUserManaged
+                            ? formatStaffAssignmentLabel(
+                                item.label,
+                                portalUsers,
+                              ) || item.label
+                            : item.label;
+                          return (
+                            <div
+                              key={item.id}
+                              className="lookup-child-row lookup-sub-row"
+                            >
+                              <span>{display}</span>
+                              {canEdit ? (
+                                <div className="lookup-actions">
+                                  {activeFieldUserManaged ? null : (
+                                    <button
+                                      type="button"
+                                      className="button secondary"
+                                      onClick={() => openEditItem(item)}
+                                    >
+                                      Edit
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    className="button secondary"
+                                    onClick={() => deleteItem(item)}
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              ) : null}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </>
@@ -471,9 +580,11 @@ export function LookupDataPanel() {
                   >
                     <div className="dialog-header">
                       <h3 id="lookup-editor-title" className="dialog-title">
-                        {editor.mode === "add"
-                          ? "Add sub-item"
-                          : "Edit sub-item"}
+                        {editor.mode === "addUser"
+                          ? "Add from User Management"
+                          : editor.mode === "add"
+                            ? "Add sub-item"
+                            : "Edit sub-item"}
                       </h3>
                       <button
                         type="button"
@@ -494,23 +605,45 @@ export function LookupDataPanel() {
                       className="client-form client-form--dialog"
                       onSubmit={submitEditor}
                     >
-                      <label className="field">
-                        <span className="field-label">
-                          Label <span className="field-required">*</span>
-                        </span>
-                        <input
-                          className="field-input"
-                          value={editor.label}
-                          onChange={(event) =>
-                            setEditor({
-                              ...editor,
-                              label: event.target.value,
-                            })
-                          }
-                          autoFocus
-                          required
-                        />
-                      </label>
+                      {editor.mode === "addUser" ? (
+                        <div className="field">
+                          <SearchableSelect
+                            label="User"
+                            value={editor.label}
+                            options={usersAvailableToAdd}
+                            required
+                            placeholder="Search name or email…"
+                            onChange={(value) =>
+                              setEditor({
+                                ...editor,
+                                label: value,
+                              })
+                            }
+                          />
+                          <span className="lookup-hint">
+                            Search and select a User Management account not
+                            already on this list.
+                          </span>
+                        </div>
+                      ) : (
+                        <label className="field">
+                          <span className="field-label">
+                            Label <span className="field-required">*</span>
+                          </span>
+                          <input
+                            className="field-input"
+                            value={editor.label}
+                            onChange={(event) =>
+                              setEditor({
+                                ...editor,
+                                label: event.target.value,
+                              })
+                            }
+                            autoFocus
+                            required
+                          />
+                        </label>
+                      )}
 
                       <div className="dialog-actions">
                         <button

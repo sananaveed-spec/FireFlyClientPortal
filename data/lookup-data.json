@@ -369,6 +369,32 @@
       ]
     },
     {
+      "id": "payrollProvider",
+      "name": "Payroll Provider",
+      "items": [
+        {
+          "id": "seed-4-adp",
+          "label": "ADP"
+        },
+        {
+          "id": "seed-1-gusto",
+          "label": "Gusto"
+        },
+        {
+          "id": "seed-5-nil",
+          "label": "NIL"
+        },
+        {
+          "id": "seed-3-paychex",
+          "label": "Paychex"
+        },
+        {
+          "id": "seed-2-qbo",
+          "label": "QBO"
+        }
+      ]
+    },
+    {
       "id": "payrollTaxesDeadlines",
       "name": "Payroll Taxes Deadlines",
       "items": [
@@ -383,16 +409,34 @@
       "name": "Primary Assignee",
       "items": [
         {
-          "id": "seed-2-abdul",
-          "label": "Abdul"
+          "id": "item-1793589139043-xrlsyn",
+          "label": "abdul@fireflyaccountancy.com"
         },
         {
-          "id": "seed-1-asad",
-          "label": "Asad"
+          "id": "item-1793250899176-cka3rj",
+          "label": "asad@fireflyaccountancy.com"
         },
         {
-          "id": "item-1791530802558-7ppxsx",
-          "label": "Sana"
+          "id": "item-1793251121166-vvv8x5",
+          "label": "sana@epsfresno.com"
+        }
+      ]
+    },
+    {
+      "id": "reportingTier",
+      "name": "Reporting Tier",
+      "items": [
+        {
+          "id": "seed-2-priority-by-bd10-bd15-for-lender-or-board-clients-",
+          "label": "Priority (by BD10 – BD15, for lender or board clients)"
+        },
+        {
+          "id": "seed-3-quarterly-within-20-30-days-of-quarter-end-",
+          "label": "Quarterly (within 20 – 30 days of quarter-end)"
+        },
+        {
+          "id": "seed-1-standard-financials-by-the-18th-",
+          "label": "Standard (financials by the 18th)"
         }
       ]
     },
@@ -401,20 +445,26 @@
       "name": "Secondary Assignee",
       "items": [
         {
-          "id": "seed-2-ahsan",
-          "label": "Ahsan"
+          "id": "item-1793250951639-wc375x",
+          "label": "ahsan@fireflyaccountancy.com"
+        }
+      ]
+    },
+    {
+      "id": "serviceFrequency",
+      "name": "Service Frequency",
+      "items": [
+        {
+          "id": "seed-3-catch-up-cleanup",
+          "label": "Catch-up/Cleanup"
         },
         {
-          "id": "seed-3-ali",
-          "label": "Ali"
+          "id": "seed-1-monthly",
+          "label": "Monthly"
         },
         {
-          "id": "seed-1-ishaq",
-          "label": "Ishaq"
-        },
-        {
-          "id": "seed-4-khizer",
-          "label": "Khizer"
+          "id": "seed-2-quarterly",
+          "label": "Quarterly"
         }
       ]
     },

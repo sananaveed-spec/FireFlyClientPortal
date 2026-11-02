@@ -1140,12 +1140,103 @@ h2,
 .schedule-pane-list {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.55rem;
   flex-shrink: 0;
 }
 
 .schedule-pane-list--inactive {
   margin-top: 0.35rem;
+}
+
+.schedule-family {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  padding: 0.45rem 0.4rem 0.4rem;
+  border-radius: 0.7rem;
+  border: 1px solid transparent;
+}
+
+.schedule-family--solo {
+  padding: 0;
+  gap: 0.35rem;
+  border: none;
+  background: transparent;
+}
+
+.schedule-family--documents,
+.schedule-family--questions {
+  background: #f7f9fc;
+  border-color: rgba(10, 22, 40, 0.16);
+}
+
+.schedule-family-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 0.08rem;
+  padding: 0 0.2rem 0.2rem;
+}
+
+.schedule-family-label {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.schedule-family-hint {
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--muted);
+}
+
+.schedule-row--main {
+  border-width: 1.5px;
+  border-color: rgba(10, 22, 40, 0.22);
+  background: #ffffff;
+  box-shadow: 0 1px 0 rgba(10, 22, 40, 0.04);
+}
+
+.schedule-row--followup {
+  margin-left: 0.55rem;
+  border-style: dashed;
+  border-color: rgba(10, 22, 40, 0.14);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.schedule-row--followup .client-schedule-link-label {
+  font-weight: 600;
+  font-size: 0.84rem;
+}
+
+.schedule-role-pill {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.4rem;
+  padding: 0.08rem 0.38rem;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 750;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  vertical-align: middle;
+  line-height: 1.2;
+  color: var(--muted);
+  background: rgba(10, 22, 40, 0.06);
+}
+
+.schedule-row--on.schedule-row--selected .schedule-role-pill {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.schedule-row--off.schedule-row--main,
+.schedule-row--off.schedule-row--followup {
+  background: rgba(247, 249, 252, 0.9);
 }
 
 .schedule-inactive-block {
@@ -1601,6 +1692,21 @@ h2,
   margin-top: 0.15rem;
 }
 
+.bd9-status-section {
+  margin-bottom: 1.35rem;
+}
+
+.bd9-status-section:last-child {
+  margin-bottom: 0;
+}
+
+.bd9-status-section-title {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
 .bd5-action-table {
   width: 100%;
 }
@@ -1953,6 +2059,12 @@ h2,
 .lookup-field-link--add:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.email-template-add-button {
+  width: 100%;
+  margin-bottom: 0.75rem;
+  justify-content: center;
 }
 
 .email-template-body-input {
@@ -3559,6 +3671,44 @@ h2,
   color: var(--muted);
   font-size: 0.85rem;
   margin: 0;
+}
+
+.sharepoint-auto-members {
+  list-style: none;
+  margin: 0 0 0.65rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 0.55rem;
+  background: #f7f9fc;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.sharepoint-auto-members li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.sharepoint-auto-members-role {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.sharepoint-auto-members-emails {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.field--nested {
+  margin-top: 0.15rem;
 }
 
 .lookup-parent-label {

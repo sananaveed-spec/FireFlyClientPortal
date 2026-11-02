@@ -45,8 +45,14 @@ export const CLIENT_MANAGEMENT_BD_SLOTS: ClientManagementBdSlot[] = [
   {
     id: "bd10",
     label: "BD10",
-    defaultTemplate: "Template 7",
+    defaultTemplate: "Template 6",
     deadlineRule: "BD10",
+  },
+  {
+    id: "bd13",
+    label: "BD13",
+    defaultTemplate: "Template 5 — Reminder: Open Questions",
+    deadlineRule: "BD13",
   },
   {
     id: "bd15",
@@ -57,7 +63,7 @@ export const CLIENT_MANAGEMENT_BD_SLOTS: ClientManagementBdSlot[] = [
   {
     id: "bd18",
     label: "BD18",
-    defaultTemplate: "Template 11 — Status check",
+    defaultTemplate: "Template 7 — Your Financial Statements Are Ready",
     deadlineRule: "—",
   },
   {

@@ -152,6 +152,40 @@ function buildSignatureHtml(signature: EmailSignature): string {
   return lines.join("\n");
 }
 
+/** Turn consecutive "• …" lines into a real HTML list (inline body bullets). */
+function bulletLinesToHtmlList(escapedBody: string): string {
+  const lines = escapedBody.split(/\r\n|\n|\r/);
+  const out: string[] = [];
+  let listItems: string[] = [];
+
+  function flushList() {
+    if (listItems.length === 0) {
+      return;
+    }
+    out.push(
+      `<ul style="margin:0.35em 0 0.75em 1.25em;padding:0;">${listItems
+        .map(
+          (item) =>
+            `<li style="margin:0.15em 0;">${item}</li>`,
+        )
+        .join("")}</ul>`,
+    );
+    listItems = [];
+  }
+
+  for (const line of lines) {
+    const bullet = /^•\s*(.*)$/.exec(line);
+    if (bullet) {
+      listItems.push(bullet[1] || "");
+      continue;
+    }
+    flushList();
+    out.push(line);
+  }
+  flushList();
+  return out.join("<br/>");
+}
+
 export function buildGraphMailHtml(payload: GraphMailPayload): string {
   let bodyHtml = boldHighlightsHtml(
     payload.bodyText,
@@ -161,7 +195,7 @@ export function buildGraphMailHtml(payload: GraphMailPayload): string {
   if (portalHref) {
     bodyHtml = linkPortalKeywordsHtml(bodyHtml, portalHref, escapeHtml);
   }
-  bodyHtml = bodyHtml.replace(/\r\n|\n|\r/g, "<br/>");
+  bodyHtml = bulletLinesToHtmlList(bodyHtml);
   const signatureHtml = buildSignatureHtml(payload.signature);
 
   return [

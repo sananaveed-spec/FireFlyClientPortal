@@ -1,5 +1,26 @@
 [
   {
+    "email": "abdul@fireflyaccountancy.com",
+    "role": "team",
+    "name": "Abdul Rehman",
+    "position": "Manager - Client Service",
+    "phone": "+1 (559) 333-2167"
+  },
+  {
+    "email": "ahsan@fireflyaccountancy.com",
+    "role": "team",
+    "name": "Ahsan",
+    "position": "",
+    "phone": ""
+  },
+  {
+    "email": "asad@fireflyaccountancy.com",
+    "role": "team",
+    "name": "Asad Hasnain",
+    "position": "Assistant Manager",
+    "phone": "+1 (559) 333-2167"
+  },
+  {
     "email": "ayesha@fireflyaccountancy.com",
     "role": "admin",
     "name": "Ayesha",
@@ -18,13 +39,6 @@
     "role": "admin",
     "name": "Sana Naveed",
     "position": "Executive Assistant",
-    "phone": "03342886108"
-  },
-  {
-    "email": "test@fireflyaccountancy.com",
-    "role": "team",
-    "name": "Test",
-    "position": "Test",
     "phone": "03342886108"
   }
 ]

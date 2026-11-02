@@ -38,6 +38,12 @@
           "date": "2026-05-01"
         },
         {
+          "id": "holiday-1793267346311-8umzhf",
+          "name": "Youm-e-Takbeer",
+          "date": "2026-05-28",
+          "origin": "manual"
+        },
+        {
           "id": "seed-7-day-of-arafa",
           "name": "Day of Arafa - Day 1",
           "date": "2026-05-26",
@@ -74,14 +80,26 @@
         },
         {
           "id": "seed-13-12th-of-rabi-ul-awal",
-          "name": "12th of Rabi-ul-Awal",
+          "name": "Eid Milad un Nabi",
           "date": "2026-08-25",
+          "origin": "manual"
+        },
+        {
+          "id": "holiday-1793267486669-glij18",
+          "name": "Iqbal Day",
+          "date": "2026-11-09",
           "origin": "manual"
         },
         {
           "id": "seed-14-quaid-e-azam-day",
           "name": "Quaid-e-Azam Day",
           "date": "2026-12-25"
+        },
+        {
+          "id": "holiday-1793267521749-lyh5wi",
+          "name": "Day after Christmas",
+          "date": "2026-12-26",
+          "origin": "manual"
         }
       ]
     },

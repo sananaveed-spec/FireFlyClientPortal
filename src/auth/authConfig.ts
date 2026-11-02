@@ -59,6 +59,7 @@ export const mailSendRequest = {
  * - Sites.Read.All: list/search sites for Portal Link picker
  * - Files.ReadWrite.All: create year/month folders in new client sites
  * - Group.ReadWrite.All: create CLIENT - {Name} Team sites
+ * - User.Invite.All: B2B guest invite for external client emails (Owner, etc.)
  */
 export const sharePointRequest = {
   scopes: [
@@ -66,6 +67,7 @@ export const sharePointRequest = {
     "Sites.Read.All",
     "Files.ReadWrite.All",
     "Group.ReadWrite.All",
+    "User.Invite.All",
     "User.Read",
     "User.ReadBasic.All",
   ],

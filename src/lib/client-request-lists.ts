@@ -569,6 +569,166 @@ export function removeRequestBullet(
   };
 }
 
+/** Prefix for BD9 Excel-row action items (synced from BD8 attachment). */
+export const BD9_EXCEL_SOURCE_PREFIX = "xlsx:";
+
+/** Prefix for BD13 mirrors of BD10 late items (local Completed/Late only). */
+export const BD13_LATE_SOURCE_PREFIX = "bd13-src:";
+
+/**
+ * Sync BD10 late rows onto the BD13 action list.
+ * Completing on BD13 only updates these mirrors — upstream BD7/BD8/BD9/BD10
+ * statuses stay unchanged.
+ */
+export function syncBd13LateItemsFromSources(
+  list: ClientRequestList,
+  sourceLateItems: ReadonlyArray<{
+    id: string;
+    label: string;
+    completedAt?: string;
+  }>,
+  monthKey: string,
+): ClientRequestList {
+  const month = monthKey.trim();
+  if (!month) {
+    return list;
+  }
+  const sourceById = new Map(
+    sourceLateItems
+      .map((item) => ({
+        id: item.id.trim(),
+        label: item.label.trim(),
+        completedAt: String(item.completedAt ?? "").trim(),
+      }))
+      .filter((item) => item.id && item.label)
+      .map((item) => [item.id, item] as const),
+  );
+
+  const nextItems: ActionWorkflowItem[] = [];
+  const seenSourceIds = new Set<string>();
+
+  for (const item of list.actionItems) {
+    const isBd13Source = item.sourceRequestId.startsWith(
+      BD13_LATE_SOURCE_PREFIX,
+    );
+    if (item.monthKey !== month) {
+      nextItems.push(item);
+      continue;
+    }
+    if (!isBd13Source) {
+      if (item.status !== "action") {
+        nextItems.push(item);
+      }
+      continue;
+    }
+    const sourceId = item.sourceRequestId.slice(BD13_LATE_SOURCE_PREFIX.length);
+    const source = sourceById.get(sourceId);
+    if (!source) {
+      // Upstream no longer late — keep BD13 Completed history only.
+      if (item.status === "completed") {
+        nextItems.push(item);
+      }
+      continue;
+    }
+    seenSourceIds.add(sourceId);
+    nextItems.push(
+      item.label !== source.label ? { ...item, label: source.label } : item,
+    );
+  }
+
+  for (const [sourceId, source] of sourceById) {
+    if (seenSourceIds.has(sourceId)) {
+      continue;
+    }
+    nextItems.push({
+      id: makeItemId("act"),
+      label: source.label,
+      sourceRequestId: `${BD13_LATE_SOURCE_PREFIX}${sourceId}`,
+      monthKey: month,
+      status: "late",
+      completedAt: source.completedAt || new Date().toISOString(),
+    });
+  }
+
+  return { ...list, actionItems: nextItems };
+}
+
+/**
+ * Sync BD8 Excel/CSV data rows onto the BD9 action list for Completed/Late.
+ * Preserves resolved statuses; refreshes open labels; drops obsolete open rows.
+ */
+export function syncBd9ExcelRowsToActionItems(
+  list: ClientRequestList,
+  rows: ReadonlyArray<{ fingerprint: string; label: string }>,
+  monthKey: string,
+): ClientRequestList {
+  const month = monthKey.trim();
+  if (!month) {
+    return list;
+  }
+  const rowByFingerprint = new Map(
+    rows
+      .map((row) => ({
+        fingerprint: row.fingerprint.trim(),
+        label: row.label.trim(),
+      }))
+      .filter((row) => row.fingerprint && row.label)
+      .map((row) => [row.fingerprint, row] as const),
+  );
+
+  const nextItems: ActionWorkflowItem[] = [];
+  const seenFingerprints = new Set<string>();
+
+  for (const item of list.actionItems) {
+    const isExcelSource = item.sourceRequestId.startsWith(
+      BD9_EXCEL_SOURCE_PREFIX,
+    );
+    if (item.monthKey !== month) {
+      nextItems.push(item);
+      continue;
+    }
+    if (!isExcelSource) {
+      // Drop open legacy BD8 question items from the BD9 month list.
+      if (item.status !== "action") {
+        nextItems.push(item);
+      }
+      continue;
+    }
+    const fingerprint = item.sourceRequestId.slice(
+      BD9_EXCEL_SOURCE_PREFIX.length,
+    );
+    const row = rowByFingerprint.get(fingerprint);
+    if (!row) {
+      if (item.status !== "action") {
+        nextItems.push(item);
+      }
+      continue;
+    }
+    seenFingerprints.add(fingerprint);
+    nextItems.push(
+      item.status === "action" && item.label !== row.label
+        ? { ...item, label: row.label }
+        : item,
+    );
+  }
+
+  for (const [fingerprint, row] of rowByFingerprint) {
+    if (seenFingerprints.has(fingerprint)) {
+      continue;
+    }
+    nextItems.push({
+      id: makeItemId("act"),
+      label: row.label,
+      sourceRequestId: `${BD9_EXCEL_SOURCE_PREFIX}${fingerprint}`,
+      monthKey: month,
+      status: "action",
+      completedAt: "",
+    });
+  }
+
+  return { ...list, actionItems: nextItems };
+}
+
 export function completeActionItem(
   list: ClientRequestList,
   actionItemId: string,

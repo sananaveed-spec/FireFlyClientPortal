@@ -35,9 +35,21 @@ export async function GET(request: Request) {
   }
 
   try {
-    const signature = await readEmailSignatureForUser(gate.email);
+    // Optional ?email= loads that user's signature (e.g. supervisor for
+    // Client Management schedule preview/send). Defaults to signed-in user.
+    const requested = new URL(request.url).searchParams.get("email");
+    const targetEmail = requested
+      ? normalizeEmail(requested)
+      : normalizeEmail(gate.email);
+    if (!targetEmail) {
+      return NextResponse.json(
+        { error: "A valid email is required." },
+        { status: 400 },
+      );
+    }
+    const signature = await readEmailSignatureForUser(targetEmail);
     return NextResponse.json({
-      signature: await signatureWithPortalProfile(gate.email, signature),
+      signature: await signatureWithPortalProfile(targetEmail, signature),
     });
   } catch (error) {
     const message =

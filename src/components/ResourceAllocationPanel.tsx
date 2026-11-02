@@ -32,6 +32,7 @@ import {
   type LookupFieldId,
 } from "@/lib/lookup-data";
 import { portalFetch } from "@/lib/portal-api";
+import type { PortalUser } from "@/lib/portal-users";
 import {
   bookkeepingCategoryForCountry,
   createEmptyResourceClientForm,
@@ -40,6 +41,12 @@ import {
   type ResourceClientEntry,
   type ResourceClientInput,
 } from "@/lib/resource-clients";
+import {
+  assigneeOptionsFromLookup,
+  coerceStaffToEmail,
+  formatStaffAssignmentLabel,
+  formatStaffAssignmentLabels,
+} from "@/lib/staff-assign";
 import {
   filterYearlyComplianceOptionsForCountry,
   isCaYearlyComplianceOption,
@@ -172,6 +179,7 @@ export function ResourceAllocationPanel() {
   const actor = getActorFromAccount(accounts[0]);
   const [clients, setClients] = useState<ResourceClientEntry[]>([]);
   const [profiles, setProfiles] = useState<ClientProfileEntry[]>([]);
+  const [portalUsers, setPortalUsers] = useState<PortalUser[]>([]);
   const [lookups, setLookups] = useState<LookupDataStore | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -199,11 +207,13 @@ export function ResourceAllocationPanel() {
 
     async function loadAll() {
       try {
-        const [clientsRes, profilesRes, lookupsRes] = await Promise.all([
-          fetch("/api/resource-clients"),
-          fetch("/api/client-profiles"),
-          fetch("/api/lookup-data", { cache: "no-store" }),
-        ]);
+        const [clientsRes, profilesRes, lookupsRes, usersRes] =
+          await Promise.all([
+            fetch("/api/resource-clients"),
+            fetch("/api/client-profiles"),
+            fetch("/api/lookup-data", { cache: "no-store" }),
+            fetch("/api/portal-users", { cache: "no-store" }),
+          ]);
 
         const clientsData = (await clientsRes.json()) as {
           clients?: ResourceClientEntry[];
@@ -214,6 +224,10 @@ export function ResourceAllocationPanel() {
           error?: string;
         };
         const lookupsData = (await lookupsRes.json()) as LookupDataStore & {
+          error?: string;
+        };
+        const usersData = (await usersRes.json()) as {
+          users?: PortalUser[];
           error?: string;
         };
 
@@ -230,6 +244,11 @@ export function ResourceAllocationPanel() {
         if (!cancelled) {
           setClients(clientsData.clients ?? []);
           setProfiles(profilesData.profiles ?? []);
+          setPortalUsers(
+            usersRes.ok && Array.isArray(usersData.users)
+              ? usersData.users
+              : [],
+          );
           setLookups({ fields: lookupsData.fields ?? [] });
           setError(null);
         }
@@ -262,14 +281,48 @@ export function ResourceAllocationPanel() {
     () => getLookupOptions(lookups, "industry"),
     [lookups],
   );
-  const supervisorOptions = useMemo(
-    () => getLookupOptions(lookups, "primaryAssignee"),
-    [lookups],
-  );
-  const bookkeeperOptions = useMemo(
-    () => getLookupOptions(lookups, "secondaryAssignee"),
-    [lookups],
-  );
+  const supervisorOptions = useMemo(() => {
+    const options = assigneeOptionsFromLookup(
+      lookups,
+      "primaryAssignee",
+      portalUsers,
+    );
+    // Keep current value visible even if removed from Lookup list.
+    if (
+      form.supervisor.trim() &&
+      !options.some((option) => option.value === form.supervisor.trim())
+    ) {
+      return [
+        ...options,
+        {
+          value: form.supervisor.trim(),
+          label:
+            formatStaffAssignmentLabel(form.supervisor, portalUsers) ||
+            form.supervisor.trim(),
+        },
+      ];
+    }
+    return options;
+  }, [lookups, portalUsers, form.supervisor]);
+
+  const bookkeeperOptions = useMemo(() => {
+    const options = assigneeOptionsFromLookup(
+      lookups,
+      "secondaryAssignee",
+      portalUsers,
+    );
+    const extras = form.bookkeeperAccountant
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .filter(
+        (value) => !options.some((option) => option.value === value),
+      )
+      .map((value) => ({
+        value,
+        label: formatStaffAssignmentLabel(value, portalUsers) || value,
+      }));
+    return [...options, ...extras];
+  }, [lookups, portalUsers, form.bookkeeperAccountant]);
   const bookkeepingOptions = useMemo(
     () => getLookupOptions(lookups, "bookkeeping"),
     [lookups],
@@ -394,8 +447,10 @@ export function ResourceAllocationPanel() {
       clientName: client.clientName,
       industry: profile?.industry.trim() || client.industry,
       status: client.status,
-      supervisor: client.supervisor,
-      bookkeeperAccountant: [...client.bookkeeperAccountant],
+      supervisor: coerceStaffToEmail(client.supervisor, portalUsers),
+      bookkeeperAccountant: client.bookkeeperAccountant.map((entry) =>
+        coerceStaffToEmail(entry, portalUsers),
+      ),
       bookkeeping: [...client.bookkeeping],
       payroll: client.payroll,
       payrollAndSalesTaxes: [...client.payrollAndSalesTaxes],
@@ -668,7 +723,10 @@ export function ResourceAllocationPanel() {
       bookkeepingCategory,
       industry,
       status: form.status.trim(),
-      supervisor: form.supervisor.trim(),
+      supervisor: coerceStaffToEmail(form.supervisor.trim(), portalUsers),
+      bookkeeperAccountant: form.bookkeeperAccountant.map((entry) =>
+        coerceStaffToEmail(entry, portalUsers),
+      ),
       payroll: form.payroll.trim(),
       meetingRequirements: form.meetingRequirements.trim(),
       meetingFrequency: frequency.frequency.trim(),
@@ -986,9 +1044,17 @@ export function ResourceAllocationPanel() {
                   <td className="col-sticky col-sticky-2">{client.clientName}</td>
                   <td>{client.industry || "—"}</td>
                   <td>{client.status || "—"}</td>
-                  <td>{client.supervisor || "—"}</td>
                   <td>
-                    {formatMultiValue(client.bookkeeperAccountant) || "—"}
+                    {formatStaffAssignmentLabel(
+                      client.supervisor,
+                      portalUsers,
+                    ) || "—"}
+                  </td>
+                  <td>
+                    {formatStaffAssignmentLabels(
+                      client.bookkeeperAccountant,
+                      portalUsers,
+                    ) || "—"}
                   </td>
                   <td>{formatMultiValue(client.bookkeeping) || "—"}</td>
                   <td>{client.payroll || "—"}</td>
@@ -1100,39 +1166,31 @@ export function ResourceAllocationPanel() {
                     />
 
                     <SearchableSelect
-                      label="Supervisor"
+                      label="Supervisor (Primary)"
                       value={form.supervisor}
                       options={supervisorOptions}
-                      allowCreate
-                      placeholder="Search/Select from the list"
+                      placeholder="Search Primary Assignee list…"
                       onChange={(value) => updateForm("supervisor", value)}
-                      onCreateOption={(label) =>
-                        createSingleLookupValue(
-                          "primaryAssignee",
-                          "supervisor",
-                          label,
-                        )
-                      }
                     />
+                    <span className="lookup-hint field--wide">
+                      Options come from Lookup → Primary Assignee (picked from
+                      User Management). This mailbox sends client schedule
+                      email.
+                    </span>
 
                     <SearchableChecklist
-                      label="Bookkeeper/Accountant"
+                      label="Bookkeeper/Accountant (Secondary)"
                       values={form.bookkeeperAccountant}
                       options={bookkeeperOptions}
-                      allowCreate
-                      placeholder="Search/Select from the list"
+                      placeholder="Search Secondary Assignee list…"
                       onChange={(values) =>
                         updateForm("bookkeeperAccountant", values)
                       }
-                      onCreateOption={(label) =>
-                        createMultiLookupValue(
-                          "secondaryAssignee",
-                          "bookkeeperAccountant",
-                          label,
-                          form.bookkeeperAccountant,
-                        )
-                      }
                     />
+                    <span className="lookup-hint field--wide">
+                      Options come from Lookup → Secondary Assignee. Secondary
+                      can view schedules but cannot send email.
+                    </span>
 
                     <SearchableChecklist
                       label="Bookkeeping services"

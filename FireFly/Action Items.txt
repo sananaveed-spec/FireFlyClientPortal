@@ -2,37 +2,88 @@
 - Client 3DB remove, only team members reminder. .... Done
 - Client K proposal -> Proposal - Active, Proposal attach to client.... Done 
 (View Only? View + Download?)
-- Ending soon -  2 months prior staff, 1 month prior client
+- Ending soon -  2 months prior staff, 1 month prior client.... Done 
 - Client Invoices handle krni hy....last kb pay kia, next kb dy ga.... Done
-
-
-
-
+Current Month payment, Next month payment... 
+small descri[tipon, adhoc payment, quick book subscription....
+- Proposal accept, new client added.... AUTO add to client, team ko notification show ho ga bs. .... Done 
+- renew - 2 months prior staff, 1 month prior client.... Done 
+- REnew converted accepted .... new wala... purany wala completed. Revise terms and coditions accepeted..... Done 
+- Server code sharepoint logic...Done
 
 Schedule? team member name?
-Server code sharepoint logic...
-
-
 
 crestview -CA
 EPs - USA
-
-
-ending soon....
-
-1. renew - 2 months prior staff, 1 month prior client
-
-
-REnew converted accepted .... new wala... purany wala completed. Revise terms and coditions accepeted. 
-
-
-2. Proposal accept, new client added.... AUTO add to client, team ko notification show ho ga bs. 
-
-
-3. ..
 
 paypal ko attach kesy krna system sy.... 
 
 
 
 
+-------------------------------------------------------------
+
+in BD13... files choosen is not neeeded? statemment can be change?
+
+proposal acceprted, then create share point, then add... 
+
+
+
+ayesha@fireflyaccountancy.com
+asad@fireflyaccountancy.com
+abdul@fireflyaccountancy.com   defaylt
+owner POc clieny
+
+	yusuf@syvgroup.com how to add ........... sharepoint link creation email send....
+
+g drive...
+
+
+how to make sure welcome mesasages always enable?
+
+
+
+Group ID..... Column in Client Profile...
+
+EPS Thomas id add
+thomas@epsfresno.com
+
+Client Add, pop up dy k poch ly, manual/automatic data management.... then craete automatic or add link
+
+
+ACC-BUS EPS - Documents - 2026 PAYROLL - Paylocity Reports - All Documents
+https://epsfresno.sharepoint.com/sites/ACCEPS/Shared%20Documents/Forms/AllItems.aspx?id=%2Fsites%2FACCEPS%2FShared%20Documents%2F%23EPS%20FFA%20FOLDER%2F2026%20PAYROLL%20%2D%20Paylocity%20Reports&viewid=fbbca561%2Dbb88%2D405b%2Daab8%2Db8e5c9e5622e&FolderCTID=0x0120006A5505499D519041A29E65120091BC52&share=cgpODUf86t%2DXQ6gcE%5FTs1OWREgUC3AuW%5Fm2beRynu4eGe5kMnw
+
+
+why it is repeated..... 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+i want to implement one feature.... let me know what is best possible solution. I want to identify religion of employees like we add one column in User Management and Can Add muslim or Christian from drop down menu, and then when we go to holidays, there will be one Column like Applies to All Staff, Christia  staff only, if this is christian staff, then email goes to chrian only, else all members in user management..... dont implement.... share the plan 

@@ -1,0 +1,81 @@
+{
+  "syncedAt": "2026-10-26T08:40:10.729Z",
+  "windowMonths": 3,
+  "proposals": [
+    {
+      "slug": "prop_nd7uyzfqhwaqasybd34q",
+      "clientSlug": "cli_nd7uzj2qoiraajyanxya",
+      "clientName": "Mahida Global LLC",
+      "name": "PROPOSAL FOR ACCOUNTING & TAX SERVICES",
+      "referenceNumber": "PROP-0075",
+      "state": "accepted",
+      "updatedAt": "2026-09-21T08:55:42Z",
+      "createdAt": "2025-10-27T10:41:40Z",
+      "startDate": "2025-11-01",
+      "minimumContractLength": 12,
+      "endsOn": "2026-11-01",
+      "viewUrl": "https://go.ignitionapp.com/clients/cli_nd7uzj2qoiraajyanxya/proposals/prop_nd7uyzfqhwaqasybd34q",
+      "pdfUrl": "https://go.ignitionapp.com/clients/cli_nd7uzj2qoiraajyanxya/proposals/prop_nd7uyzfqhwaqasybd34q/pdf"
+    },
+    {
+      "slug": "prop_njzyn4fb43jqawaaqgsa",
+      "clientSlug": "cli_ncuh7n7tygpaakabat3q",
+      "clientName": "Clearview Merchant Ltd",
+      "name": "PROPOSAL FOR ACCOUNTING & TAX SERVICES",
+      "referenceNumber": "PROP-0140",
+      "state": "accepted",
+      "updatedAt": "2026-09-21T19:20:25Z",
+      "createdAt": "2026-08-05T18:54:40Z",
+      "startDate": "2026-09-01",
+      "minimumContractLength": 3,
+      "endsOn": "2026-12-01",
+      "viewUrl": "https://go.ignitionapp.com/clients/cli_ncuh7n7tygpaakabat3q/proposals/prop_njzyn4fb43jqawaaqgsa",
+      "pdfUrl": "https://go.ignitionapp.com/clients/cli_ncuh7n7tygpaakabat3q/proposals/prop_njzyn4fb43jqawaaqgsa/pdf"
+    },
+    {
+      "slug": "prop_njgk2b2r3zrqasaa6p7q",
+      "clientSlug": "cli_niwe36cm6i5qawiastoq",
+      "clientName": "Gregory L Nickel",
+      "name": "PROPOSAL FOR ACCOUNTING & TAX SERVICES",
+      "referenceNumber": "PROP-0124",
+      "state": "accepted",
+      "updatedAt": "2026-09-24T17:23:50Z",
+      "createdAt": "2026-07-07T07:38:47Z",
+      "startDate": "2026-09-01",
+      "minimumContractLength": 4,
+      "endsOn": "2027-01-01",
+      "viewUrl": "https://go.ignitionapp.com/clients/cli_niwe36cm6i5qawiastoq/proposals/prop_njgk2b2r3zrqasaa6p7q",
+      "pdfUrl": "https://go.ignitionapp.com/clients/cli_niwe36cm6i5qawiastoq/proposals/prop_njgk2b2r3zrqasaa6p7q/pdf"
+    },
+    {
+      "slug": "prop_nklvmw6esqjaaoyawouq",
+      "clientSlug": "cli_nklvpcycvvkqavaa6ppa",
+      "clientName": "Halal Inc",
+      "name": "PROPOSAL FOR ACCOUNTING & TAX SERVICES",
+      "referenceNumber": "PROP-0154",
+      "state": "accepted",
+      "updatedAt": "2026-09-04T22:40:01Z",
+      "createdAt": "2026-09-01T22:48:59Z",
+      "startDate": "2026-09-01",
+      "minimumContractLength": 4,
+      "endsOn": "2027-01-01",
+      "viewUrl": "https://go.ignitionapp.com/clients/cli_nklvpcycvvkqavaa6ppa/proposals/prop_nklvmw6esqjaaoyawouq",
+      "pdfUrl": "https://go.ignitionapp.com/clients/cli_nklvpcycvvkqavaa6ppa/proposals/prop_nklvmw6esqjaaoyawouq/pdf"
+    },
+    {
+      "slug": "prop_ndfmvv4f3yiqamabarva",
+      "clientSlug": "cli_ndfmu5r73xrqaiyazcpa",
+      "clientName": "LASH & CO.",
+      "name": "PROPOSAL FOR ACCOUNTING & TAX SERVICES",
+      "referenceNumber": "PROP-0063",
+      "state": "accepted",
+      "updatedAt": "2026-04-15T11:13:15Z",
+      "createdAt": "2025-09-17T14:51:03Z",
+      "startDate": "2026-01-26",
+      "minimumContractLength": 12,
+      "endsOn": "2027-01-26",
+      "viewUrl": "https://go.ignitionapp.com/clients/cli_ndfmu5r73xrqaiyazcpa/proposals/prop_ndfmvv4f3yiqamabarva",
+      "pdfUrl": "https://go.ignitionapp.com/clients/cli_ndfmu5r73xrqaiyazcpa/proposals/prop_ndfmvv4f3yiqamabarva/pdf"
+    }
+  ]
+}

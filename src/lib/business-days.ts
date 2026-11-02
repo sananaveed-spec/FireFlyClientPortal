@@ -292,6 +292,45 @@ export function getScheduleBusinessDate(
   return ensureWorkingDay(date, excludedForShift);
 }
 
+function startOfLocalDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+/**
+ * Same as getScheduleBusinessDate, but if that day is already before today,
+ * resolve the same BD slot in the next month (this month’s date expired).
+ * Example: on 28 Oct, BD1 shows November’s BD1 instead of 1 Oct.
+ */
+export function getUpcomingScheduleBusinessDate(
+  scheduleId: string,
+  holidays: HolidaysStore,
+  clientCountry: ClientCountry | string | undefined,
+  clientState: string,
+  now: Date = new Date(),
+): Date | null {
+  const thisMonth = getScheduleBusinessDate(
+    scheduleId,
+    holidays,
+    clientCountry,
+    clientState,
+    now,
+  );
+  if (!thisMonth) {
+    return null;
+  }
+  if (startOfLocalDay(thisMonth) >= startOfLocalDay(now)) {
+    return thisMonth;
+  }
+  const nextMonthAnchor = new Date(now.getFullYear(), now.getMonth() + 1, 15);
+  return getScheduleBusinessDate(
+    scheduleId,
+    holidays,
+    clientCountry,
+    clientState,
+    nextMonthAnchor,
+  );
+}
+
 /** True if any Sat/Sun falls strictly between `from` and `to` (exclusive). */
 function hasWeekendBetween(from: Date, to: Date): boolean {
   const cursor = new Date(from.getFullYear(), from.getMonth(), from.getDate());
@@ -316,14 +355,14 @@ export function getBd7DeadlineDate(
   clientState: string,
   now: Date = new Date(),
 ): Date | null {
-  const bd7 = getScheduleBusinessDate(
+  const bd7 = getUpcomingScheduleBusinessDate(
     "bd7",
     holidays,
     clientCountry,
     clientState,
     now,
   );
-  const bd8 = getScheduleBusinessDate(
+  const bd8 = getUpcomingScheduleBusinessDate(
     "bd8",
     holidays,
     clientCountry,

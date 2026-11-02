@@ -15,6 +15,19 @@
         "last-2-bd",
         "last-1-bd"
       ]
+    },
+    {
+      "clientId": "1793250981231-tf2bev",
+      "activeScheduleIds": [
+        "bd1",
+        "bd5",
+        "bd7",
+        "bd8",
+        "bd9",
+        "bd10",
+        "bd13",
+        "bd18"
+      ]
     }
   ]
 }

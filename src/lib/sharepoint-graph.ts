@@ -4,6 +4,7 @@ import type {
 } from "@azure/msal-browser";
 import { InteractionRequiredAuthError } from "@azure/msal-browser";
 import { sharePointRequest } from "@/auth/authConfig";
+import { DEFAULT_SHAREPOINT_TEAM_MEMBERS } from "@/lib/sharepoint-default-members";
 import {
   sharePointPeriodFolder,
   sharePointYearMonthFolderNames,
@@ -296,10 +297,51 @@ export function parseMemberEmails(value: string): string[] {
   return emails;
 }
 
+/** Merge email lists (typed members, Owner Email, …) with case-insensitive dedupe. */
+export function mergeMemberEmails(
+  ...lists: ReadonlyArray<ReadonlyArray<string> | string>
+): string[] {
+  const seen = new Set<string>();
+  const emails: string[] = [];
+  for (const list of lists) {
+    const values = typeof list === "string" ? [list] : list;
+    for (const value of values) {
+      const email = value.trim();
+      if (!email || !email.includes("@")) {
+        continue;
+      }
+      const key = email.toLowerCase();
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      emails.push(email);
+    }
+  }
+  return emails;
+}
+
+/**
+ * Members for a new client site: default Fire Fly team + Owner + POC + extras.
+ * Owner/POC (external) get guest invites; team emails are directory members.
+ */
+export function buildSharePointMemberEmails(options: {
+  ownerEmail?: string;
+  pocEmail?: string;
+  extraEmails?: ReadonlyArray<string> | string;
+} = {}): string[] {
+  return mergeMemberEmails(
+    DEFAULT_SHAREPOINT_TEAM_MEMBERS,
+    options.ownerEmail || "",
+    options.pocEmail || "",
+    options.extraEmails || [],
+  );
+}
+
 async function resolveDirectoryUserId(
   accessToken: string,
   email: string,
-): Promise<string> {
+): Promise<string | null> {
   const trimmed = email.trim();
   const encoded = encodeURIComponent(trimmed);
   try {
@@ -322,25 +364,103 @@ async function resolveDirectoryUserId(
     accessToken,
     `${GRAPH}/users?$filter=${filter}&$select=id&$top=1`,
   );
-  const id = data.value?.[0]?.id?.trim();
+  return data.value?.[0]?.id?.trim() || null;
+}
+
+/**
+ * Invite an external email as an Azure AD B2B guest (sends Microsoft invite).
+ * Requires User.Invite.All. Tenant must allow guest invitations.
+ */
+async function inviteExternalGuestUser(
+  accessToken: string,
+  email: string,
+  inviteRedirectUrl: string,
+): Promise<string> {
+  const redirectUrl =
+    inviteRedirectUrl.trim() || `https://${sharePointSiteHost()}`;
+  const data = await graphJson<{
+    invitedUser?: { id?: string };
+  }>(accessToken, `${GRAPH}/invitations`, {
+    method: "POST",
+    body: JSON.stringify({
+      invitedUserEmailAddress: email.trim(),
+      inviteRedirectUrl: redirectUrl,
+      sendInvitationMessage: true,
+      invitedUserMessageInfo: {
+        customizedMessageBody:
+          "You have been invited to your Fire Fly client SharePoint site. After accepting, you can upload, edit, and delete documents in Shared Documents.",
+      },
+    }),
+  });
+  const id = data.invitedUser?.id?.trim();
   if (!id) {
-    throw new Error("User not found in the Fire Fly directory.");
+    throw new Error(
+      "Guest invitation did not return a user id. Check Azure AD guest invite settings and User.Invite.All consent.",
+    );
   }
   return id;
 }
 
-async function addGroupMember(
+async function resolveOrInviteUserId(
+  accessToken: string,
+  email: string,
+  inviteRedirectUrl: string,
+): Promise<string> {
+  const existing = await resolveDirectoryUserId(accessToken, email);
+  if (existing) {
+    return existing;
+  }
+  return inviteExternalGuestUser(accessToken, email, inviteRedirectUrl);
+}
+
+async function addUserIdToGroup(
   accessToken: string,
   groupId: string,
-  email: string,
+  userId: string,
 ): Promise<void> {
-  const userId = await resolveDirectoryUserId(accessToken, email);
   await graphJson(accessToken, `${GRAPH}/groups/${groupId}/members/$ref`, {
     method: "POST",
     body: JSON.stringify({
       "@odata.id": `${GRAPH}/directoryObjects/${userId}`,
     }),
   });
+}
+
+/**
+ * Add a Fire Fly or external email as an M365 group member (SharePoint edit).
+ * External emails are invited as B2B guests first, then added to the group.
+ */
+async function addGroupMember(
+  accessToken: string,
+  groupId: string,
+  email: string,
+  inviteRedirectUrl: string,
+): Promise<void> {
+  const userId = await resolveOrInviteUserId(
+    accessToken,
+    email,
+    inviteRedirectUrl,
+  );
+  try {
+    await addUserIdToGroup(accessToken, groupId, userId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (isAlreadyGroupMemberError(message)) {
+      return;
+    }
+    // Guest object can lag briefly after invite — retry once.
+    await sleep(2000);
+    try {
+      await addUserIdToGroup(accessToken, groupId, userId);
+    } catch (retryError) {
+      const retryMessage =
+        retryError instanceof Error ? retryError.message : String(retryError);
+      if (isAlreadyGroupMemberError(retryMessage)) {
+        return;
+      }
+      throw retryError;
+    }
+  }
 }
 
 function currentYearMonthFolderNames(now = new Date()): {
@@ -480,17 +600,34 @@ async function ensureYearMonthFolders(
   return warnings;
 }
 
+async function addGroupOwner(
+  accessToken: string,
+  groupId: string,
+  userId: string,
+): Promise<void> {
+  await graphJson(accessToken, `${GRAPH}/groups/${groupId}/owners/$ref`, {
+    method: "POST",
+    body: JSON.stringify({
+      "@odata.id": `${GRAPH}/directoryObjects/${userId}`,
+    }),
+  });
+}
+
 /**
- * Create a private Microsoft 365 Group (Team site) named CLIENT - {Legal Name}.
- * Needs Group.ReadWrite.All. Returns the SharePoint site webUrl.
- * Optional memberEmails are added as group members (not owners).
- * Also creates Shared Documents/{year}/JanYY…DecYY (skips existing).
+ * Create CLIENT - {Legal Name} site with an existing Graph access token
+ * (delegated or app-only). Adds members (guest-invite for externals) and
+ * year/month folders. When skipCreatorEmail is set, that email is not
+ * re-added as a member (already owner via delegated create).
  */
-export async function createClientSharePointSite(
-  instance: IPublicClientApplication,
-  account: AccountInfo,
+export async function createClientSharePointSiteWithToken(
+  accessToken: string,
   legalName: string,
   memberEmails: string[] = [],
+  options: {
+    skipCreatorEmail?: string;
+    /** App-only creates have no signed-in owner — promote Fire Fly team. */
+    promoteTeamAsOwners?: boolean;
+  } = {},
 ): Promise<{
   displayName: string;
   webUrl: string;
@@ -502,11 +639,8 @@ export async function createClientSharePointSite(
   }
 
   const displayName = clientSharePointSiteDisplayName(name);
-  const accessToken = await acquireSharePointToken(instance, account);
   const mailNickname = toMailNickname(name);
-  const creatorEmail = String(
-    account.username || account.name || "",
-  ).toLowerCase();
+  const skipEmail = (options.skipCreatorEmail || "").trim().toLowerCase();
 
   const group = await graphJson<{ id: string }>(accessToken, `${GRAPH}/groups`, {
     method: "POST",
@@ -520,22 +654,6 @@ export async function createClientSharePointSite(
       visibility: "Private",
     }),
   });
-
-  const memberWarnings: string[] = [];
-  for (const email of memberEmails) {
-    if (email.toLowerCase() === creatorEmail) {
-      continue; // Creator is already owner/member.
-    }
-    try {
-      await addGroupMember(accessToken, group.id, email);
-    } catch (memberError) {
-      const detail =
-        memberError instanceof Error
-          ? memberError.message
-          : "Could not add member.";
-      memberWarnings.push(`${email}: ${detail}`);
-    }
-  }
 
   let webUrl = "";
   let resolvedDisplayName = displayName;
@@ -561,6 +679,49 @@ export async function createClientSharePointSite(
     webUrl = `https://${host}/sites/${mailNickname}`;
   }
 
+  const memberWarnings: string[] = [];
+  const emails = mergeMemberEmails(memberEmails);
+
+  if (options.promoteTeamAsOwners) {
+    for (const email of DEFAULT_SHAREPOINT_TEAM_MEMBERS) {
+      try {
+        const userId = await resolveDirectoryUserId(accessToken, email);
+        if (!userId) {
+          memberWarnings.push(`${email}: not found to set as site owner.`);
+          continue;
+        }
+        await addGroupOwner(accessToken, group.id, userId);
+      } catch (ownerError) {
+        const detail =
+          ownerError instanceof Error
+            ? ownerError.message
+            : "Could not set owner.";
+        if (isAlreadyGroupMemberError(detail)) {
+          continue;
+        }
+        memberWarnings.push(`${email} (owner): ${detail}`);
+      }
+    }
+  }
+
+  for (const email of emails) {
+    if (skipEmail && email.toLowerCase() === skipEmail) {
+      continue;
+    }
+    try {
+      await addGroupMember(accessToken, group.id, email, webUrl);
+    } catch (memberError) {
+      const detail =
+        memberError instanceof Error
+          ? memberError.message
+          : "Could not add member.";
+      if (isAlreadyGroupMemberError(detail)) {
+        continue;
+      }
+      memberWarnings.push(`${email}: ${detail}`);
+    }
+  }
+
   const folderWarnings = await ensureYearMonthFolders(accessToken, group.id);
   memberWarnings.push(...folderWarnings);
 
@@ -569,6 +730,54 @@ export async function createClientSharePointSite(
     webUrl,
     memberWarnings,
   };
+}
+
+/**
+ * Create a private Microsoft 365 Group (Team site) named CLIENT - {Legal Name}.
+ * Needs Group.ReadWrite.All. Returns the SharePoint site webUrl.
+ * Optional memberEmails (Fire Fly or external) are invited as needed and added
+ * as group members (not owners) — SharePoint edit/upload/delete.
+ * Also creates Shared Documents/{year}/JanYY…DecYY (skips existing).
+ */
+export async function createClientSharePointSite(
+  instance: IPublicClientApplication,
+  account: AccountInfo,
+  legalName: string,
+  memberEmails: string[] = [],
+): Promise<{
+  displayName: string;
+  webUrl: string;
+  memberWarnings: string[];
+}> {
+  const accessToken = await acquireSharePointToken(instance, account);
+  const creatorEmail = String(account.username || account.name || "");
+  return createClientSharePointSiteWithToken(
+    accessToken,
+    legalName,
+    memberEmails,
+    { skipCreatorEmail: creatorEmail },
+  );
+}
+
+/**
+ * Server-side site create (Ignition proposal.accepted). Uses app-only token.
+ */
+export async function createClientSharePointSiteAppOnly(
+  legalName: string,
+  memberEmails: string[] = [],
+): Promise<{
+  displayName: string;
+  webUrl: string;
+  memberWarnings: string[];
+}> {
+  const { acquireGraphAppOnlyToken } = await import("@/lib/azure-graph-app");
+  const accessToken = await acquireGraphAppOnlyToken();
+  return createClientSharePointSiteWithToken(
+    accessToken,
+    legalName,
+    memberEmails,
+    { promoteTeamAsOwners: true },
+  );
 }
 
 function normalizeSharePointSiteKey(url: string): string {
@@ -684,8 +893,9 @@ function isAlreadyGroupMemberError(message: string): boolean {
 }
 
 /**
- * Add directory users as members of the SharePoint site's M365 group
- * (resolved from Portal Link). Skips emails already in the group.
+ * Add Fire Fly or external emails as members of the SharePoint site's M365
+ * group (resolved from Portal Link). External emails get a B2B guest invite
+ * (edit access via group membership). Skips emails already in the group.
  */
 export async function addSharePointSiteMembers(
   instance: IPublicClientApplication,
@@ -693,13 +903,28 @@ export async function addSharePointSiteMembers(
   portalLink: string,
   memberEmails: string[],
 ): Promise<{ memberWarnings: string[] }> {
-  const emails = [...new Set(memberEmails.map((e) => e.trim()).filter(Boolean))];
+  const emails = mergeMemberEmails(memberEmails);
   if (emails.length === 0) {
     return { memberWarnings: [] };
   }
 
   const accessToken = await acquireSharePointToken(instance, account);
   const groupId = await resolveGroupIdFromPortalLink(accessToken, portalLink);
+  const inviteRedirectUrl =
+    parseSharePointSiteFromPortalLink(portalLink) != null
+      ? (() => {
+          try {
+            const url = new URL(
+              /^https?:\/\//i.test(portalLink.trim())
+                ? portalLink.trim()
+                : `https://${portalLink.trim()}`,
+            );
+            return `${url.origin}${url.pathname.replace(/\/+$/, "")}` || url.origin;
+          } catch {
+            return `https://${sharePointSiteHost()}`;
+          }
+        })()
+      : `https://${sharePointSiteHost()}`;
   const creatorEmail = String(
     account.username || account.name || "",
   ).toLowerCase();
@@ -710,7 +935,7 @@ export async function addSharePointSiteMembers(
       continue;
     }
     try {
-      await addGroupMember(accessToken, groupId, email);
+      await addGroupMember(accessToken, groupId, email, inviteRedirectUrl);
     } catch (memberError) {
       const detail =
         memberError instanceof Error

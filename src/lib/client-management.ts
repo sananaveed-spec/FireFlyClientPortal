@@ -37,6 +37,7 @@ function staffLabelMatches(
   if (!label || aliases.length === 0) {
     return false;
   }
+  // Email or full/first-name alias (User Management → Resource assign).
   if (aliases.includes(label)) {
     return true;
   }
@@ -117,6 +118,14 @@ export function findProfileForResourceClient(
   );
 }
 
+function sortAssignedClients(assigned: AssignedClient[]): AssignedClient[] {
+  return assigned.sort((a, b) =>
+    a.resource.clientName.localeCompare(b.resource.clientName, undefined, {
+      sensitivity: "base",
+    }),
+  );
+}
+
 /** Clients where the user is Supervisor or Bookkeeper/Accountant. */
 export function getClientsAssignedToUser(
   resources: ResourceClientEntry[],
@@ -140,11 +149,29 @@ export function getClientsAssignedToUser(
     });
   }
 
-  return assigned.sort((a, b) =>
-    a.resource.clientName.localeCompare(b.resource.clientName, undefined, {
-      sensitivity: "base",
-    }),
-  );
+  return sortAssignedClients(assigned);
+}
+
+/**
+ * Client Management list: assignees see their clients; Admins see all
+ * (view schedules / From account) even when not assigned.
+ */
+export function getClientsForManagement(
+  resources: ResourceClientEntry[],
+  profiles: ClientProfileEntry[],
+  aliases: string[],
+  options?: { seeAll?: boolean },
+): AssignedClient[] {
+  if (options?.seeAll) {
+    return sortAssignedClients(
+      resources.map((resource) => ({
+        resource,
+        profile: findProfileForResourceClient(resource, profiles),
+        roles: rolesForUserOnClient(resource, aliases),
+      })),
+    );
+  }
+  return getClientsAssignedToUser(resources, profiles, aliases);
 }
 
 export const ASSIGNMENT_ROLE_LABELS: Record<ClientAssignmentRole, string> = {
