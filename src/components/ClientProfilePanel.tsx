@@ -381,7 +381,20 @@ function renderProfileCell(
   if (!text) {
     return "—";
   }
-  if (key === "website" || key === "portalLink") {
+  if (key === "portalLink") {
+    return (
+      <a
+        className="table-link"
+        href={toWebsiteHref(text)}
+        target="_blank"
+        rel="noopener noreferrer"
+        title={text}
+      >
+        Portal Link
+      </a>
+    );
+  }
+  if (key === "website") {
     return (
       <a
         className="table-link"

@@ -803,8 +803,9 @@ function clientInfoValue(
           href={toPortalHref(link)}
           target="_blank"
           rel="noopener noreferrer"
+          title={link}
         >
-          {link}
+          Portal Link
         </a>
       );
     }
