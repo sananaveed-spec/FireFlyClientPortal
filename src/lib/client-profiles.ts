@@ -410,6 +410,46 @@ export function bd1TemplateToRequestTypeId(
   return template === "template-2" ? "other-statements" : "bank-credit-card";
 }
 
+export type PortalLinkType = "firefly-sharepoint" | "other";
+
+export function normalizePortalLinkType(value: unknown): PortalLinkType | "" {
+  const raw = String(value ?? "")
+    .trim()
+    .toLowerCase();
+  if (raw === "firefly-sharepoint" || raw === "firefly" || raw === "sharepoint") {
+    return "firefly-sharepoint";
+  }
+  if (raw === "other") {
+    return "other";
+  }
+  return "";
+}
+
+/**
+ * Infer portal type from a saved link when portalLinkType was never set.
+ */
+export function inferPortalLinkType(
+  portalLink: string,
+  sharePointHost = "fireflyaccountancy.sharepoint.com",
+): PortalLinkType | "" {
+  const trimmed = portalLink.trim();
+  if (!trimmed) {
+    return "";
+  }
+  try {
+    const url = new URL(
+      /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`,
+    );
+    const host = sharePointHost.trim().toLowerCase() || "fireflyaccountancy.sharepoint.com";
+    if (url.hostname.toLowerCase() === host && /^\/sites\//i.test(url.pathname)) {
+      return "firefly-sharepoint";
+    }
+  } catch {
+    // fall through
+  }
+  return "other";
+}
+
 export type ClientProfileEntry = {
   id: string;
   uniqueId: string;
@@ -419,6 +459,11 @@ export type ClientProfileEntry = {
   operatingName: string;
   website: string;
   portalLink: string;
+  /**
+   * How Portal Link was set: Fire Fly SharePoint (create/pick + members)
+   * or Other (any typed URL, no SharePoint member invites).
+   */
+  portalLinkType: PortalLinkType | "";
   industry: string;
   businessActivity: string;
   entityType: string;
@@ -607,6 +652,7 @@ export function createEmptyClientProfileForm(
     operatingName: "",
     website: "",
     portalLink: "",
+    portalLinkType: "",
     industry: "",
     businessActivity: "",
     entityType: "",
@@ -677,6 +723,13 @@ export function normalizeClientProfile(
     operatingName: String(value.operatingName ?? "").trim(),
     website: String(value.website ?? "").trim(),
     portalLink: String(value.portalLink ?? "").trim(),
+    portalLinkType: (() => {
+      const explicit = normalizePortalLinkType(value.portalLinkType);
+      if (explicit) {
+        return explicit;
+      }
+      return inferPortalLinkType(String(value.portalLink ?? ""));
+    })(),
     industry: String(value.industry ?? "").trim(),
     businessActivity: String(value.businessActivity ?? "").trim(),
     entityType: String(value.entityType ?? "").trim(),

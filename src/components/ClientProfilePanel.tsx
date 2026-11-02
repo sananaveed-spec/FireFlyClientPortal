@@ -28,8 +28,10 @@ import {
   normalizeFinancialAccounts,
   CLIENT_MEETING_FREQUENCY_OPTIONS,
   normalizeClientMeetingFrequency,
+  inferPortalLinkType,
   normalizePaymentType,
   normalizePayrollReportsNeeded,
+  normalizePortalLinkType,
   normalizeReportingTier,
   normalizeServiceFrequency,
   normalizeYesNo,
@@ -48,6 +50,7 @@ import {
   type FinancialAccountType,
   type PaymentType,
   type PayrollReportsNeeded,
+  type PortalLinkType,
   type YesNo,
 } from "@/lib/client-profiles";
 import { portalFetch } from "@/lib/portal-api";
@@ -89,6 +92,7 @@ import {
   isClientSharePointSite,
   listSharePointSitesForPicker,
   parseMemberEmails,
+  sharePointSiteHost,
   type SharePointSiteOption,
 } from "@/lib/sharepoint-graph";
 import type { SearchableOption } from "@/components/SearchableSelect";
@@ -635,6 +639,10 @@ export function ClientProfilePanel() {
       operatingName: profile.operatingName,
       website: profile.website,
       portalLink: profile.portalLink,
+      portalLinkType:
+        normalizePortalLinkType(profile.portalLinkType) ||
+        inferPortalLinkType(profile.portalLink, sharePointSiteHost()) ||
+        "",
       industry: profile.industry,
       businessActivity: profile.businessActivity,
       entityType: profile.entityType,
@@ -749,13 +757,26 @@ export function ClientProfilePanel() {
   }, [sharePointSites, profiles, form.legalName]);
 
   const portalLinkTrimmed = form.portalLink.trim();
-  // Edit with an existing link: Portal section is read-only. Empty link (or Add): full setup.
+  const portalLinkType: PortalLinkType | "" =
+    normalizePortalLinkType(form.portalLinkType) ||
+    (portalLinkTrimmed
+      ? inferPortalLinkType(portalLinkTrimmed, sharePointSiteHost())
+      : "");
+  const isFireflyPortal = portalLinkType === "firefly-sharepoint";
+  const isOtherPortal = portalLinkType === "other";
+  // Edit with an existing link: Fire Fly portal section is mostly read-only.
   const portalAlreadyLinked = Boolean(editingId && portalLinkTrimmed);
   const canSetupPortal = !portalAlreadyLinked;
 
   useEffect(() => {
-    // Load existing sites when the picker is shown (Add, or Edit with no link yet).
-    if (!formOpen || !canSetupPortal || createSharePointSite || !account) {
+    // Load existing sites when Fire Fly SharePoint picker is shown.
+    if (
+      !formOpen ||
+      !canSetupPortal ||
+      !isFireflyPortal ||
+      createSharePointSite ||
+      !account
+    ) {
       return;
     }
     let cancelled = false;
@@ -793,6 +814,7 @@ export function ClientProfilePanel() {
   }, [
     formOpen,
     canSetupPortal,
+    isFireflyPortal,
     createSharePointSite,
     account,
     instance,
@@ -1551,64 +1573,78 @@ export function ClientProfilePanel() {
       );
 
     let portalLink = form.portalLink.trim();
+    const resolvedPortalType: PortalLinkType | "" =
+      normalizePortalLinkType(form.portalLinkType) ||
+      (portalLink
+        ? inferPortalLinkType(portalLink, sharePointSiteHost())
+        : "") ||
+      (canSetupPortal && createSharePointSite ? "firefly-sharepoint" : "");
     let memberWarnings: string[] = [];
-    // Default Fire Fly team + Owner + POC + any typed extras (guests for externals).
-    const memberEmails = buildSharePointMemberEmails({
-      ownerEmail: form.ownerEmail,
-      pocEmail: form.pocEmail,
-      extraEmails: parseMemberEmails(sharePointMemberEmails),
-    });
-    // Create only when Portal is editable (Add, or Edit with no existing link).
-    if (canSetupPortal && createSharePointSite) {
-      if (!account) {
-        setError("Sign in with Microsoft to create a SharePoint site.");
-        return;
+    // SharePoint create / member invites only for Fire Fly SharePoint.
+    if (resolvedPortalType === "firefly-sharepoint") {
+      const memberEmails = buildSharePointMemberEmails({
+        ownerEmail: form.ownerEmail,
+        pocEmail: form.pocEmail,
+        extraEmails: parseMemberEmails(sharePointMemberEmails),
+      });
+      if (canSetupPortal && createSharePointSite) {
+        if (!account) {
+          setError("Sign in with Microsoft to create a SharePoint site.");
+          return;
+        }
+        setSaving(true);
+        setError(null);
+        try {
+          const created = await createClientSharePointSite(
+            instance,
+            account,
+            legalName,
+            memberEmails,
+          );
+          portalLink = created.webUrl;
+          memberWarnings = created.memberWarnings;
+          setForm((current) => ({
+            ...current,
+            portalLink,
+            portalLinkType: "firefly-sharepoint",
+          }));
+        } catch (createError) {
+          setSaving(false);
+          setError(
+            createError instanceof Error
+              ? createError.message
+              : "Failed to create SharePoint site.",
+          );
+          return;
+        }
+      } else if (portalAlreadyLinked && memberEmails.length > 0) {
+        if (!account) {
+          setError("Sign in with Microsoft to add SharePoint members.");
+          return;
+        }
+        setSaving(true);
+        setError(null);
+        try {
+          const added = await addSharePointSiteMembers(
+            instance,
+            account,
+            portalLink,
+            memberEmails,
+          );
+          memberWarnings = added.memberWarnings;
+        } catch (addError) {
+          setSaving(false);
+          setError(
+            addError instanceof Error
+              ? addError.message
+              : "Failed to add SharePoint members.",
+          );
+          return;
+        }
       }
-      setSaving(true);
-      setError(null);
-      try {
-        const created = await createClientSharePointSite(
-          instance,
-          account,
-          legalName,
-          memberEmails,
-        );
-        portalLink = created.webUrl;
-        memberWarnings = created.memberWarnings;
-        setForm((current) => ({ ...current, portalLink }));
-      } catch (createError) {
-        setSaving(false);
-        setError(
-          createError instanceof Error
-            ? createError.message
-            : "Failed to create SharePoint site.",
-        );
-        return;
-      }
-    } else if (portalAlreadyLinked && memberEmails.length > 0) {
-      if (!account) {
-        setError("Sign in with Microsoft to add SharePoint members.");
-        return;
-      }
-      setSaving(true);
-      setError(null);
-      try {
-        const added = await addSharePointSiteMembers(
-          instance,
-          account,
-          portalLink,
-          memberEmails,
-        );
-        memberWarnings = added.memberWarnings;
-      } catch (addError) {
-        setSaving(false);
-        setError(
-          addError instanceof Error
-            ? addError.message
-            : "Failed to add SharePoint members.",
-        );
-        return;
-      }
+    } else if (resolvedPortalType === "other" && canSetupPortal && !portalLink) {
+      setError("Enter a Portal URL for Other.");
+      return;
     }
 
     const entry: ClientProfileEntry = {
@@ -1620,6 +1656,7 @@ export function ClientProfilePanel() {
       operatingName: form.operatingName.trim(),
       website: form.website.trim(),
       portalLink,
+      portalLinkType: resolvedPortalType,
       industry: form.industry.trim(),
       businessActivity: form.businessActivity.trim(),
       entityType: form.entityType.trim(),
@@ -2588,163 +2625,264 @@ export function ClientProfilePanel() {
 
           <FormSection
             title="Portal"
-            description="SharePoint site used for document uploads."
+            description="Client document portal — Fire Fly SharePoint or another URL."
           >
-            {portalAlreadyLinked ? (
-              <label className="field field--checkbox">
-                <span className="field-label">
+            <fieldset className="field field--radios">
+              <legend className="field-label">Portal type</legend>
+              <div className="radio-row">
+                <label className="radio-option">
                   <input
-                    type="checkbox"
-                    checked
-                    disabled
-                    readOnly
-                  />{" "}
-                  Create site on SharePoint
-                </span>
-                <span className="lookup-hint">
-                  A SharePoint site is already linked. Create and Portal Link
-                  are read-only; you can still add members below.
-                </span>
-              </label>
-            ) : (
-              <label className="field field--checkbox">
-                <span className="field-label">
-                  <input
-                    type="checkbox"
-                    checked={createSharePointSite}
-                    disabled={saving}
-                    onChange={(event) => {
-                      const checked = event.target.checked;
-                      setCreateSharePointSite(checked);
-                      if (!checked) {
-                        setSharePointMemberEmails("");
-                      } else {
-                        setSharePointSitesError(null);
+                    type="radio"
+                    name="portal-link-type"
+                    checked={isFireflyPortal}
+                    disabled={saving || portalAlreadyLinked}
+                    onChange={() => {
+                      updateField("portalLinkType", "firefly-sharepoint");
+                      setCreateSharePointSite(false);
+                      setSharePointMemberEmails("");
+                      if (isOtherPortal) {
+                        updateField("portalLink", "");
                       }
                     }}
                   />{" "}
-                  Create site on SharePoint
-                </span>
-                <span className="lookup-hint">
-                  {createSharePointSite
-                    ? `On save, creates "${clientSharePointSiteDisplayName(form.legalName || "Client Name")}", year/month folders (e.g. 2026/01.Jan26…12.Dec26), and fills Portal Link.`
-                    : "Leave unchecked to pick an existing SharePoint site below."}
-                </span>
-              </label>
-            )}
-
-            {(portalAlreadyLinked ||
-              (canSetupPortal && createSharePointSite)) ? (
-              <div className="field">
-                <span className="field-label">SharePoint members</span>
-                <ul className="sharepoint-auto-members">
-                  <li>
-                    <span className="sharepoint-auto-members-role">
-                      Fire Fly team
-                    </span>
-                    <span className="sharepoint-auto-members-emails">
-                      {DEFAULT_SHAREPOINT_TEAM_MEMBERS.join(", ")}
-                    </span>
-                  </li>
-                  <li>
-                    <span className="sharepoint-auto-members-role">
-                      Owner (guest if external)
-                    </span>
-                    <span className="sharepoint-auto-members-emails">
-                      {form.ownerEmail.trim() ||
-                        "Add Owner Email under People below"}
-                    </span>
-                  </li>
-                  <li>
-                    <span className="sharepoint-auto-members-role">
-                      POC (guest if external)
-                    </span>
-                    <span className="sharepoint-auto-members-emails">
-                      {form.pocEmail.trim() ||
-                        "Add POC Email under People below"}
-                    </span>
-                  </li>
-                </ul>
-                <label className="field field--nested">
-                  <span className="field-label">Extra members (optional)</span>
-                  <textarea
-                    className="field-input"
-                    rows={2}
-                    value={sharePointMemberEmails}
-                    disabled={saving}
-                    placeholder="extra@fireflyaccountancy.com"
-                    onChange={(event) =>
-                      setSharePointMemberEmails(event.target.value)
-                    }
-                  />
+                  FireFly SharePoint
                 </label>
-                <span className="lookup-hint">
-                  {portalAlreadyLinked
-                    ? "On save, the Fire Fly team, Owner Email, and POC Email are always added (guests invited for external addresses). Use Extra members only for anyone else."
-                    : "On create, the Fire Fly team, Owner Email, and POC Email are always added (guests invited for external addresses). You remain the site owner. Use Extra members only for anyone else."}
-                </span>
+                <label className="radio-option">
+                  <input
+                    type="radio"
+                    name="portal-link-type"
+                    checked={isOtherPortal}
+                    disabled={saving || portalAlreadyLinked}
+                    onChange={() => {
+                      updateField("portalLinkType", "other");
+                      setCreateSharePointSite(false);
+                      setSharePointMemberEmails("");
+                      setSharePointSitesError(null);
+                      updateField("portalLink", "");
+                    }}
+                  />{" "}
+                  Other
+                </label>
+              </div>
+              <span className="lookup-hint">
+                {portalAlreadyLinked
+                  ? isOtherPortal
+                    ? "Other portal URL is linked (read-only)."
+                    : "Fire Fly SharePoint is linked (read-only). You can still add members below."
+                  : "Choose FireFly SharePoint for create/pick + members, or Other to type any portal URL."}
+              </span>
+            </fieldset>
+
+            {isFireflyPortal ? (
+              <>
+                {portalAlreadyLinked ? (
+                  <label className="field field--checkbox">
+                    <span className="field-label">
+                      <input type="checkbox" checked disabled readOnly />{" "}
+                      Create site on SharePoint
+                    </span>
+                    <span className="lookup-hint">
+                      A SharePoint site is already linked. Create and Portal
+                      Link are read-only; you can still add members below.
+                    </span>
+                  </label>
+                ) : (
+                  <label className="field field--checkbox">
+                    <span className="field-label">
+                      <input
+                        type="checkbox"
+                        checked={createSharePointSite}
+                        disabled={saving}
+                        onChange={(event) => {
+                          const checked = event.target.checked;
+                          setCreateSharePointSite(checked);
+                          if (!checked) {
+                            setSharePointMemberEmails("");
+                          } else {
+                            setSharePointSitesError(null);
+                          }
+                        }}
+                      />{" "}
+                      Create site on SharePoint
+                    </span>
+                    <span className="lookup-hint">
+                      {createSharePointSite
+                        ? `On save, creates "${clientSharePointSiteDisplayName(form.legalName || "Client Name")}", year/month folders (e.g. 2026/01.Jan26…12.Dec26), and fills Portal Link.`
+                        : "Leave unchecked to pick an existing SharePoint site below."}
+                    </span>
+                  </label>
+                )}
+
+                {(portalAlreadyLinked ||
+                  (canSetupPortal && createSharePointSite)) ? (
+                  <div className="field">
+                    <span className="field-label">SharePoint members</span>
+                    <ul className="sharepoint-auto-members">
+                      <li>
+                        <span className="sharepoint-auto-members-role">
+                          Fire Fly team
+                        </span>
+                        <span className="sharepoint-auto-members-emails">
+                          {DEFAULT_SHAREPOINT_TEAM_MEMBERS.join(", ")}
+                        </span>
+                      </li>
+                      <li>
+                        <span className="sharepoint-auto-members-role">
+                          Owner (guest if external)
+                        </span>
+                        <span className="sharepoint-auto-members-emails">
+                          {form.ownerEmail.trim() ||
+                            "Add Owner Email under People below"}
+                        </span>
+                      </li>
+                      <li>
+                        <span className="sharepoint-auto-members-role">
+                          POC (guest if external)
+                        </span>
+                        <span className="sharepoint-auto-members-emails">
+                          {form.pocEmail.trim() ||
+                            "Add POC Email under People below"}
+                        </span>
+                      </li>
+                    </ul>
+                    <label className="field field--nested">
+                      <span className="field-label">
+                        Extra members (optional)
+                      </span>
+                      <textarea
+                        className="field-input"
+                        rows={2}
+                        value={sharePointMemberEmails}
+                        disabled={saving}
+                        placeholder="extra@fireflyaccountancy.com"
+                        onChange={(event) =>
+                          setSharePointMemberEmails(event.target.value)
+                        }
+                      />
+                    </label>
+                    <span className="lookup-hint">
+                      {portalAlreadyLinked
+                        ? "On save, the Fire Fly team, Owner Email, and POC Email are always added (guests invited for external addresses). Use Extra members only for anyone else."
+                        : "On create, the Fire Fly team, Owner Email, and POC Email are always added (guests invited for external addresses). You remain the site owner. Use Extra members only for anyone else."}
+                    </span>
+                  </div>
+                ) : null}
+
+                <div className="field">
+                  <span className="field-label">Portal Link</span>
+                  {portalAlreadyLinked ? (
+                    <input
+                      className="field-input field-input--readonly"
+                      type="text"
+                      readOnly
+                      value={portalLinkTrimmed}
+                    />
+                  ) : createSharePointSite ? (
+                    <input
+                      className="field-input field-input--readonly"
+                      type="text"
+                      readOnly
+                      value={
+                        portalLinkTrimmed ||
+                        `Will create: ${clientSharePointSiteDisplayName(form.legalName || "Client Name")}`
+                      }
+                    />
+                  ) : (
+                    <>
+                      <SearchableSelect
+                        label="Portal Link"
+                        hideLabel
+                        value={form.portalLink}
+                        options={portalLinkOptions}
+                        placeholder={
+                          loadingSharePointSites
+                            ? "Loading SharePoint sites…"
+                            : editingId
+                              ? "Select the existing SharePoint site…"
+                              : "Select an existing site…"
+                        }
+                        allowCreate
+                        disabled={saving || loadingSharePointSites}
+                        onChange={(value) => {
+                          updateField("portalLink", value);
+                          updateField("portalLinkType", "firefly-sharepoint");
+                        }}
+                      />
+                      {editingId ? (
+                        <span className="lookup-hint">
+                          No portal yet — create a site above, or pick an
+                          existing SharePoint site, then Save.
+                        </span>
+                      ) : null}
+                      {sharePointSitesError ? (
+                        <p className="form-message error">
+                          {sharePointSitesError}
+                        </p>
+                      ) : null}
+                    </>
+                  )}
+                  {portalLinkTrimmed ? (
+                    <a
+                      className="table-link client-profile-portal-link"
+                      href={toWebsiteHref(portalLinkTrimmed)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Open portal link
+                    </a>
+                  ) : null}
+                </div>
+              </>
+            ) : null}
+
+            {isOtherPortal ? (
+              <div className="field">
+                <span className="field-label">Portal URL</span>
+                {portalAlreadyLinked ? (
+                  <input
+                    className="field-input field-input--readonly"
+                    type="text"
+                    readOnly
+                    value={portalLinkTrimmed}
+                  />
+                ) : (
+                  <>
+                    <input
+                      className="field-input"
+                      type="url"
+                      inputMode="url"
+                      value={form.portalLink}
+                      disabled={saving}
+                      placeholder="https://example.com/client-portal"
+                      onChange={(event) => {
+                        updateField("portalLink", event.target.value);
+                        updateField("portalLinkType", "other");
+                      }}
+                    />
+                    <span className="lookup-hint">
+                      Type any portal URL. No SharePoint site create or member
+                      invites.
+                    </span>
+                  </>
+                )}
+                {portalLinkTrimmed ? (
+                  <a
+                    className="table-link client-profile-portal-link"
+                    href={toWebsiteHref(portalLinkTrimmed)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Open portal link
+                  </a>
+                ) : null}
               </div>
             ) : null}
 
-            <div className="field">
-              <span className="field-label">Portal Link</span>
-              {portalAlreadyLinked ? (
-                <input
-                  className="field-input field-input--readonly"
-                  type="text"
-                  readOnly
-                  value={portalLinkTrimmed}
-                />
-              ) : createSharePointSite ? (
-                <input
-                  className="field-input field-input--readonly"
-                  type="text"
-                  readOnly
-                  value={
-                    portalLinkTrimmed ||
-                    `Will create: ${clientSharePointSiteDisplayName(form.legalName || "Client Name")}`
-                  }
-                />
-              ) : (
-                <>
-                  <SearchableSelect
-                    label="Portal Link"
-                    hideLabel
-                    value={form.portalLink}
-                    options={portalLinkOptions}
-                    placeholder={
-                      loadingSharePointSites
-                        ? "Loading SharePoint sites…"
-                        : editingId
-                          ? "Select the existing SharePoint site…"
-                          : "Select an existing site…"
-                    }
-                    allowCreate
-                    disabled={saving || loadingSharePointSites}
-                    onChange={(value) => updateField("portalLink", value)}
-                  />
-                  {editingId ? (
-                    <span className="lookup-hint">
-                      No portal yet — create a site above, or pick an existing
-                      SharePoint site, then Save.
-                    </span>
-                  ) : null}
-                  {sharePointSitesError ? (
-                    <p className="form-message error">{sharePointSitesError}</p>
-                  ) : null}
-                </>
-              )}
-              {portalLinkTrimmed ? (
-                <a
-                  className="table-link client-profile-portal-link"
-                  href={toWebsiteHref(portalLinkTrimmed)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Open portal link
-                </a>
-              ) : null}
-            </div>
+            {!portalLinkType && canSetupPortal ? (
+              <p className="lookup-hint">
+                Select FireFly SharePoint or Other to continue.
+              </p>
+            ) : null}
           </FormSection>
 
           <FormSection
