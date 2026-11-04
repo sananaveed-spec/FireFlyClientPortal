@@ -11,7 +11,7 @@ export const runtime = "nodejs";
  * Cron entry: send due BD1 / BD7 / BD8 emails as supervisor (app-only Graph).
  *
  * Auth: Authorization: Bearer $BD_AUTO_EMAIL_CRON_SECRET
- * Optional: ?force=1 to re-send even if lastSentAt is set.
+ * Optional: ?force=1 to re-send even if lastSentAt is set (still requires send window).
  * Optional: ?scheduleId=bd1 to limit to one BD.
  */
 export async function POST(request: Request) {

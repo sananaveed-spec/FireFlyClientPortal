@@ -41,15 +41,16 @@ Status is saved in `data/bd-auto-email-status.json` (`lastSentAt`).
    - Supervisor on Resource Allocation (mailbox in Fire Fly tenant preferred)
    - POC Email + time zone on Client Profile
 
-## Manual test
+## Manual check (does not bypass send time)
 
 ```bash
 curl -fsS -X POST \
   -H "Authorization: Bearer YOUR_BD_AUTO_EMAIL_CRON_SECRET" \
-  "http://127.0.0.1:3000/api/bd-auto-emails/run?force=1&scheduleId=bd1"
+  "http://127.0.0.1:3000/api/bd-auto-emails/run"
 ```
 
-Check Client Management → BD1 Email for **Last sent at …**, or
+Emails only send when BD 9:00 AM client time has been reached (within the
+send window). Check Client Management → BD1 Email for **Last sent at …**, or
 `data/bd-auto-email-status.json`.
 
 ## Notes

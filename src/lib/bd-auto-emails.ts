@@ -524,8 +524,7 @@ export async function runBdAutoEmails(options?: {
       }
 
       const sendAt = sendSchedule.instant;
-      // ?force=1 bypasses the clock window so you can test immediately.
-      if (!force && now.getTime() < sendAt.getTime()) {
+      if (now.getTime() < sendAt.getTime()) {
         result.skipped.push({
           clientId: resource.id,
           clientName,
@@ -534,7 +533,7 @@ export async function runBdAutoEmails(options?: {
         });
         continue;
       }
-      if (!force && now.getTime() > sendAt.getTime() + SEND_WINDOW_MS) {
+      if (now.getTime() > sendAt.getTime() + SEND_WINDOW_MS) {
         result.skipped.push({
           clientId: resource.id,
           clientName,
