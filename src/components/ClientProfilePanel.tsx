@@ -57,7 +57,8 @@ import { portalFetch } from "@/lib/portal-api";
 import {
   DataListToolbar,
   downloadCsv,
-  parseCsv,
+  parseSpreadsheetFile,
+  SPREADSHEET_IMPORT_ACCEPT,
   uniqueSortedValues,
 } from "@/components/DataListToolbar";
 import { RowActionsMenu } from "@/components/RowActionsMenu";
@@ -1399,7 +1400,7 @@ export function ClientProfilePanel() {
         skipped > 0 ? `, ${skipped} skipped` : ""
       })`,
       details: `File: ${preview.fileName}\nAdded: ${created}\nUpdated: ${updated}\nSkipped: ${skipped}\nMatch mode: ${matchMode}`,
-      comment: "Bulk import from CSV.",
+      comment: "Bulk import from Excel/CSV.",
     });
   }
 
@@ -1409,11 +1410,10 @@ export function ClientProfilePanel() {
     setNotice(null);
     setImportPreview(null);
     try {
-      const text = await file.text();
-      const rows = parseCsv(text);
+      const rows = await parseSpreadsheetFile(file);
       if (rows.length < 2) {
         throw new Error(
-          "CSV must include a header row and at least one data row.",
+          "File must include a header row and at least one data row.",
         );
       }
 
@@ -1444,7 +1444,7 @@ export function ClientProfilePanel() {
 
       if (columnIndexes.length === 0) {
         throw new Error(
-          "No recognized columns. Export a CSV first and use those headers.",
+          "No recognized columns. Export first and use those headers.",
         );
       }
 
@@ -1859,7 +1859,7 @@ export function ClientProfilePanel() {
                 <input
                   ref={importInputRef}
                   type="file"
-                  accept=".csv,text/csv"
+                  accept={SPREADSHEET_IMPORT_ACCEPT}
                   hidden
                   onChange={(event) => {
                     const file = event.target.files?.[0];

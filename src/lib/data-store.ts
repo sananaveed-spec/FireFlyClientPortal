@@ -108,6 +108,10 @@ function bd15EmailStatusPath() {
   return path.join(getDataDir(), "bd15-email-status.json");
 }
 
+function bdAutoEmailStatusPath() {
+  return path.join(getDataDir(), "bd-auto-email-status.json");
+}
+
 function pakistanHolidayEmailsPath() {
   return path.join(getDataDir(), "pakistan-holiday-emails.json");
 }
@@ -604,6 +608,28 @@ export async function readBd15EmailStatusFile(): Promise<unknown> {
 export async function writeBd15EmailStatusFile(value: unknown): Promise<void> {
   await ensureDataDir();
   await writeJsonFile(bd15EmailStatusPath(), value);
+}
+
+export async function readBdAutoEmailStatusFile(): Promise<unknown> {
+  await ensureDataDir();
+  const filePath = bdAutoEmailStatusPath();
+
+  try {
+    const raw = await readFile(filePath, "utf8");
+    return parseJsonFile(raw);
+  } catch (error) {
+    if (isMissingFile(error)) {
+      return { statuses: [] };
+    }
+    throw error;
+  }
+}
+
+export async function writeBdAutoEmailStatusFile(
+  value: unknown,
+): Promise<void> {
+  await ensureDataDir();
+  await writeJsonFile(bdAutoEmailStatusPath(), value);
 }
 
 export async function readPakistanHolidayEmailsFile(): Promise<unknown> {

@@ -252,6 +252,56 @@ export function downloadCsv(filename: string, rows: string[][]) {
   URL.revokeObjectURL(url);
 }
 
+/** File input accept list for Import (Excel + CSV). */
+export const SPREADSHEET_IMPORT_ACCEPT =
+  ".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv";
+
+function isExcelFile(file: File): boolean {
+  const name = file.name.toLowerCase();
+  return (
+    name.endsWith(".xlsx") ||
+    name.endsWith(".xls") ||
+    file.type.includes("spreadsheet") ||
+    file.type.includes("excel")
+  );
+}
+
+/**
+ * Read a CSV or Excel (.xlsx / .xls) file into a grid of string cells.
+ * Excel uses the first sheet.
+ */
+export async function parseSpreadsheetFile(file: File): Promise<string[][]> {
+  if (isExcelFile(file)) {
+    const XLSX = await import("xlsx");
+    const buffer = await file.arrayBuffer();
+    const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
+    const sheetName = workbook.SheetNames[0];
+    if (!sheetName) {
+      return [];
+    }
+    const sheet = workbook.Sheets[sheetName];
+    if (!sheet) {
+      return [];
+    }
+    const rows = XLSX.utils.sheet_to_json<(string | number | boolean | Date | null)[]>(
+      sheet,
+      {
+        header: 1,
+        defval: "",
+        raw: false,
+      },
+    );
+    return rows
+      .map((row) =>
+        (Array.isArray(row) ? row : []).map((cell) => String(cell ?? "").trim()),
+      )
+      .filter((row) => row.some((cell) => cell.length > 0));
+  }
+
+  const text = await file.text();
+  return parseCsv(text);
+}
+
 /** Parse a CSV string into rows of cells (supports quoted commas). */
 export function parseCsv(text: string): string[][] {
   const rows: string[][] = [];

@@ -1,12 +1,20 @@
 "use client";
 
 import { useMsal } from "@azure/msal-react";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { createPortal } from "react-dom";
 import { useAccess } from "@/auth/accessContext";
 import {
   DataListToolbar,
   downloadCsv,
+  parseSpreadsheetFile,
+  SPREADSHEET_IMPORT_ACCEPT,
   uniqueSortedValues,
 } from "@/components/DataListToolbar";
 import { RowActionsMenu } from "@/components/RowActionsMenu";
@@ -37,6 +45,7 @@ import {
   bookkeepingCategoryForCountry,
   createEmptyResourceClientForm,
   formatMultiValue,
+  normalizeResourceClient,
   resolveMeetingFrequency,
   type ResourceClientEntry,
   type ResourceClientInput,
@@ -197,6 +206,23 @@ export function ResourceAllocationPanel() {
   const [activeFilters, setActiveFilters] = useState<Record<string, string[]>>(
     {},
   );
+  const [importing, setImporting] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
+
+  const MULTI_VALUE_KEYS = new Set<keyof ResourceClientEntry>([
+    "bookkeeperAccountant",
+    "bookkeeping",
+    "payrollAndSalesTaxes",
+    "deliverables",
+    "yearlyCompliance",
+  ]);
+
+  function parseMultiCell(raw: string): string[] {
+    return raw
+      .split(/\s*\+\s*|;|,/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+  }
 
   useEffect(() => {
     setMounted(true);
@@ -929,6 +955,134 @@ export function ResourceAllocationPanel() {
     downloadCsv("resource-allocation.csv", [header, ...rows]);
   }
 
+  function openImportPicker() {
+    importInputRef.current?.click();
+  }
+
+  async function handleImportFile(file: File) {
+    setImporting(true);
+    setError(null);
+    try {
+      const rows = await parseSpreadsheetFile(file);
+      if (rows.length < 2) {
+        throw new Error(
+          "File must include a header row and at least one data row.",
+        );
+      }
+
+      const headers = rows[0].map((header) => header.trim().toLowerCase());
+      const labelToKey = new Map(
+        RESOURCE_EXPORT_COLUMNS.map((column) => [
+          column.label.trim().toLowerCase(),
+          column.key,
+        ]),
+      );
+      for (const column of RESOURCE_EXPORT_COLUMNS) {
+        labelToKey.set(column.key.toLowerCase(), column.key);
+      }
+
+      const columnIndexes: {
+        key: keyof ResourceClientEntry;
+        index: number;
+      }[] = [];
+      headers.forEach((header, index) => {
+        const key = labelToKey.get(header);
+        if (key) {
+          columnIndexes.push({ key, index });
+        }
+      });
+
+      if (columnIndexes.length === 0) {
+        throw new Error(
+          "No recognized columns. Export first and use those headers.",
+        );
+      }
+
+      const next = [...clients];
+      let created = 0;
+      let updated = 0;
+
+      for (const row of rows.slice(1)) {
+        const values: Partial<ResourceClientEntry> = {};
+        for (const { key, index } of columnIndexes) {
+          const cell = (row[index] ?? "").trim();
+          if (MULTI_VALUE_KEYS.has(key)) {
+            (values as Record<string, string[]>)[key] = parseMultiCell(cell);
+          } else if (key === "bookkeepingCategory") {
+            const cat = cell.toUpperCase();
+            if (cat === "ACC1" || cat === "ACC2" || cat === "ACC3") {
+              values.bookkeepingCategory = cat;
+            }
+          } else {
+            (values as Record<string, string>)[key] = cell;
+          }
+        }
+
+        const clientName = String(values.clientName ?? "").trim();
+        if (!clientName) {
+          continue;
+        }
+
+        const existingIndex = next.findIndex(
+          (client) =>
+            client.clientName.trim().toLowerCase() === clientName.toLowerCase(),
+        );
+
+        if (existingIndex >= 0) {
+          const existing = next[existingIndex]!;
+          next[existingIndex] = normalizeResourceClient({
+            ...existing,
+            ...values,
+            id: existing.id,
+            clientName,
+            createdAt: existing.createdAt,
+          });
+          updated += 1;
+        } else {
+          next.unshift(
+            normalizeResourceClient({
+              id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              ...createEmptyResourceClientForm(getDefaultStatus(statusOptions)),
+              ...values,
+              clientName,
+              createdAt: new Date().toISOString(),
+            }),
+          );
+          created += 1;
+        }
+      }
+
+      if (created === 0 && updated === 0) {
+        throw new Error("No valid rows found. Client Name is required.");
+      }
+
+      await persistClients(next);
+      setClients(next);
+      setError(null);
+      await logPortalAction({
+        account: accounts[0] ?? null,
+        entityType: "resourceAllocation",
+        action: "updated",
+        project: "Resource Allocation",
+        entityLabel: "Excel/CSV Import",
+        summary: `Imported resource clients (${created} added, ${updated} updated)`,
+        details: `File: ${file.name}`,
+        comment: "Bulk import from Excel/CSV.",
+      });
+    } catch (importError) {
+      setError(
+        importError instanceof Error
+          ? importError.message
+          : "Failed to import resource clients.",
+      );
+    } finally {
+      setImporting(false);
+      if (importInputRef.current) {
+        importInputRef.current.value = "";
+      }
+    }
+  }
+
   const visibleSelectedCount = visibleClients.filter((client) =>
     selectedIds.includes(client.id),
   ).length;
@@ -966,13 +1120,35 @@ export function ResourceAllocationPanel() {
               Export
             </button>
             {canEdit ? (
-              <button
-                type="button"
-                className="button primary"
-                onClick={openNewClientForm}
-              >
-                New Client
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="button secondary-solid"
+                  onClick={openImportPicker}
+                  disabled={importing}
+                >
+                  {importing ? "Importing…" : "Import"}
+                </button>
+                <input
+                  ref={importInputRef}
+                  type="file"
+                  accept={SPREADSHEET_IMPORT_ACCEPT}
+                  hidden
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) {
+                      void handleImportFile(file);
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="button primary"
+                  onClick={openNewClientForm}
+                >
+                  New Client
+                </button>
+              </>
             ) : null}
           </>
         }

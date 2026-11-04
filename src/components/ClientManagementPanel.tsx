@@ -936,6 +936,12 @@ export function ClientManagementPanel() {
     emailSentAt: string;
     comments: Array<{ id: string; text: string; createdAt: string }>;
   }>({ emailSent: false, emailSentAt: "", comments: [] });
+  const [bdAutoEmailStatus, setBdAutoEmailStatus] = useState<{
+    emailSent: boolean;
+    lastSentAt: string;
+    fromEmail: string;
+    lastError: string;
+  }>({ emailSent: false, lastSentAt: "", fromEmail: "", lastError: "" });
   const [bd18CommentDraft, setBd18CommentDraft] = useState("");
   const [savingBd18Comment, setSavingBd18Comment] = useState(false);
   const [savingBd1Template, setSavingBd1Template] = useState(false);
@@ -1262,6 +1268,72 @@ export function ClientManagementPanel() {
             emailSent: false,
             emailSentAt: "",
             comments: [],
+          });
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId, selectedScheduleId, scheduleNow]);
+
+  // Load BD1/BD7/BD8 auto-send lastSentAt status.
+  useEffect(() => {
+    if (
+      !selectedId ||
+      (selectedScheduleId !== "bd1" &&
+        selectedScheduleId !== "bd7" &&
+        selectedScheduleId !== "bd8")
+    ) {
+      setBdAutoEmailStatus({
+        emailSent: false,
+        lastSentAt: "",
+        fromEmail: "",
+        lastError: "",
+      });
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await portalFetch(
+          `/api/bd-auto-emails/status?clientId=${encodeURIComponent(selectedId)}&scheduleId=${encodeURIComponent(selectedScheduleId)}&monthKey=${encodeURIComponent(currentMonthKey(scheduleNow))}`,
+          { cache: "no-store" },
+        );
+        const data = (await response.json()) as {
+          status?: {
+            emailSent?: boolean;
+            lastSentAt?: string;
+            fromEmail?: string;
+            lastError?: string;
+          };
+          error?: string;
+        };
+        if (cancelled) {
+          return;
+        }
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to load BD auto-email status.");
+        }
+        const status = data.status;
+        setBdAutoEmailStatus({
+          emailSent: Boolean(status?.emailSent),
+          lastSentAt:
+            typeof status?.lastSentAt === "string" ? status.lastSentAt : "",
+          fromEmail:
+            typeof status?.fromEmail === "string" ? status.fromEmail : "",
+          lastError:
+            typeof status?.lastError === "string" ? status.lastError : "",
+        });
+      } catch {
+        if (!cancelled) {
+          setBdAutoEmailStatus({
+            emailSent: false,
+            lastSentAt: "",
+            fromEmail: "",
+            lastError: "",
           });
         }
       }
@@ -3579,6 +3651,45 @@ export function ClientManagementPanel() {
       if (showBd15Email) {
         await markBd15EmailAsSent(sendAt.toISOString());
       }
+      if (
+        selectedScheduleId === "bd1" ||
+        selectedScheduleId === "bd7" ||
+        selectedScheduleId === "bd8"
+      ) {
+        try {
+          const markResponse = await portalFetch("/api/bd-auto-emails/status", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "mark-sent",
+              clientId: selected?.resource.id,
+              scheduleId: selectedScheduleId,
+              monthKey: currentMonthKey(scheduleNow),
+              lastSentAt: sendAt.toISOString(),
+              fromEmail: emailFrom,
+              source: "manual-schedule",
+            }),
+          });
+          const markData = (await markResponse.json()) as {
+            status?: {
+              emailSent?: boolean;
+              lastSentAt?: string;
+              fromEmail?: string;
+              lastError?: string;
+            };
+          };
+          if (markResponse.ok && markData.status) {
+            setBdAutoEmailStatus({
+              emailSent: Boolean(markData.status.emailSent),
+              lastSentAt: markData.status.lastSentAt ?? sendAt.toISOString(),
+              fromEmail: markData.status.fromEmail ?? emailFrom,
+              lastError: markData.status.lastError ?? "",
+            });
+          }
+        } catch {
+          // Schedule already queued in Outlook; status write is best-effort.
+        }
+      }
       setEmailSendMessage(
         showBd15Email && bd15Attachments.length > 0
           ? `Email scheduled for ${whenLabel} (Pakistan) with ${bd15Attachments.length} attachment${bd15Attachments.length === 1 ? "" : "s"}.`
@@ -5456,10 +5567,29 @@ export function ClientManagementPanel() {
                                   : showBd7Content
                                     ? "BD7"
                                     : "BD1"
-                              } is schedule-only — sends at the upcoming BD (9:00 am client time) from the supervisor account.`}
+                              } auto-sends at 9:00 am client time from the supervisor mailbox (server cron). Schedule is optional for supervisors.`}
                             </span>
                           ) : null}
                         </div>
+                        {scheduleOnlyEmailDay && bdAutoEmailStatus.emailSent ? (
+                          <p className="form-message success">
+                            Last sent at{" "}
+                            {formatActionResolvedAt(bdAutoEmailStatus.lastSentAt) ||
+                              bdAutoEmailStatus.lastSentAt ||
+                              "—"}
+                            {bdAutoEmailStatus.fromEmail
+                              ? ` from ${bdAutoEmailStatus.fromEmail}`
+                              : ""}
+                            .
+                          </p>
+                        ) : null}
+                        {scheduleOnlyEmailDay &&
+                        !bdAutoEmailStatus.emailSent &&
+                        bdAutoEmailStatus.lastError ? (
+                          <p className="form-message error">
+                            Last auto-send error: {bdAutoEmailStatus.lastError}
+                          </p>
+                        ) : null}
                         {emailSendMessage ? (
                           <p className="form-message success">
                             {emailSendMessage}

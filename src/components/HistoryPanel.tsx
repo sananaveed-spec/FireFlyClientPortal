@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAccess } from "@/auth/accessContext";
 import {
   DataListToolbar,
   downloadCsv,
+  parseSpreadsheetFile,
+  SPREADSHEET_IMPORT_ACCEPT,
   uniqueSortedValues,
 } from "@/components/DataListToolbar";
 import {
@@ -12,6 +14,8 @@ import {
   entityTypeLabel,
   formatHistoryDate,
   formatHistoryTime,
+  type HistoryAction,
+  type HistoryEntityType,
   type HistoryEntry,
 } from "@/lib/history";
 import { portalFetch } from "@/lib/portal-api";
@@ -29,6 +33,8 @@ export function HistoryPanel() {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("newest");
   const [clearing, setClearing] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
   const [activeFilters, setActiveFilters] = useState<Record<string, string[]>>(
     {},
   );
@@ -204,6 +210,156 @@ export function HistoryPanel() {
     downloadCsv("history.csv", [header, ...rows]);
   }
 
+  function openImportPicker() {
+    importInputRef.current?.click();
+  }
+
+  function parseEntityType(raw: string): HistoryEntityType {
+    const value = raw.trim().toLowerCase();
+    if (
+      value === "clientprofile" ||
+      value === "client profile" ||
+      value.includes("client profile")
+    ) {
+      return "clientProfile";
+    }
+    if (
+      value === "lookupdata" ||
+      value === "lookup data" ||
+      value.includes("lookup")
+    ) {
+      return "lookupData";
+    }
+    return "resourceAllocation";
+  }
+
+  function parseAction(raw: string): HistoryAction {
+    const value = raw.trim().toLowerCase();
+    if (value.startsWith("creat")) {
+      return "created";
+    }
+    if (value.startsWith("delet")) {
+      return "deleted";
+    }
+    return "updated";
+  }
+
+  async function handleImportFile(file: File) {
+    setImporting(true);
+    setError(null);
+    try {
+      const rows = await parseSpreadsheetFile(file);
+      if (rows.length < 2) {
+        throw new Error(
+          "File must include a header row and at least one data row.",
+        );
+      }
+
+      const headers = rows[0].map((header) => header.trim().toLowerCase());
+      const indexOf = (labels: string[]) =>
+        headers.findIndex((header) => labels.includes(header));
+
+      const dateIdx = indexOf(["date"]);
+      const timeIdx = indexOf(["time"]);
+      const employeeIdx = indexOf(["employee", "employee name"]);
+      const emailIdx = indexOf(["employee email", "email"]);
+      const projectIdx = indexOf(["client / project", "client", "project"]);
+      const areaIdx = indexOf(["area", "entity type"]);
+      const actionIdx = indexOf(["action"]);
+      const summaryIdx = indexOf(["summary"]);
+      const detailsIdx = indexOf(["details"]);
+      const commentIdx = indexOf(["comments", "comment"]);
+
+      if (employeeIdx < 0 && summaryIdx < 0) {
+        throw new Error(
+          "No recognized columns. Export first and use those headers.",
+        );
+      }
+
+      const imported: HistoryEntry[] = [];
+      for (const row of rows.slice(1)) {
+        const employeeName = (row[employeeIdx] ?? "").trim();
+        const summary = (row[summaryIdx] ?? "").trim();
+        if (!employeeName && !summary) {
+          continue;
+        }
+
+        const datePart = (row[dateIdx] ?? "").trim();
+        const timePart = (row[timeIdx] ?? "").trim();
+        const combined = [datePart, timePart].filter(Boolean).join(" ");
+        const parsedDate = combined ? new Date(combined) : null;
+        const createdAt =
+          parsedDate && !Number.isNaN(parsedDate.getTime())
+            ? parsedDate.toISOString()
+            : new Date().toISOString();
+
+        imported.push({
+          id: `hist-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          createdAt,
+          employeeName: employeeName || "Unknown",
+          employeeEmail: (row[emailIdx] ?? "").trim(),
+          project: (row[projectIdx] ?? "").trim(),
+          entityType: parseEntityType(row[areaIdx] ?? ""),
+          entityLabel: (row[projectIdx] ?? "").trim(),
+          action: parseAction(row[actionIdx] ?? ""),
+          summary: summary || "Imported history entry",
+          details: (row[detailsIdx] ?? "").trim(),
+          comment: (row[commentIdx] ?? "").trim(),
+        });
+      }
+
+      if (imported.length === 0) {
+        throw new Error("No valid history rows found.");
+      }
+
+      let added = 0;
+      for (const entry of imported) {
+        const response = await portalFetch("/api/history", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            employeeName: entry.employeeName,
+            employeeEmail: entry.employeeEmail,
+            project: entry.project,
+            entityType: entry.entityType,
+            entityLabel: entry.entityLabel,
+            action: entry.action,
+            summary: entry.summary,
+            details: entry.details,
+            comment: entry.comment,
+            createdAt: entry.createdAt,
+          }),
+        });
+        if (!response.ok) {
+          const data = (await response.json()) as { error?: string };
+          throw new Error(data.error || "Failed to import history row.");
+        }
+        added += 1;
+      }
+
+      const refresh = await fetch("/api/history", { cache: "no-store" });
+      const refreshData = (await refresh.json()) as {
+        entries?: HistoryEntry[];
+      };
+      if (refresh.ok) {
+        setEntries(refreshData.entries ?? []);
+      }
+      setError(null);
+      window.alert(`Imported ${added} history ${added === 1 ? "entry" : "entries"}.`);
+    } catch (importError) {
+      setError(
+        importError instanceof Error
+          ? importError.message
+          : "Failed to import history.",
+      );
+    } finally {
+      setImporting(false);
+      if (importInputRef.current) {
+        importInputRef.current.value = "";
+      }
+    }
+  }
+
   async function handleClearHistory() {
     if (entries.length === 0) {
       return;
@@ -270,6 +426,30 @@ export function HistoryPanel() {
             >
               Export
             </button>
+            {canEdit ? (
+              <>
+                <button
+                  type="button"
+                  className="button secondary-solid"
+                  onClick={openImportPicker}
+                  disabled={importing}
+                >
+                  {importing ? "Importing…" : "Import"}
+                </button>
+                <input
+                  ref={importInputRef}
+                  type="file"
+                  accept={SPREADSHEET_IMPORT_ACCEPT}
+                  hidden
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) {
+                      void handleImportFile(file);
+                    }
+                  }}
+                />
+              </>
+            ) : null}
           </>
         }
       />
