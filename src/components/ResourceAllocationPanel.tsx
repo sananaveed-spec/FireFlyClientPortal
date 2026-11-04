@@ -1060,7 +1060,7 @@ export function ResourceAllocationPanel() {
       setClients(next);
       setError(null);
       await logPortalAction({
-        account: accounts[0] ?? null,
+        actor,
         entityType: "resourceAllocation",
         action: "updated",
         project: "Resource Allocation",
