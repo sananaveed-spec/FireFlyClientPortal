@@ -2,9 +2,12 @@
 
 ## What it does
 
-Server cron sends **BD1 / BD7 / BD8** at **9:00 AM client time** from the
-**assigned supervisor mailbox**, using Graph **Application** `Mail.Send`.
-Status is saved in `data/bd-auto-email-status.json` (`lastSentAt`).
+Server cron sends **Active email BDs** (BD1, BD7, BD8, BD10, BD13, BD15, BD18)
+at **9:00 AM client time** from the **assigned supervisor mailbox**, using
+Graph **Application** `Mail.Send`. Each run only evaluates BDs whose
+**this-month date equals today** in the client time zone (e.g. on BD7’s date
+only BD7 is checked). Status-only BD5 / BD9 and Last-N BD stay manual.
+Status is saved in `data/bd-auto-email-status.json` (`lastSentAt` + attempts).
 
 ## Your checklist
 
@@ -38,9 +41,10 @@ Status is saved in `data/bd-auto-email-status.json` (`lastSentAt`).
      -H "Authorization: Bearer YOUR_BD_AUTO_EMAIL_CRON_SECRET" \
      http://127.0.0.1:3000/api/bd-auto-emails/run
    ```
-   Each run sends any due Active BD that is not already marked sent
-   (within the send window after sendAt). UI shows each try (fail/sent);
-   “already sent” is not listed as a check.
+   Each run only checks Active BDs whose date is today, then sends if
+   9:00 AM client time has been reached (within the send window) and not
+   already marked sent. UI shows each try (fail/sent); “already sent” and
+   other BDs’ dates are not listed as checks.
 
 5. **Per client must have**
    - BD star **Active**

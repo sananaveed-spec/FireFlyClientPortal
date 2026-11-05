@@ -1,7 +1,18 @@
 import { currentMonthKey } from "@/lib/client-request-lists";
 
-/** Schedule ids that auto-send without supervisor click. */
-export const BD_AUTO_SEND_SCHEDULE_IDS = ["bd1", "bd7", "bd8"] as const;
+/**
+ * Schedule ids that auto-send without supervisor click (email-capable BDs).
+ * Status-only BD5 / BD9 are excluded. Last-N BD team mail stays manual.
+ */
+export const BD_AUTO_SEND_SCHEDULE_IDS = [
+  "bd1",
+  "bd7",
+  "bd8",
+  "bd10",
+  "bd13",
+  "bd15",
+  "bd18",
+] as const;
 
 export type BdAutoSendScheduleId = (typeof BD_AUTO_SEND_SCHEDULE_IDS)[number];
 

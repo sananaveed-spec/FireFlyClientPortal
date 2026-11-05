@@ -38,6 +38,20 @@ function pad2(n: number): string {
   return String(n).padStart(2, "0");
 }
 
+/** YYYY-MM-DD for a Date’s local calendar components (BD schedule dates). */
+export function calendarYmdFromLocalDate(date: Date): string {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
+/** YYYY-MM-DD for `instant` as seen in `timeZone`. */
+export function getCalendarYmdInTimeZone(
+  instant: Date,
+  timeZone: string,
+): string {
+  const parts = getZonedParts(instant, timeZone);
+  return `${parts.year}-${pad2(parts.month)}-${pad2(parts.day)}`;
+}
+
 /** Map free-form client profile labels (EST, PST, …) to an IANA zone. */
 export function resolveClientTimeZone(label: string | undefined | null): string | null {
   const raw = String(label ?? "").trim();

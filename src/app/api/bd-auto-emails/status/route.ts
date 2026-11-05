@@ -78,7 +78,10 @@ export async function PUT(request: Request) {
     }
     if (!isBdAutoSendScheduleId(scheduleId)) {
       return NextResponse.json(
-        { error: "scheduleId must be bd1, bd7, or bd8." },
+        {
+          error:
+            "scheduleId must be an auto-send BD (bd1, bd7, bd8, bd10, bd13, bd15, bd18).",
+        },
         { status: 400 },
       );
     }

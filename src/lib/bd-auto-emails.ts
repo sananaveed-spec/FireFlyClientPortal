@@ -10,8 +10,22 @@ import {
   type BdAutoSendScheduleId,
 } from "@/lib/bd-auto-email-status";
 import {
+  getBd8EmailAttachment,
+  normalizeBd8EmailAttachmentsStore,
+} from "@/lib/bd8-email-attachments";
+import {
+  getBd15EmailAttachments,
+  normalizeBd15EmailAttachmentsStore,
+} from "@/lib/bd15-email-attachments";
+import {
+  getBd15EmailStatus,
+  markBd15EmailSent,
+  normalizeBd15EmailStatusStore,
+} from "@/lib/bd15-email-status";
+import {
   getScheduleBusinessDate,
   getUpcomingScheduleBusinessDate,
+  formatBusinessDayLabel,
 } from "@/lib/business-days";
 import { findProfileForResourceClient } from "@/lib/client-management";
 import {
@@ -20,6 +34,8 @@ import {
   type ClientProfileEntry,
 } from "@/lib/client-profiles";
 import {
+  BD13_LATE_SOURCE_PREFIX,
+  BD9_EXCEL_SOURCE_PREFIX,
   currentMonthKey,
   getClientRequestList,
   normalizeClientRequestListsStore,
@@ -32,6 +48,9 @@ import {
   normalizeClientScheduleSettingsStore,
 } from "@/lib/client-schedule-settings";
 import {
+  readBd8EmailAttachmentsFile,
+  readBd15EmailAttachmentsFile,
+  readBd15EmailStatusFile,
   readBdAutoEmailStatusFile,
   readClientProfiles,
   readClientRequestListsFile,
@@ -41,6 +60,7 @@ import {
   readHolidays,
   readPortalUsersFile,
   readResourceClients,
+  writeBd15EmailStatusFile,
   writeBdAutoEmailStatusFile,
 } from "@/lib/data-store";
 import {
@@ -57,12 +77,17 @@ import {
   createEmptyEmailSignature,
   stripLegacySignatureClosing,
 } from "@/lib/email-signatures";
-import { formatBusinessDayLabel } from "@/lib/business-days";
 import type { HolidaysStore } from "@/lib/holidays";
 import { parsePortalUsers, type PortalUser } from "@/lib/portal-users";
 import { sendGraphAppMail } from "@/lib/send-graph-app-mail";
+import type { GraphMailAttachment } from "@/lib/send-graph-mail";
 import { resolveStaffEmail } from "@/lib/staff-assign";
-import { getClientNineAmSchedule } from "@/lib/time-zones";
+import {
+  calendarYmdFromLocalDate,
+  getCalendarYmdInTimeZone,
+  getClientNineAmSchedule,
+  resolveClientTimeZone,
+} from "@/lib/time-zones";
 
 const SCHEDULE_EMAIL_OWNER_CC_FALLBACK = "ayesha@fireflyaccountancy.com";
 const EPS_SCHEDULE_EMAIL_CC = "thomas@epsfresno.com";
@@ -166,7 +191,23 @@ function templateForSchedule(
   if (scheduleId === "bd7") {
     return findTemplateByLabelNumber(store, 3);
   }
-  return findTemplateByLabelNumber(store, 4);
+  if (scheduleId === "bd8") {
+    return findTemplateByLabelNumber(store, 4);
+  }
+  if (scheduleId === "bd13") {
+    return findTemplateByLabelNumber(store, 5);
+  }
+  if (scheduleId === "bd10") {
+    return findTemplateByLabelNumber(store, 6);
+  }
+  if (scheduleId === "bd18") {
+    return findTemplateByLabelNumber(store, 7);
+  }
+  if (scheduleId === "bd15") {
+    return findTemplateById(store, "template-11") ??
+      findTemplateByLabelNumber(store, 11);
+  }
+  return null;
 }
 
 function requestListScheduleIdForBd1(profile: ClientProfileEntry): string {
@@ -193,6 +234,86 @@ function getBd5LateItems(
     }
   }
   return Array.from(lateById.values());
+}
+
+/** BD10: Late from BD5 (BD7 Status Check) + BD9 Excel Status Check. */
+function getBd10LateItems(
+  store: ClientRequestListsStore,
+  clientId: string,
+  monthKey: string,
+): ActionWorkflowItem[] {
+  const lateById = new Map<string, ActionWorkflowItem>();
+  for (const item of getBd5LateItems(store, clientId, monthKey)) {
+    lateById.set(item.id, item);
+  }
+  const bd9 = getClientRequestList(store, clientId, "bd9");
+  for (const item of bd9.actionItems) {
+    if (
+      item.monthKey === monthKey &&
+      item.status === "late" &&
+      item.sourceRequestId.startsWith(BD9_EXCEL_SOURCE_PREFIX)
+    ) {
+      lateById.set(item.id, item);
+    }
+  }
+  return Array.from(lateById.values());
+}
+
+/** BD13: local late mirrors only. */
+function getBd13LateItems(
+  store: ClientRequestListsStore,
+  clientId: string,
+  monthKey: string,
+): ActionWorkflowItem[] {
+  const list = getClientRequestList(store, clientId, "bd13");
+  return list.actionItems.filter(
+    (item) =>
+      item.monthKey === monthKey &&
+      item.status === "late" &&
+      item.sourceRequestId.startsWith(BD13_LATE_SOURCE_PREFIX),
+  );
+}
+
+function normalizeBd15ReportKey(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/\.[^.]+$/, "")
+    .replace(/[/_\\-]+/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function bd15FileMatchesReport(
+  fileName: string,
+  requiredLabel: string,
+): boolean {
+  const fileKey = normalizeBd15ReportKey(fileName);
+  if (!fileKey) {
+    return false;
+  }
+  const reqKey = normalizeBd15ReportKey(requiredLabel);
+  if (reqKey === "balance sheet") {
+    return fileKey.includes("balance sheet");
+  }
+  if (reqKey.includes("profit") && reqKey.includes("loss")) {
+    return fileKey.includes("profit") && fileKey.includes("loss");
+  }
+  const requiredWords = reqKey.split(" ").filter(Boolean);
+  return (
+    requiredWords.length > 0 &&
+    requiredWords.every((word) => fileKey.includes(word))
+  );
+}
+
+function getMissingBd15Reports(
+  attachments: ReadonlyArray<{ name: string }>,
+): string[] {
+  const required = ["Profit & Loss Account", "Balance Sheet"] as const;
+  return required.filter(
+    (label) =>
+      !attachments.some((file) => bd15FileMatchesReport(file.name, label)),
+  );
 }
 
 function toBulletList(labels: string[]): string {
@@ -298,12 +419,22 @@ function buildEmailContent(input: {
     emailLabels = getBd5LateItems(requestLists, clientId, monthKey).map(
       (item) => item.label,
     );
+  } else if (scheduleId === "bd10") {
+    emailLabels = getBd10LateItems(requestLists, clientId, monthKey).map(
+      (item) => item.label,
+    );
+  } else if (scheduleId === "bd13") {
+    emailLabels = getBd13LateItems(requestLists, clientId, monthKey).map(
+      (item) => item.label,
+    );
   } else if (scheduleId === "bd8") {
     const list = getClientRequestList(requestLists, clientId, "bd8");
     const period = requestItemsForMonth(list.requestItems, monthKey);
     emailLabels = (period.length > 0 ? period : list.requestItems).map(
       (item) => item.label,
     );
+  } else if (scheduleId === "bd15" || scheduleId === "bd18") {
+    emailLabels = [];
   } else {
     const listId = requestListScheduleIdForBd1(profile);
     const list = getClientRequestList(requestLists, clientId, listId);
@@ -313,10 +444,12 @@ function buildEmailContent(input: {
     );
   }
 
+  const usesLateList =
+    scheduleId === "bd7" || scheduleId === "bd10" || scheduleId === "bd13";
   const actionListText =
     emailLabels.length > 0
       ? toBulletList(emailLabels)
-      : scheduleId === "bd7"
+      : usesLateList
         ? "• [Late Action Items]"
         : "• [Request List Items]";
   const questionListText =
@@ -394,8 +527,8 @@ function buildEmailContent(input: {
 }
 
 /**
- * Run auto-send for Active BD1 / BD7 / BD8 clients whose send time has been
- * reached and who are not already marked sent for the month.
+ * Run auto-send for Active email BDs whose calendar date is today (client TZ)
+ * and whose 9:00 AM send time has been reached. Other BDs are skipped quietly.
  */
 export async function runBdAutoEmails(options?: {
   force?: boolean;
@@ -437,6 +570,9 @@ export async function runBdAutoEmails(options?: {
     requestListsRaw,
     scheduleSettingsRaw,
     statusRaw,
+    bd8AttachmentsRaw,
+    bd15AttachmentsRaw,
+    bd15StatusRaw,
   ] = await Promise.all([
     readClientProfiles(),
     readResourceClients(),
@@ -446,16 +582,30 @@ export async function runBdAutoEmails(options?: {
     readClientRequestListsFile(),
     readClientScheduleSettingsFile(),
     readBdAutoEmailStatusFile(),
+    readBd8EmailAttachmentsFile(),
+    readBd15EmailAttachmentsFile(),
+    readBd15EmailStatusFile(),
   ]);
 
   const users = parsePortalUsers(usersRaw);
   const requestLists = normalizeClientRequestListsStore(requestListsRaw);
   const scheduleSettings =
     normalizeClientScheduleSettingsStore(scheduleSettingsRaw);
-  let statusStore = normalizeBdAutoEmailStatusStore(
-    statusRaw,
-    currentMonthKey(now),
+  const monthKey = currentMonthKey(now);
+  let statusStore = normalizeBdAutoEmailStatusStore(statusRaw, monthKey);
+  const bd8Attachments = normalizeBd8EmailAttachmentsStore(
+    bd8AttachmentsRaw,
+    monthKey,
   );
+  const bd15Attachments = normalizeBd15EmailAttachmentsStore(
+    bd15AttachmentsRaw,
+    monthKey,
+  );
+  let bd15StatusStore = normalizeBd15EmailStatusStore(
+    bd15StatusRaw,
+    monthKey,
+  );
+  let bd15StatusDirty = false;
   const ownerCc = resolveOwnerEmail(users);
   const publicOrigin = publicPortalOrigin();
 
@@ -464,16 +614,14 @@ export async function runBdAutoEmails(options?: {
     const profile = findProfileForResourceClient(resource, profiles);
 
     if (!profile) {
-      for (const scheduleId of scheduleIds) {
-        result.skipped.push({
-          clientId: resource.id,
-          clientName,
-          scheduleId,
-          reason: "No matching Client Profile.",
-        });
-      }
       continue;
     }
+
+    const clientIana = resolveClientTimeZone(profile.timeZone);
+    if (!clientIana) {
+      continue;
+    }
+    const todayYmd = getCalendarYmdInTimeZone(now, clientIana);
 
     const activeIds = getActiveScheduleIds(
       scheduleSettings,
@@ -482,6 +630,18 @@ export async function runBdAutoEmails(options?: {
     );
 
     for (const scheduleId of scheduleIds) {
+      // Only evaluate BDs whose this-month date equals today in client TZ.
+      const bdDate = getScheduleBusinessDate(
+        scheduleId,
+        holidays,
+        profile.country,
+        profile.state,
+        now,
+      );
+      if (!bdDate || calendarYmdFromLocalDate(bdDate) !== todayYmd) {
+        continue;
+      }
+
       if (!activeIds.includes(scheduleId)) {
         result.skipped.push({
           clientId: resource.id,
@@ -492,7 +652,6 @@ export async function runBdAutoEmails(options?: {
         continue;
       }
 
-      const monthKey = currentMonthKey(now);
       const existing = getBdAutoEmailStatus(
         statusStore,
         resource.id,
@@ -500,12 +659,15 @@ export async function runBdAutoEmails(options?: {
         monthKey,
       );
       if (!force && existing?.emailSent) {
-        result.skipped.push({
-          clientId: resource.id,
-          clientName,
-          scheduleId,
-          reason: `Already sent at ${existing.lastSentAt || "unknown"}.`,
-        });
+        // Already sent — no attempt history / UI noise.
+        continue;
+      }
+
+      if (
+        (scheduleId === "bd15" || scheduleId === "bd18") &&
+        !force &&
+        getBd15EmailStatus(bd15StatusStore, resource.id, monthKey).emailSent
+      ) {
         continue;
       }
 
@@ -531,13 +693,6 @@ export async function runBdAutoEmails(options?: {
         continue;
       }
 
-      const bdDate = getUpcomingScheduleBusinessDate(
-        scheduleId,
-        holidays,
-        profile.country,
-        profile.state,
-        now,
-      );
       const sendSchedule = getClientNineAmSchedule(bdDate, profile.timeZone);
       if (!sendSchedule) {
         result.skipped.push({
@@ -579,6 +734,81 @@ export async function runBdAutoEmails(options?: {
             reason: "No BD5 Late items for this month.",
           });
           continue;
+        }
+      }
+
+      if (scheduleId === "bd10") {
+        const late = getBd10LateItems(requestLists, resource.id, monthKey);
+        if (late.length === 0) {
+          result.skipped.push({
+            clientId: resource.id,
+            clientName,
+            scheduleId,
+            reason: "No late BD10 question list items for this month.",
+          });
+          continue;
+        }
+      }
+
+      if (scheduleId === "bd13") {
+        const late = getBd13LateItems(requestLists, resource.id, monthKey);
+        if (late.length === 0) {
+          result.skipped.push({
+            clientId: resource.id,
+            clientName,
+            scheduleId,
+            reason: "No late BD13 question list items for this month.",
+          });
+          continue;
+        }
+      }
+
+      const mailAttachments: GraphMailAttachment[] = [];
+      if (scheduleId === "bd8") {
+        const file = getBd8EmailAttachment(
+          bd8Attachments,
+          resource.id,
+          monthKey,
+          "bd8",
+        );
+        if (!file) {
+          result.skipped.push({
+            clientId: resource.id,
+            clientName,
+            scheduleId,
+            reason: "BD8 Excel/CSV attachment missing.",
+          });
+          continue;
+        }
+        mailAttachments.push({
+          name: file.name,
+          contentType: file.contentType,
+          contentBytes: file.contentBytes,
+        });
+      }
+
+      if (scheduleId === "bd15" || scheduleId === "bd18") {
+        const files = getBd15EmailAttachments(
+          bd15Attachments,
+          resource.id,
+          monthKey,
+        );
+        const missing = getMissingBd15Reports(files);
+        if (missing.length > 0) {
+          result.skipped.push({
+            clientId: resource.id,
+            clientName,
+            scheduleId,
+            reason: `Missing BD15 reports: ${missing.join(", ")}.`,
+          });
+          continue;
+        }
+        for (const file of files) {
+          mailAttachments.push({
+            name: file.name,
+            contentType: file.contentType,
+            contentBytes: file.contentBytes,
+          });
         }
       }
 
@@ -647,7 +877,6 @@ export async function runBdAutoEmails(options?: {
           email: supervisorEmail,
         };
       }
-      // Avoid "email" showing twice when name was accidentally set to the address.
       if (
         signature.name.trim().toLowerCase() ===
         signature.email.trim().toLowerCase()
@@ -665,6 +894,7 @@ export async function runBdAutoEmails(options?: {
           portalHref: content.portalHref,
           signature,
           publicOrigin,
+          attachments: mailAttachments,
         });
         const lastSentAt = now.toISOString();
         statusStore = markBdAutoEmailSent(statusStore, {
@@ -675,6 +905,15 @@ export async function runBdAutoEmails(options?: {
           fromEmail: supervisorEmail,
           source: "auto-cron",
         });
+        if (scheduleId === "bd15" || scheduleId === "bd18") {
+          bd15StatusStore = markBd15EmailSent(
+            bd15StatusStore,
+            resource.id,
+            monthKey,
+            lastSentAt,
+          );
+          bd15StatusDirty = true;
+        }
         result.sent.push({
           clientId: resource.id,
           clientName,
@@ -708,6 +947,9 @@ export async function runBdAutoEmails(options?: {
   }
 
   await writeBdAutoEmailStatusFile(statusStore);
+  if (bd15StatusDirty) {
+    await writeBd15EmailStatusFile(bd15StatusStore);
+  }
   return result;
 }
 

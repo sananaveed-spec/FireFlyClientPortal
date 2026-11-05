@@ -14,6 +14,7 @@ import {
 import { mailSendRequest, sharePointRequest } from "@/auth/authConfig";
 import { useAccess } from "@/auth/accessContext";
 import { getAccountEmail } from "@/auth/organization";
+import { isBdAutoSendScheduleId } from "@/lib/bd-auto-email-status";
 import {
   formatBusinessDayLabel,
   getScheduleBusinessDate,
@@ -1047,9 +1048,8 @@ export function ClientManagementPanel() {
   const showBd5Content = selectedScheduleId === "bd5";
   const showBd7Content = selectedScheduleId === "bd7";
   const showBd8Content = selectedScheduleId === "bd8";
-  /** BD1 / BD7 / BD8: server auto-send; Schedule disabled for everyone. */
-  const scheduleOnlyEmailDay =
-    showBd1TypeContent || showBd7Content || showBd8Content;
+  /** Email BDs with server auto-send; Schedule disabled for everyone. */
+  const scheduleOnlyEmailDay = isBdAutoSendScheduleId(selectedScheduleId);
   const showBd15Content = selectedScheduleId === "bd15";
   /** BD18 is the status check for BD15 books-closed email/files. */
   const showBd18Content = selectedScheduleId === "bd18";
@@ -1293,14 +1293,9 @@ export function ClientManagementPanel() {
     };
   }, [selectedId, selectedScheduleId, scheduleNow]);
 
-  // Load BD1/BD7/BD8 auto-send lastSentAt status.
+  // Load auto-send attempt history for email BDs.
   useEffect(() => {
-    if (
-      !selectedId ||
-      (selectedScheduleId !== "bd1" &&
-        selectedScheduleId !== "bd7" &&
-        selectedScheduleId !== "bd8")
-    ) {
+    if (!selectedId || !isBdAutoSendScheduleId(selectedScheduleId)) {
       setBdAutoEmailStatus({
         emailSent: false,
         lastSentAt: "",
@@ -5636,13 +5631,7 @@ export function ClientManagementPanel() {
                           )}
                           {scheduleOnlyEmailDay ? (
                             <span className="lookup-hint">
-                              {`${
-                                showBd8Content
-                                  ? "BD8"
-                                  : showBd7Content
-                                    ? "BD7"
-                                    : "BD1"
-                              } auto-sends at 9:00 am client time from the supervisor mailbox (server cron). Schedule is disabled for everyone.`}
+                              {`${selectedScheduleId.toUpperCase()} auto-sends at 9:00 am client time on its BD date from the supervisor mailbox (server cron). Schedule is disabled for everyone.`}
                             </span>
                           ) : null}
                         </div>
