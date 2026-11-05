@@ -129,6 +129,7 @@ import {
 } from "@/lib/spreadsheet-row-count";
 import {
   CLIENT_TIME_ZONE_REQUIRED_MESSAGE,
+  getClientEpsFridaySendSchedule,
   getClientNineAmSchedule,
   parseDateTimeLocalInTimeZone,
   resolveClientTimeZone,
@@ -2562,7 +2563,7 @@ export function ClientManagementPanel() {
     );
   }, [selected, selectedScheduleId, holidays, scheduleNow]);
 
-  // BD date at 9am client TZ → Pakistan (read-only; fixed from BD schedule).
+  // BD date at 9:00 / EPS Friday at 10:50 client TZ → Pakistan (read-only).
   const clientTimeZoneMissing = !selected?.profile?.timeZone?.trim();
   const clientTimeZoneInvalid =
     !clientTimeZoneMissing &&
@@ -2574,11 +2575,20 @@ export function ClientManagementPanel() {
       : null;
   const defaultEmailSendSchedule = useMemo(
     () =>
-      getClientNineAmSchedule(
-        selectedScheduleBusinessDate,
-        selected?.profile?.timeZone,
-      ),
-    [selectedScheduleBusinessDate, selected?.profile?.timeZone],
+      showEpsFridayWeek
+        ? getClientEpsFridaySendSchedule(
+            selectedScheduleBusinessDate,
+            selected?.profile?.timeZone,
+          )
+        : getClientNineAmSchedule(
+            selectedScheduleBusinessDate,
+            selected?.profile?.timeZone,
+          ),
+    [
+      showEpsFridayWeek,
+      selectedScheduleBusinessDate,
+      selected?.profile?.timeZone,
+    ],
   );
   const emailSendAtClientLabel = defaultEmailSendSchedule?.clientLabel ?? "";
   const emailSendAtPakistanLabel = defaultEmailSendSchedule?.userLabel ?? "";
@@ -3831,13 +3841,18 @@ export function ClientManagementPanel() {
 
   async function handleScheduleEmail() {
     if (scheduleOnlyEmailDay) {
-      const scheduleOnlyLabel = showBd8Content
-        ? "BD8"
-        : showBd7Content
-          ? "BD7"
-          : "BD1";
+      const scheduleOnlyLabel = showEpsFridayWeek
+        ? selectedSchedule.label
+        : showBd8Content
+          ? "BD8"
+          : showBd7Content
+            ? "BD7"
+            : "BD1";
+      const sendTimeLabel = showEpsFridayWeek
+        ? "10:50 am client time"
+        : "9:00 am client time";
       setEmailSendError(
-        `${scheduleOnlyLabel} is sent automatically by the server at 9:00 am client time. Schedule is disabled.`,
+        `${scheduleOnlyLabel} is sent automatically by the server at ${sendTimeLabel}. Schedule is disabled.`,
       );
       setEmailSendMessage(null);
       return;
@@ -5752,8 +5767,9 @@ export function ClientManagementPanel() {
                               </span>
                             ) : (
                               <span className="lookup-hint">
-                                This BD date at 9:00 am in the client’s time
-                                zone
+                                {showEpsFridayWeek
+                                  ? "This Friday at 10:50 am in the client’s time zone"
+                                  : "This BD date at 9:00 am in the client’s time zone"}
                               </span>
                             )}
                           </div>
