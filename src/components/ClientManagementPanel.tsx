@@ -1767,6 +1767,17 @@ export function ClientManagementPanel() {
       const country = selected?.profile?.country;
       const state = selected?.profile?.state ?? "";
       return [...items].sort((a, b) => {
+        // EPS Fridays group always first in the sidebar.
+        const epsA = isEpsFridayWeekScheduleId(a.id);
+        const epsB = isEpsFridayWeekScheduleId(b.id);
+        if (epsA !== epsB) {
+          return epsA ? -1 : 1;
+        }
+        if (epsA && epsB) {
+          const weekA = parseInt(a.id.replace(/\D/g, ""), 10) || 0;
+          const weekB = parseInt(b.id.replace(/\D/g, ""), 10) || 0;
+          return weekA - weekB;
+        }
         const dateA = getUpcomingScheduleBusinessDate(
           a.id,
           holidays,
@@ -1786,13 +1797,10 @@ export function ClientManagementPanel() {
         if (timeA !== timeB) {
           return timeA - timeB;
         }
-        const orderA = isEpsFridayWeekScheduleId(a.id)
-          ? 10_000 + (parseInt(a.id.replace(/\D/g, ""), 10) || 0)
-          : (CLIENT_SCHEDULE_ORDER.get(a.id) ?? 0);
-        const orderB = isEpsFridayWeekScheduleId(b.id)
-          ? 10_000 + (parseInt(b.id.replace(/\D/g, ""), 10) || 0)
-          : (CLIENT_SCHEDULE_ORDER.get(b.id) ?? 0);
-        return orderA - orderB;
+        return (
+          (CLIENT_SCHEDULE_ORDER.get(a.id) ?? 0) -
+          (CLIENT_SCHEDULE_ORDER.get(b.id) ?? 0)
+        );
       });
     },
     [selected?.profile?.country, selected?.profile?.state, holidays, scheduleNow],
