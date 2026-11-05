@@ -116,6 +116,7 @@ function buildSignatureHtml(signature: EmailSignature): string {
     return "";
   }
   const lines: string[] = [];
+  const seen = new Set<string>();
   for (const value of [
     signature.name,
     signature.email,
@@ -123,11 +124,17 @@ function buildSignatureHtml(signature: EmailSignature): string {
     signature.phone,
   ]) {
     const trimmed = value.trim();
-    if (trimmed) {
-      lines.push(
-        `<div style="font-weight:700;color:#0a1628;">${escapeHtml(trimmed)}</div>`,
-      );
+    if (!trimmed) {
+      continue;
     }
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    lines.push(
+      `<div style="font-weight:700;color:#0a1628;">${escapeHtml(trimmed)}</div>`,
+    );
   }
   const website = signature.website.trim() || DEFAULT_SIGNATURE_WEBSITE;
   const websiteHref =
@@ -157,13 +164,14 @@ function bulletLinesToHtmlList(escapedBody: string): string {
   const lines = escapedBody.split(/\r\n|\n|\r/);
   const out: string[] = [];
   let listItems: string[] = [];
+  let justFlushedList = false;
 
   function flushList() {
     if (listItems.length === 0) {
       return;
     }
     out.push(
-      `<ul style="margin:0.35em 0 0.75em 1.25em;padding:0;">${listItems
+      `<ul style="margin:0.35em 0 0.5em 1.25em;padding:0;">${listItems
         .map(
           (item) =>
             `<li style="margin:0.15em 0;">${item}</li>`,
@@ -171,15 +179,23 @@ function bulletLinesToHtmlList(escapedBody: string): string {
         .join("")}</ul>`,
     );
     listItems = [];
+    justFlushedList = true;
   }
 
   for (const line of lines) {
     const bullet = /^•\s*(.*)$/.exec(line);
     if (bullet) {
+      justFlushedList = false;
       listItems.push(bullet[1] || "");
       continue;
     }
     flushList();
+    // Drop blank lines right after a bullet list (avoids a big gap before
+    // "Please upload them to the portal…").
+    if (justFlushedList && !line.trim()) {
+      continue;
+    }
+    justFlushedList = false;
     out.push(line);
   }
   flushList();
@@ -198,10 +214,11 @@ export function buildGraphMailHtml(payload: GraphMailPayload): string {
   bodyHtml = bulletLinesToHtmlList(bodyHtml);
   const signatureHtml = buildSignatureHtml(payload.signature);
 
+  const bodyEndsWithBreak = /(?:<br\s*\/?>|<\/ul>)\s*$/i.test(bodyHtml);
   return [
     `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;line-height:1.5;color:#0a1628;">`,
     bodyHtml,
-    `<br/><br/>`,
+    bodyEndsWithBreak ? `<br/>` : `<br/><br/>`,
     `<div>Thank you,</div>`,
     signatureHtml ? `<br/>${signatureHtml}` : "",
     `</div>`,

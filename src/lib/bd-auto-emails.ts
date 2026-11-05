@@ -360,8 +360,20 @@ function buildEmailContent(input: {
     emailLabels.length > 0 &&
     !emailLabels.every((label) => body.includes(label))
   ) {
-    body = `${body.trimEnd()}\n\n${actionListText}`;
+    // Insert list once after the "accounts below:" line when placeholders
+    // were missing — keep a single blank line, not a large gap.
+    const injected = body.replace(
+      /(need the statements(?: for the accounts)? below:)\s*/i,
+      `$1\n${actionListText}\n`,
+    );
+    body =
+      injected !== body
+        ? injected
+        : `${body.trimEnd()}\n${actionListText}`;
   }
+
+  // Collapse 3+ newlines to at most one blank line (tightens list → portal gap).
+  body = body.replace(/\n{3,}/g, "\n\n").trimEnd();
 
   const portalHref = resolvePortalHref(portalLink, periodDate) || null;
   return { subject, body, portalHref };
@@ -600,11 +612,14 @@ export async function runBdAutoEmails(options?: {
       const cc = [...new Set(ccParts)].join(", ");
 
       let signature = await readEmailSignatureForUser(supervisorEmail);
+      const supervisorLabel = resource.supervisor.trim();
+      const supervisorDisplayName =
+        supervisorLabel.includes("@") ? "" : supervisorLabel;
       if (!signature.email.trim()) {
         signature = {
           ...signature,
           email: supervisorEmail,
-          name: signature.name.trim() || resource.supervisor.trim(),
+          name: signature.name.trim() || supervisorDisplayName,
         };
       }
       if (
@@ -614,9 +629,16 @@ export async function runBdAutoEmails(options?: {
       ) {
         signature = {
           ...createEmptyEmailSignature(),
-          name: resource.supervisor.trim() || supervisorEmail,
+          name: supervisorDisplayName,
           email: supervisorEmail,
         };
+      }
+      // Avoid "email" showing twice when name was accidentally set to the address.
+      if (
+        signature.name.trim().toLowerCase() ===
+        signature.email.trim().toLowerCase()
+      ) {
+        signature = { ...signature, name: "" };
       }
 
       try {
