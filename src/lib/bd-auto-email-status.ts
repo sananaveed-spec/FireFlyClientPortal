@@ -11,6 +11,15 @@ export function isBdAutoSendScheduleId(
   return (BD_AUTO_SEND_SCHEDULE_IDS as readonly string[]).includes(value);
 }
 
+export type BdAutoEmailAttempt = {
+  /** ISO timestamp when this cron/check ran. */
+  at: string;
+  outcome: "sent" | "error";
+  /** Human message (error text, or short success note). */
+  message: string;
+  fromEmail: string;
+};
+
 export type BdAutoEmailStatus = {
   clientId: string;
   scheduleId: BdAutoSendScheduleId;
@@ -20,9 +29,11 @@ export type BdAutoEmailStatus = {
   lastSentAt: string;
   /** Supervisor mailbox used as From. */
   fromEmail: string;
-  /** How it was recorded. */
+  /** How the successful send was recorded. */
   source: "auto-cron" | "manual-schedule" | "manual-mark";
   lastError: string;
+  /** Cron/send tries after send time (newest last). Not used for "already sent" skips. */
+  attempts: BdAutoEmailAttempt[];
 };
 
 export type BdAutoEmailStatusStore = {
@@ -38,6 +49,24 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     return value as Record<string, unknown>;
   }
   return null;
+}
+
+function normalizeAttempt(value: unknown): BdAutoEmailAttempt | null {
+  const record = asRecord(value);
+  if (!record) {
+    return null;
+  }
+  const at = String(record.at ?? "").trim();
+  const outcome = String(record.outcome ?? "").trim();
+  if (!at || (outcome !== "sent" && outcome !== "error")) {
+    return null;
+  }
+  return {
+    at,
+    outcome,
+    message: String(record.message ?? "").trim(),
+    fromEmail: String(record.fromEmail ?? "").trim(),
+  };
 }
 
 export function normalizeBdAutoEmailStatus(
@@ -58,20 +87,50 @@ export function normalizeBdAutoEmailStatus(
     sourceRaw === "manual-schedule" || sourceRaw === "manual-mark"
       ? sourceRaw
       : "auto-cron";
+  const lastSentAt =
+    typeof record.lastSentAt === "string" && record.lastSentAt.trim()
+      ? record.lastSentAt.trim()
+      : typeof record.emailSentAt === "string" && record.emailSentAt.trim()
+        ? record.emailSentAt.trim()
+        : "";
+  const lastError = String(record.lastError ?? "").trim();
+  let attempts = Array.isArray(record.attempts)
+    ? record.attempts
+        .map(normalizeAttempt)
+        .filter((item): item is BdAutoEmailAttempt => Boolean(item))
+    : [];
+  // Migrate legacy lastError / lastSentAt into attempts when empty.
+  if (attempts.length === 0) {
+    if (Boolean(record.emailSent) && lastSentAt) {
+      attempts = [
+        {
+          at: lastSentAt,
+          outcome: "sent",
+          message: "Sent",
+          fromEmail: String(record.fromEmail ?? "").trim(),
+        },
+      ];
+    } else if (lastError) {
+      attempts = [
+        {
+          at: lastSentAt || new Date().toISOString(),
+          outcome: "error",
+          message: lastError,
+          fromEmail: String(record.fromEmail ?? "").trim(),
+        },
+      ];
+    }
+  }
   return {
     clientId,
     scheduleId: scheduleIdRaw,
     monthKey,
     emailSent: Boolean(record.emailSent),
-    lastSentAt:
-      typeof record.lastSentAt === "string" && record.lastSentAt.trim()
-        ? record.lastSentAt.trim()
-        : typeof record.emailSentAt === "string" && record.emailSentAt.trim()
-          ? record.emailSentAt.trim()
-          : "",
+    lastSentAt,
     fromEmail: String(record.fromEmail ?? "").trim(),
     source,
-    lastError: String(record.lastError ?? "").trim(),
+    lastError,
+    attempts,
   };
 }
 
@@ -133,29 +192,11 @@ export function getBdAutoEmailStatus(
   );
 }
 
-export function markBdAutoEmailSent(
+function upsertStatus(
   store: BdAutoEmailStatusStore,
-  input: {
-    clientId: string;
-    scheduleId: BdAutoSendScheduleId;
-    monthKey?: string;
-    lastSentAt?: string;
-    fromEmail?: string;
-    source?: BdAutoEmailStatus["source"];
-  },
+  next: BdAutoEmailStatus,
+  monthKey: string,
 ): BdAutoEmailStatusStore {
-  const monthKey = input.monthKey?.trim() || currentMonthKey();
-  const lastSentAt = input.lastSentAt?.trim() || new Date().toISOString();
-  const next: BdAutoEmailStatus = {
-    clientId: input.clientId.trim(),
-    scheduleId: input.scheduleId,
-    monthKey,
-    emailSent: true,
-    lastSentAt,
-    fromEmail: input.fromEmail?.trim() || "",
-    source: input.source ?? "auto-cron",
-    lastError: "",
-  };
   const statuses = store.statuses.filter(
     (item) =>
       !(
@@ -168,17 +209,29 @@ export function markBdAutoEmailSent(
   return pruneBdAutoEmailStatus({ statuses }, monthKey);
 }
 
-export function markBdAutoEmailError(
+function appendAttempt(
+  existing: BdAutoEmailStatus | null,
+  attempt: BdAutoEmailAttempt,
+): BdAutoEmailAttempt[] {
+  const prior = existing?.attempts ?? [];
+  return [...prior, attempt].slice(-20);
+}
+
+export function markBdAutoEmailSent(
   store: BdAutoEmailStatusStore,
   input: {
     clientId: string;
     scheduleId: BdAutoSendScheduleId;
     monthKey?: string;
-    lastError: string;
+    lastSentAt?: string;
     fromEmail?: string;
+    source?: BdAutoEmailStatus["source"];
+    attemptMessage?: string;
   },
 ): BdAutoEmailStatusStore {
   const monthKey = input.monthKey?.trim() || currentMonthKey();
+  const lastSentAt = input.lastSentAt?.trim() || new Date().toISOString();
+  const fromEmail = input.fromEmail?.trim() || "";
   const existing = getBdAutoEmailStatus(
     store,
     input.clientId,
@@ -189,20 +242,57 @@ export function markBdAutoEmailError(
     clientId: input.clientId.trim(),
     scheduleId: input.scheduleId,
     monthKey,
+    emailSent: true,
+    lastSentAt,
+    fromEmail: fromEmail || existing?.fromEmail || "",
+    source: input.source ?? "auto-cron",
+    lastError: "",
+    attempts: appendAttempt(existing, {
+      at: lastSentAt,
+      outcome: "sent",
+      message: input.attemptMessage?.trim() || "Sent",
+      fromEmail: fromEmail || existing?.fromEmail || "",
+    }),
+  };
+  return upsertStatus(store, next, monthKey);
+}
+
+export function markBdAutoEmailError(
+  store: BdAutoEmailStatusStore,
+  input: {
+    clientId: string;
+    scheduleId: BdAutoSendScheduleId;
+    monthKey?: string;
+    lastError: string;
+    fromEmail?: string;
+    attemptedAt?: string;
+  },
+): BdAutoEmailStatusStore {
+  const monthKey = input.monthKey?.trim() || currentMonthKey();
+  const attemptedAt = input.attemptedAt?.trim() || new Date().toISOString();
+  const existing = getBdAutoEmailStatus(
+    store,
+    input.clientId,
+    input.scheduleId,
+    monthKey,
+  );
+  const fromEmail = input.fromEmail?.trim() || existing?.fromEmail || "";
+  const lastError = input.lastError.trim();
+  const next: BdAutoEmailStatus = {
+    clientId: input.clientId.trim(),
+    scheduleId: input.scheduleId,
+    monthKey,
     emailSent: existing?.emailSent ?? false,
     lastSentAt: existing?.lastSentAt ?? "",
-    fromEmail: input.fromEmail?.trim() || existing?.fromEmail || "",
+    fromEmail,
     source: existing?.source ?? "auto-cron",
-    lastError: input.lastError.trim(),
+    lastError,
+    attempts: appendAttempt(existing, {
+      at: attemptedAt,
+      outcome: "error",
+      message: lastError,
+      fromEmail,
+    }),
   };
-  const statuses = store.statuses.filter(
-    (item) =>
-      !(
-        item.clientId === next.clientId &&
-        item.scheduleId === next.scheduleId &&
-        item.monthKey === next.monthKey
-      ),
-  );
-  statuses.push(next);
-  return pruneBdAutoEmailStatus({ statuses }, monthKey);
+  return upsertStatus(store, next, monthKey);
 }

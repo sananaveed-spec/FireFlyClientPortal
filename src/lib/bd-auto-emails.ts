@@ -694,6 +694,7 @@ export async function runBdAutoEmails(options?: {
           monthKey,
           lastError: message,
           fromEmail: supervisorEmail,
+          attemptedAt: now.toISOString(),
         });
         result.errors.push({
           clientId: resource.id,

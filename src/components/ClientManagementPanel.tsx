@@ -944,7 +944,19 @@ export function ClientManagementPanel() {
     lastSentAt: string;
     fromEmail: string;
     lastError: string;
-  }>({ emailSent: false, lastSentAt: "", fromEmail: "", lastError: "" });
+    attempts: Array<{
+      at: string;
+      outcome: "sent" | "error";
+      message: string;
+      fromEmail: string;
+    }>;
+  }>({
+    emailSent: false,
+    lastSentAt: "",
+    fromEmail: "",
+    lastError: "",
+    attempts: [],
+  });
   const [bd18CommentDraft, setBd18CommentDraft] = useState("");
   const [savingBd18Comment, setSavingBd18Comment] = useState(false);
   const [savingBd1Template, setSavingBd1Template] = useState(false);
@@ -1294,6 +1306,7 @@ export function ClientManagementPanel() {
         lastSentAt: "",
         fromEmail: "",
         lastError: "",
+        attempts: [],
       });
       return;
     }
@@ -1311,6 +1324,12 @@ export function ClientManagementPanel() {
             lastSentAt?: string;
             fromEmail?: string;
             lastError?: string;
+            attempts?: Array<{
+              at?: string;
+              outcome?: string;
+              message?: string;
+              fromEmail?: string;
+            }>;
           };
           error?: string;
         };
@@ -1329,6 +1348,23 @@ export function ClientManagementPanel() {
             typeof status?.fromEmail === "string" ? status.fromEmail : "",
           lastError:
             typeof status?.lastError === "string" ? status.lastError : "",
+          attempts: Array.isArray(status?.attempts)
+            ? status.attempts
+                .filter(
+                  (item) =>
+                    typeof item.at === "string" &&
+                    item.at &&
+                    (item.outcome === "sent" || item.outcome === "error"),
+                )
+                .map((item) => ({
+                  at: item.at as string,
+                  outcome: item.outcome as "sent" | "error",
+                  message:
+                    typeof item.message === "string" ? item.message : "",
+                  fromEmail:
+                    typeof item.fromEmail === "string" ? item.fromEmail : "",
+                }))
+            : [],
         });
       } catch {
         if (!cancelled) {
@@ -1337,6 +1373,7 @@ export function ClientManagementPanel() {
             lastSentAt: "",
             fromEmail: "",
             lastError: "",
+            attempts: [],
           });
         }
       }
@@ -3716,6 +3753,7 @@ export function ClientManagementPanel() {
               lastSentAt: markData.status.lastSentAt ?? sendAt.toISOString(),
               fromEmail: markData.status.fromEmail ?? emailFrom,
               lastError: markData.status.lastError ?? "",
+              attempts: [],
             });
           }
         } catch {
@@ -5608,24 +5646,54 @@ export function ClientManagementPanel() {
                             </span>
                           ) : null}
                         </div>
-                        {scheduleOnlyEmailDay && bdAutoEmailStatus.emailSent ? (
-                          <p className="form-message success">
-                            Last sent at{" "}
-                            {formatActionResolvedAt(bdAutoEmailStatus.lastSentAt) ||
-                              bdAutoEmailStatus.lastSentAt ||
-                              "—"}
-                            {bdAutoEmailStatus.fromEmail
-                              ? ` from ${bdAutoEmailStatus.fromEmail}`
-                              : ""}
-                            .
-                          </p>
-                        ) : null}
                         {scheduleOnlyEmailDay &&
-                        !bdAutoEmailStatus.emailSent &&
-                        bdAutoEmailStatus.lastError ? (
-                          <p className="form-message error">
-                            Last auto-send error: {bdAutoEmailStatus.lastError}
-                          </p>
+                        bdAutoEmailStatus.attempts.length > 0 ? (
+                          <div className="bd-auto-email-attempts">
+                            <p className="lookup-hint" style={{ marginBottom: 6 }}>
+                              Auto-send checks (after send time)
+                            </p>
+                            <ul className="lookup-hint" style={{ margin: 0, paddingLeft: "1.2em" }}>
+                              {bdAutoEmailStatus.attempts.map((attempt) => {
+                                const when =
+                                  formatActionResolvedAt(attempt.at) ||
+                                  attempt.at ||
+                                  "—";
+                                if (attempt.outcome === "sent") {
+                                  return (
+                                    <li key={`${attempt.at}-sent`}>
+                                      Check at {when}
+                                      {attempt.fromEmail
+                                        ? ` from ${attempt.fromEmail}`
+                                        : ""}
+                                      : sent.
+                                    </li>
+                                  );
+                                }
+                                return (
+                                  <li key={`${attempt.at}-error`}>
+                                    Check at {when}: auto-send failed
+                                    {attempt.message
+                                      ? ` — ${attempt.message}`
+                                      : "."}
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                            {bdAutoEmailStatus.emailSent ? (
+                              <p className="form-message success">
+                                Last sent at{" "}
+                                {formatActionResolvedAt(
+                                  bdAutoEmailStatus.lastSentAt,
+                                ) ||
+                                  bdAutoEmailStatus.lastSentAt ||
+                                  "—"}
+                                {bdAutoEmailStatus.fromEmail
+                                  ? ` from ${bdAutoEmailStatus.fromEmail}`
+                                  : ""}
+                                .
+                              </p>
+                            ) : null}
+                          </div>
                         ) : null}
                         {emailSendMessage ? (
                           <p className="form-message success">
