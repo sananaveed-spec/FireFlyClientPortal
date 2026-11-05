@@ -116,6 +116,10 @@ function bdEmailBccPath() {
   return path.join(getDataDir(), "bd-email-bcc.json");
 }
 
+function epsFridayAttachmentsPath() {
+  return path.join(getDataDir(), "eps-friday-attachments.json");
+}
+
 function pakistanHolidayEmailsPath() {
   return path.join(getDataDir(), "pakistan-holiday-emails.json");
 }
@@ -654,6 +658,28 @@ export async function readBdEmailBccFile(): Promise<unknown> {
 export async function writeBdEmailBccFile(value: unknown): Promise<void> {
   await ensureDataDir();
   await writeJsonFile(bdEmailBccPath(), value);
+}
+
+export async function readEpsFridayAttachmentsFile(): Promise<unknown> {
+  await ensureDataDir();
+  const filePath = epsFridayAttachmentsPath();
+
+  try {
+    const raw = await readFile(filePath, "utf8");
+    return parseJsonFile(raw);
+  } catch (error) {
+    if (isMissingFile(error)) {
+      return { attachments: [] };
+    }
+    throw error;
+  }
+}
+
+export async function writeEpsFridayAttachmentsFile(
+  value: unknown,
+): Promise<void> {
+  await ensureDataDir();
+  await writeJsonFile(epsFridayAttachmentsPath(), value);
 }
 
 export async function readPakistanHolidayEmailsFile(): Promise<unknown> {

@@ -961,6 +961,17 @@ export function ClientManagementPanel() {
     Bd15StoredAttachment[]
   >([]);
   const [uploadingBd15Files, setUploadingBd15Files] = useState(false);
+  const [epsFridayAttachments, setEpsFridayAttachments] = useState<
+    Array<{
+      id: string;
+      name: string;
+      contentType: string;
+      contentBytes: string;
+      savedAt: string;
+    }>
+  >([]);
+  const [uploadingEpsFridayFiles, setUploadingEpsFridayFiles] = useState(false);
+  const epsFridayFileRef = useRef<HTMLInputElement | null>(null);
   const bd15FileRef = useRef<HTMLInputElement | null>(null);
   const [bd15EmailStatus, setBd15EmailStatus] = useState<{
     emailSent: boolean;
@@ -1202,6 +1213,78 @@ export function ClientManagementPanel() {
       cancelled = true;
     };
   }, [selectedId, selectedScheduleId, scheduleNow]);
+
+  // Load EPS Week-N Friday spreadsheet attachments (multi .xlsx/.xls/.csv).
+  useEffect(() => {
+    if (!selectedId || !showEpsFridayWeek) {
+      setEpsFridayAttachments([]);
+      if (epsFridayFileRef.current) {
+        epsFridayFileRef.current.value = "";
+      }
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await portalFetch(
+          `/api/eps-friday-attachments?clientId=${encodeURIComponent(selectedId)}&scheduleId=${encodeURIComponent(selectedScheduleId)}&monthKey=${encodeURIComponent(currentMonthKey(scheduleNow))}`,
+          { cache: "no-store" },
+        );
+        const data = (await response.json()) as {
+          attachments?: Array<{
+            id?: string;
+            name?: string;
+            contentType?: string;
+            contentBytes?: string;
+            savedAt?: string;
+          }>;
+          error?: string;
+        };
+        if (cancelled) {
+          return;
+        }
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to load Friday attachments.");
+        }
+        setEpsFridayAttachments(
+          Array.isArray(data.attachments)
+            ? data.attachments
+                .filter(
+                  (item) =>
+                    typeof item.id === "string" &&
+                    item.id &&
+                    typeof item.name === "string" &&
+                    item.name &&
+                    typeof item.contentBytes === "string" &&
+                    item.contentBytes,
+                )
+                .map((item) => ({
+                  id: item.id as string,
+                  name: item.name as string,
+                  contentType:
+                    typeof item.contentType === "string" && item.contentType
+                      ? item.contentType
+                      : "application/octet-stream",
+                  contentBytes: item.contentBytes as string,
+                  savedAt:
+                    typeof item.savedAt === "string" && item.savedAt
+                      ? item.savedAt
+                      : "",
+                }))
+            : [],
+        );
+      } catch {
+        if (!cancelled) {
+          setEpsFridayAttachments([]);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId, selectedScheduleId, scheduleNow, showEpsFridayWeek]);
 
   // Load saved BD15 PDF attachments for this client + current month.
   // Also load on BD18 so status can show attached / not attached.
@@ -3191,6 +3274,170 @@ export function ClientManagementPanel() {
     }
   }
 
+  async function handleEpsFridayFileUpload(
+    event: ChangeEvent<HTMLInputElement>,
+  ) {
+    const files = Array.from(event.target.files ?? []);
+    if (files.length === 0 || !selected || !showEpsFridayWeek) {
+      return;
+    }
+    if (!requireActiveSchedule("attach Friday files")) {
+      event.target.value = "";
+      return;
+    }
+
+    const allowed = files.filter((file) => {
+      const lower = file.name.toLowerCase();
+      return (
+        lower.endsWith(".xlsx") ||
+        lower.endsWith(".xls") ||
+        lower.endsWith(".csv")
+      );
+    });
+    if (allowed.length === 0) {
+      setError("Choose .xlsx, .xls, or .csv files only.");
+      event.target.value = "";
+      return;
+    }
+
+    setUploadingEpsFridayFiles(true);
+    setError(null);
+    try {
+      const monthKey = currentMonthKey(scheduleNow);
+      const payload = [];
+      for (const file of allowed) {
+        const buffer = await file.arrayBuffer();
+        payload.push({
+          clientId: selected.resource.id,
+          scheduleId: selectedScheduleId,
+          monthKey,
+          name: file.name,
+          contentType: mimeTypeForExcelFile(file),
+          contentBytes: arrayBufferToBase64(buffer),
+        });
+      }
+      const response = await portalFetch("/api/eps-friday-attachments", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ attachments: payload }),
+      });
+      const data = (await response.json()) as {
+        attachments?: Array<{
+          id?: string;
+          name?: string;
+          contentType?: string;
+          contentBytes?: string;
+          savedAt?: string;
+        }>;
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to save Friday attachments.");
+      }
+      setEpsFridayAttachments(
+        Array.isArray(data.attachments)
+          ? data.attachments
+              .filter(
+                (item) =>
+                  typeof item.id === "string" &&
+                  item.id &&
+                  typeof item.name === "string" &&
+                  item.name &&
+                  typeof item.contentBytes === "string" &&
+                  item.contentBytes,
+              )
+              .map((item) => ({
+                id: item.id as string,
+                name: item.name as string,
+                contentType:
+                  typeof item.contentType === "string" && item.contentType
+                    ? item.contentType
+                    : "application/octet-stream",
+                contentBytes: item.contentBytes as string,
+                savedAt:
+                  typeof item.savedAt === "string" && item.savedAt
+                    ? item.savedAt
+                    : "",
+              }))
+          : [],
+      );
+    } catch (uploadError) {
+      setError(
+        uploadError instanceof Error
+          ? uploadError.message
+          : "Failed to save Friday attachments.",
+      );
+    } finally {
+      setUploadingEpsFridayFiles(false);
+      event.target.value = "";
+    }
+  }
+
+  async function handleRemoveEpsFridayAttachment(attachmentId: string) {
+    if (!selected || !showEpsFridayWeek) {
+      return;
+    }
+    if (!requireActiveSchedule("remove Friday files")) {
+      return;
+    }
+    setUploadingEpsFridayFiles(true);
+    setError(null);
+    try {
+      const response = await portalFetch(
+        `/api/eps-friday-attachments?clientId=${encodeURIComponent(selected.resource.id)}&scheduleId=${encodeURIComponent(selectedScheduleId)}&monthKey=${encodeURIComponent(currentMonthKey(scheduleNow))}&attachmentId=${encodeURIComponent(attachmentId)}`,
+        { method: "DELETE" },
+      );
+      const data = (await response.json()) as {
+        attachments?: Array<{
+          id?: string;
+          name?: string;
+          contentType?: string;
+          contentBytes?: string;
+          savedAt?: string;
+        }>;
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to remove attachment.");
+      }
+      setEpsFridayAttachments(
+        Array.isArray(data.attachments)
+          ? data.attachments
+              .filter(
+                (item) =>
+                  typeof item.id === "string" &&
+                  item.id &&
+                  typeof item.name === "string" &&
+                  item.name &&
+                  typeof item.contentBytes === "string" &&
+                  item.contentBytes,
+              )
+              .map((item) => ({
+                id: item.id as string,
+                name: item.name as string,
+                contentType:
+                  typeof item.contentType === "string" && item.contentType
+                    ? item.contentType
+                    : "application/octet-stream",
+                contentBytes: item.contentBytes as string,
+                savedAt:
+                  typeof item.savedAt === "string" && item.savedAt
+                    ? item.savedAt
+                    : "",
+              }))
+          : [],
+      );
+    } catch (removeError) {
+      setError(
+        removeError instanceof Error
+          ? removeError.message
+          : "Failed to remove attachment.",
+      );
+    } finally {
+      setUploadingEpsFridayFiles(false);
+    }
+  }
+
   async function handleBd15FileUpload(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
     if (files.length === 0 || !selected) {
@@ -4464,7 +4711,9 @@ export function ClientManagementPanel() {
                           ? "Question List Status"
                           : showBd7Content
                             ? "Late Action Items"
-                            : "Action Items"}
+                            : showEpsFridayWeek
+                              ? "Attachments"
+                              : "Action Items"}
                       </button>
                       ) : null}
                       {showBd1LikeWorkflow ? (
@@ -5368,6 +5617,71 @@ export function ClientManagementPanel() {
                               </div>
                             )}
                           </>
+                        ) : showEpsFridayWeek ? (
+                          <div className="question-list-upload">
+                            <p className="lookup-hint">
+                              Upload one or more .xlsx, .xls, or .csv files for
+                              this Week Friday email. Files are attached on
+                              auto-send at 10:50 am client time.
+                            </p>
+                            <label className="field field--wide">
+                              <span className="field-label">
+                                Spreadsheet attachments
+                              </span>
+                              <input
+                                ref={epsFridayFileRef}
+                                className="field-input"
+                                type="file"
+                                multiple
+                                accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+                                disabled={
+                                  uploadingEpsFridayFiles ||
+                                  !isSelectedScheduleActive
+                                }
+                                onChange={(event) =>
+                                  void handleEpsFridayFileUpload(event)
+                                }
+                              />
+                            </label>
+                            <div className="bd5-action-toolbar">
+                              <p className="lookup-hint">
+                                {uploadingEpsFridayFiles
+                                  ? "Saving…"
+                                  : epsFridayAttachments.length === 0
+                                    ? "No files yet."
+                                    : `${epsFridayAttachments.length} file${epsFridayAttachments.length === 1 ? "" : "s"} attached.`}
+                              </p>
+                            </div>
+                            {epsFridayAttachments.length > 0 ? (
+                              <ul className="request-list-items">
+                                {epsFridayAttachments.map((file) => (
+                                  <li
+                                    key={file.id}
+                                    className="request-list-item"
+                                  >
+                                    <span className="request-list-label">
+                                      {file.name}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      className="button secondary"
+                                      disabled={
+                                        uploadingEpsFridayFiles ||
+                                        !isSelectedScheduleActive
+                                      }
+                                      onClick={() =>
+                                        void handleRemoveEpsFridayAttachment(
+                                          file.id,
+                                        )
+                                      }
+                                    >
+                                      Remove
+                                    </button>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : null}
+                          </div>
                         ) : showBd7Content ? (
                           <>
                             {bd7LateItems.length === 0 ? (

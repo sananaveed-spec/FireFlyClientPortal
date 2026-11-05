@@ -32,6 +32,10 @@ import {
   formatBusinessDayLabel,
 } from "@/lib/business-days";
 import {
+  getEpsFridayAttachments,
+  normalizeEpsFridayAttachmentsStore,
+} from "@/lib/eps-friday-attachments";
+import {
   EPS_FRIDAYS_TOGGLE_ID,
   getEpsFridayWeekItemsForMonth,
   isEpsFridayWeekScheduleId,
@@ -68,6 +72,7 @@ import {
   readClientScheduleSettingsFile,
   readEmailSignatureForUser,
   readEmailTemplates,
+  readEpsFridayAttachmentsFile,
   readHolidays,
   readPortalUsersFile,
   readResourceClients,
@@ -598,6 +603,7 @@ export async function runBdAutoEmails(options?: {
     bd15AttachmentsRaw,
     bd15StatusRaw,
     bdEmailBccRaw,
+    epsFridayAttachmentsRaw,
   ] = await Promise.all([
     readClientProfiles(),
     readResourceClients(),
@@ -611,6 +617,7 @@ export async function runBdAutoEmails(options?: {
     readBd15EmailAttachmentsFile(),
     readBd15EmailStatusFile(),
     readBdEmailBccFile(),
+    readEpsFridayAttachmentsFile(),
   ]);
 
   const users = parsePortalUsers(usersRaw);
@@ -633,6 +640,10 @@ export async function runBdAutoEmails(options?: {
   );
   let bd15StatusDirty = false;
   const bdEmailBccStore = normalizeBdEmailBccStore(bdEmailBccRaw);
+  const epsFridayAttachmentsStore = normalizeEpsFridayAttachmentsStore(
+    epsFridayAttachmentsRaw,
+    monthKey,
+  );
   const ownerCc = resolveOwnerEmail(users);
   const publicOrigin = publicPortalOrigin();
 
@@ -825,6 +836,21 @@ export async function runBdAutoEmails(options?: {
           contentType: file.contentType,
           contentBytes: file.contentBytes,
         });
+      }
+
+      if (isEpsFriday) {
+        for (const file of getEpsFridayAttachments(
+          epsFridayAttachmentsStore,
+          resource.id,
+          scheduleId,
+          monthKey,
+        )) {
+          mailAttachments.push({
+            name: file.name,
+            contentType: file.contentType,
+            contentBytes: file.contentBytes,
+          });
+        }
       }
 
       if (scheduleId === "bd15" || scheduleId === "bd18") {
