@@ -512,9 +512,10 @@ const SCHEDULE_FAMILY_META: Record<
 
 function scheduleFamilyForId(
   scheduleId: string,
-): { family: ScheduleFamilyId; role: "main" | "followup" } | null {
+): { family: ScheduleFamilyId; role: "main" | "followup" | null } | null {
   if (isEpsFridayWeekScheduleId(scheduleId)) {
-    return { family: "epsFridays", role: "main" };
+    // No "Main" pill — date shows under the Week-N Friday label.
+    return { family: "epsFridays", role: null };
   }
   return SCHEDULE_FAMILY_BY_ID[scheduleId] ?? null;
 }
@@ -2583,7 +2584,8 @@ export function ClientManagementPanel() {
     }
     const country = selected.profile?.country;
     const state = selected.profile?.state ?? "";
-    for (const item of CLIENT_SCHEDULE_ITEMS) {
+    const items = [...CLIENT_SCHEDULE_ITEMS, ...epsFridayWeekItems];
+    for (const item of items) {
       const date = getUpcomingScheduleBusinessDate(
         item.id,
         holidays,
@@ -2596,7 +2598,7 @@ export function ClientManagementPanel() {
       }
     }
     return map;
-  }, [selected, holidays, scheduleNow]);
+  }, [selected, holidays, scheduleNow, epsFridayWeekItems]);
 
   const activeList: ClientRequestList =
     selected && activeRequestScheduleId
