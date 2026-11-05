@@ -21,6 +21,13 @@ import {
   getUpcomingScheduleBusinessDate,
 } from "@/lib/business-days";
 import {
+  EPS_FRIDAYS_TOGGLE_ID,
+  epsFridayWeekScheduleId,
+  getEpsFridayWeekItemsForMonth,
+  isEpsFridayWeekScheduleId,
+  isEpsFridaysActive,
+} from "@/lib/eps-friday-weeks";
+import {
   CLIENT_MANAGEMENT_DEMO_MONTH_EVENT,
   getClientManagementNow,
   ROLL_CLIENT_MANAGEMENT_MONTH_ID,
@@ -459,7 +466,10 @@ function isEpsClientProfile(profile: {
 }
 
 /** Sidebar order: BD1→…→BD18, then end-of-month by date (Last 3 → Last 2 → Last 1). */
-const CLIENT_SCHEDULE_ITEMS = [
+type ClientScheduleItem = { id: string; label: string };
+type ScheduleFamilyId = "documents" | "questions" | "epsFridays";
+
+const CLIENT_SCHEDULE_ITEMS: readonly ClientScheduleItem[] = [
   { id: "bd1", label: "BD1" },
   { id: "bd5", label: "BD5" },
   { id: "bd7", label: "BD7" },
@@ -472,10 +482,7 @@ const CLIENT_SCHEDULE_ITEMS = [
   { id: "last-3-bd", label: "Last 3 BD" },
   { id: "last-2-bd", label: "Last 2 BD" },
   { id: "last-1-bd", label: "Last 1 BD" },
-] as const;
-
-type ClientScheduleItem = (typeof CLIENT_SCHEDULE_ITEMS)[number];
-type ScheduleFamilyId = "documents" | "questions";
+];
 
 /** BD1 chain = document request; BD8 chain = question list. */
 const SCHEDULE_FAMILY_BY_ID: Record<
@@ -497,7 +504,20 @@ const SCHEDULE_FAMILY_META: Record<
 > = {
   documents: { label: "Document request", hint: "BD1 → BD5 / BD7" },
   questions: { label: "Question list", hint: "BD8 → BD9 / BD10 / BD13" },
+  epsFridays: {
+    label: "EPS Fridays",
+    hint: "Week-N Friday · 10:50 AM · Template 22",
+  },
 };
+
+function scheduleFamilyForId(
+  scheduleId: string,
+): { family: ScheduleFamilyId; role: "main" | "followup" } | null {
+  if (isEpsFridayWeekScheduleId(scheduleId)) {
+    return { family: "epsFridays", role: "main" };
+  }
+  return SCHEDULE_FAMILY_BY_ID[scheduleId] ?? null;
+}
 
 type ScheduleSidebarGroup = {
   family: ScheduleFamilyId | null;
@@ -510,7 +530,7 @@ function groupScheduleItemsForSidebar(
   const groups: ScheduleSidebarGroup[] = [];
   const familyGroupIndex = new Map<ScheduleFamilyId, number>();
   for (const item of items) {
-    const family = SCHEDULE_FAMILY_BY_ID[item.id]?.family ?? null;
+    const family = scheduleFamilyForId(item.id)?.family ?? null;
     if (family == null) {
       groups.push({ family: null, items: [item] });
       continue;
@@ -553,7 +573,12 @@ function lastBdLabel(scheduleId: string): string {
     : `Last ${n} business days of the month`;
 }
 
-const ALL_SCHEDULE_IDS = CLIENT_SCHEDULE_ITEMS.map((item) => item.id);
+/** Includes EPS Fridays master toggle + Week 1–6 Friday slots for Active storage. */
+const ALL_SCHEDULE_IDS = [
+  ...CLIENT_SCHEDULE_ITEMS.map((item) => item.id),
+  EPS_FRIDAYS_TOGGLE_ID,
+  ...[1, 2, 3, 4, 5, 6].map((week) => epsFridayWeekScheduleId(week)),
+];
 
 const BD1_SUB_MENUS = [
   {
@@ -1050,6 +1075,8 @@ export function ClientManagementPanel() {
   const showBd5Content = selectedScheduleId === "bd5";
   const showBd7Content = selectedScheduleId === "bd7";
   const showBd8Content = selectedScheduleId === "bd8";
+  /** EPS Week-N Friday (sidebar only for EPS clients). */
+  const showEpsFridayWeek = isEpsFridayWeekScheduleId(selectedScheduleId);
   /** Email BDs with server auto-send; Schedule disabled for everyone. */
   const scheduleOnlyEmailDay = isBdAutoSendScheduleId(selectedScheduleId);
   const showBd15Content = selectedScheduleId === "bd15";
@@ -1088,6 +1115,7 @@ export function ClientManagementPanel() {
     showBd10Content ||
     showBd13Content ||
     showBd15Email ||
+    showEpsFridayWeek ||
     showEndOfMonthEmailOnly;
   const showRequestTypeChooser =
     selectedScheduleId === "bd1" ||
@@ -1723,6 +1751,16 @@ export function ClientManagementPanel() {
       ),
     );
   }, [scheduleSettings, selectedClientId]);
+  const epsFridaysActive = isEpsFridaysActive([...activeScheduleIdSet]);
+  const epsFridayWeekItems = useMemo((): ClientScheduleItem[] => {
+    if (!selectedIsEpsClient) {
+      return [];
+    }
+    return getEpsFridayWeekItemsForMonth(scheduleNow).map((item) => ({
+      id: item.id,
+      label: item.label,
+    }));
+  }, [selectedIsEpsClient, scheduleNow]);
   const sortScheduleItemsByMonthDate = useCallback(
     <T extends { id: string }>(items: readonly T[]): T[] => {
       const country = selected?.profile?.country;
@@ -1747,41 +1785,54 @@ export function ClientManagementPanel() {
         if (timeA !== timeB) {
           return timeA - timeB;
         }
-        return (
-          (CLIENT_SCHEDULE_ORDER.get(a.id) ?? 0) -
-          (CLIENT_SCHEDULE_ORDER.get(b.id) ?? 0)
-        );
+        const orderA = isEpsFridayWeekScheduleId(a.id)
+          ? 10_000 + (parseInt(a.id.replace(/\D/g, ""), 10) || 0)
+          : (CLIENT_SCHEDULE_ORDER.get(a.id) ?? 0);
+        const orderB = isEpsFridayWeekScheduleId(b.id)
+          ? 10_000 + (parseInt(b.id.replace(/\D/g, ""), 10) || 0)
+          : (CLIENT_SCHEDULE_ORDER.get(b.id) ?? 0);
+        return orderA - orderB;
       });
     },
     [selected?.profile?.country, selected?.profile?.state, holidays, scheduleNow],
   );
 
-  const activeScheduleItems = useMemo(
-    () =>
-      sortScheduleItemsByMonthDate(
-        CLIENT_SCHEDULE_ITEMS.filter((item) =>
-          activeScheduleIdSet.has(item.id),
-        ),
-      ),
-    [activeScheduleIdSet, sortScheduleItemsByMonthDate],
-  );
-  const inactiveScheduleItems = useMemo(
-    () =>
-      sortScheduleItemsByMonthDate(
-        CLIENT_SCHEDULE_ITEMS.filter(
-          (item) => !activeScheduleIdSet.has(item.id),
-        ),
-      ),
-    [activeScheduleIdSet, sortScheduleItemsByMonthDate],
-  );
+  const activeScheduleItems = useMemo(() => {
+    const base = CLIENT_SCHEDULE_ITEMS.filter((item) =>
+      activeScheduleIdSet.has(item.id),
+    );
+    const weeks = epsFridaysActive ? epsFridayWeekItems : [];
+    return sortScheduleItemsByMonthDate([...base, ...weeks]);
+  }, [
+    activeScheduleIdSet,
+    epsFridaysActive,
+    epsFridayWeekItems,
+    sortScheduleItemsByMonthDate,
+  ]);
+  const inactiveScheduleItems = useMemo(() => {
+    const base = CLIENT_SCHEDULE_ITEMS.filter(
+      (item) => !activeScheduleIdSet.has(item.id),
+    );
+    const weeks =
+      selectedIsEpsClient && !epsFridaysActive ? epsFridayWeekItems : [];
+    return sortScheduleItemsByMonthDate([...base, ...weeks]);
+  }, [
+    activeScheduleIdSet,
+    epsFridaysActive,
+    epsFridayWeekItems,
+    selectedIsEpsClient,
+    sortScheduleItemsByMonthDate,
+  ]);
   const isSelectedScheduleActive = Boolean(
     selectedClientId &&
-      isScheduleActiveForClient(
-        scheduleSettings,
-        selectedClientId,
-        selectedScheduleId,
-        ALL_SCHEDULE_IDS,
-      ),
+      (showEpsFridayWeek
+        ? epsFridaysActive
+        : isScheduleActiveForClient(
+            scheduleSettings,
+            selectedClientId,
+            selectedScheduleId,
+            ALL_SCHEDULE_IDS,
+          )),
   );
 
   // When switching clients, land on an Active business day if the current one is not.
@@ -1794,11 +1845,15 @@ export function ClientManagementPanel() {
       selectedClientId,
       ALL_SCHEDULE_IDS,
     );
-    setSelectedScheduleId((current) =>
-      activeIds.includes(current)
+    const epsOn = isEpsFridaysActive(activeIds);
+    setSelectedScheduleId((current) => {
+      if (isEpsFridayWeekScheduleId(current) && epsOn) {
+        return current;
+      }
+      return activeIds.includes(current)
         ? current
-        : (activeIds[0] ?? CLIENT_SCHEDULE_ITEMS[0].id),
-    );
+        : (activeIds[0] ?? CLIENT_SCHEDULE_ITEMS[0].id);
+    });
     setInactiveExpanded(false);
     // Only re-run when the selected client changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
@@ -1892,28 +1947,32 @@ export function ClientManagementPanel() {
         selectedScheduleId !== "bd13" &&
         selectedScheduleId !== "bd15" &&
         selectedScheduleId !== "bd18" &&
+        !showEpsFridayWeek &&
         !showLastBdSchedule)
     ) {
       return;
     }
     const template = showLastBdSchedule
       ? findEmailTemplateById(emailTemplates, "template-18")
-      : selectedScheduleId === "bd15"
-        ? findEmailTemplateById(emailTemplates, "template-11")
-        : selectedScheduleId === "bd18"
-          ? // Sidebar label "Template 7".
-            findEmailTemplateByLabelNumber(emailTemplates, 7)
-          : selectedScheduleId === "bd13"
-            ? // Sidebar label "Template 5 (BD13)" (id may not be template-5).
-              findEmailTemplateByLabelNumber(emailTemplates, 5)
-            : selectedScheduleId === "bd10"
-              ? // Sidebar label "Template 6 (BD10)".
-                findEmailTemplateByLabelNumber(emailTemplates, 6)
-              : selectedScheduleId === "bd8"
-                ? findEmailTemplateByLabelNumber(emailTemplates, 4)
-                : selectedScheduleId === "bd7"
-                  ? findEmailTemplateByLabelNumber(emailTemplates, 3)
-                  : findBd1EmailTemplate(emailTemplates, requestTypeId);
+      : showEpsFridayWeek
+        ? findEmailTemplateById(emailTemplates, "template-22") ??
+          findEmailTemplateByLabelNumber(emailTemplates, 22)
+        : selectedScheduleId === "bd15"
+          ? findEmailTemplateById(emailTemplates, "template-11")
+          : selectedScheduleId === "bd18"
+            ? // Sidebar label "Template 7".
+              findEmailTemplateByLabelNumber(emailTemplates, 7)
+            : selectedScheduleId === "bd13"
+              ? // Sidebar label "Template 5 (BD13)" (id may not be template-5).
+                findEmailTemplateByLabelNumber(emailTemplates, 5)
+              : selectedScheduleId === "bd10"
+                ? // Sidebar label "Template 6 (BD10)".
+                  findEmailTemplateByLabelNumber(emailTemplates, 6)
+                : selectedScheduleId === "bd8"
+                  ? findEmailTemplateByLabelNumber(emailTemplates, 4)
+                  : selectedScheduleId === "bd7"
+                    ? findEmailTemplateByLabelNumber(emailTemplates, 3)
+                    : findBd1EmailTemplate(emailTemplates, requestTypeId);
     const clientName =
       selectedOperatingName.replace(/[.:]+$/g, "").trim() ||
       selectedOperatingName.trim() ||
@@ -2252,6 +2311,7 @@ export function ClientManagementPanel() {
     selectedClientId,
     selectedScheduleId,
     showLastBdSchedule,
+    showEpsFridayWeek,
     requestTypeId,
     selectedOperatingName,
     selectedPointOfContact,
@@ -2277,6 +2337,7 @@ export function ClientManagementPanel() {
         selectedScheduleId !== "bd13" &&
         selectedScheduleId !== "bd15" &&
         selectedScheduleId !== "bd18" &&
+        !showEpsFridayWeek &&
         !showLastBdSchedule)
     ) {
       return;
@@ -2298,7 +2359,9 @@ export function ClientManagementPanel() {
       showBd8Content ||
       showBd10Content ||
       showBd13Content ||
-      showBd18Content
+      showBd15Content ||
+      showBd18Content ||
+      showEpsFridayWeek
     ) {
       setEmailTo(selectedPocEmail);
       const toEmail = selectedPocEmail.trim().toLowerCase();
@@ -2306,7 +2369,7 @@ export function ClientManagementPanel() {
       const ccEmails = [
         scheduleOwnerCcEmail,
         selectedGroupIdCc,
-        selectedIsEpsClient ? EPS_SCHEDULE_EMAIL_CC : "",
+        selectedIsEpsClient || showEpsFridayWeek ? EPS_SCHEDULE_EMAIL_CC : "",
       ]
         .map((email) => email.trim().toLowerCase())
         .filter(
@@ -2333,7 +2396,9 @@ export function ClientManagementPanel() {
     showBd8Content,
     showBd10Content,
     showBd13Content,
+    showBd15Content,
     showBd18Content,
+    showEpsFridayWeek,
     requestTypeId,
     portalUsers,
     emailFrom,
@@ -2355,7 +2420,8 @@ export function ClientManagementPanel() {
         showBd10Content ||
         showBd13Content ||
         showBd15Content ||
-        showBd18Content
+        showBd18Content ||
+        showEpsFridayWeek
       )
     ) {
       emailBccReadyRef.current = false;
@@ -2407,6 +2473,7 @@ export function ClientManagementPanel() {
     showBd13Content,
     showBd15Content,
     showBd18Content,
+    showEpsFridayWeek,
   ]);
 
   // Persist BCC after the user edits it (debounced).
@@ -2422,7 +2489,8 @@ export function ClientManagementPanel() {
         showBd10Content ||
         showBd13Content ||
         showBd15Content ||
-        showBd18Content
+        showBd18Content ||
+        showEpsFridayWeek
       )
     ) {
       return;
@@ -2464,10 +2532,12 @@ export function ClientManagementPanel() {
     showBd13Content,
     showBd15Content,
     showBd18Content,
+    showEpsFridayWeek,
   ]);
 
   const selectedSchedule =
     CLIENT_SCHEDULE_ITEMS.find((item) => item.id === selectedScheduleId) ??
+    epsFridayWeekItems.find((item) => item.id === selectedScheduleId) ??
     CLIENT_SCHEDULE_ITEMS[0];
 
   const selectedScheduleBusinessDate = useMemo(() => {
@@ -2857,10 +2927,14 @@ export function ClientManagementPanel() {
       return;
     }
 
+    // One EPS Fridays star toggles all Week-N Friday rows.
+    const toggleId = isEpsFridayWeekScheduleId(scheduleId)
+      ? EPS_FRIDAYS_TOGGLE_ID
+      : scheduleId;
     const nextStore = toggleClientScheduleActive(
       scheduleSettings,
       selected.resource.id,
-      scheduleId,
+      toggleId,
       ALL_SCHEDULE_IDS,
     );
     const entry = {
@@ -4090,7 +4164,7 @@ export function ClientManagementPanel() {
                               const isSelected =
                                 selectedSchedule.id === item.id;
                               const role =
-                                SCHEDULE_FAMILY_BY_ID[item.id]?.role ?? null;
+                                scheduleFamilyForId(item.id)?.role ?? null;
                               const rowClass = [
                                 "schedule-row",
                                 "schedule-row--on",
@@ -4214,7 +4288,7 @@ export function ClientManagementPanel() {
                               const isSelected =
                                 selectedSchedule.id === item.id;
                               const role =
-                                SCHEDULE_FAMILY_BY_ID[item.id]?.role ?? null;
+                                scheduleFamilyForId(item.id)?.role ?? null;
                               const rowClass = [
                                 "schedule-row",
                                 "schedule-row--off",
@@ -5617,7 +5691,8 @@ export function ClientManagementPanel() {
                               showBd10Content ||
                               showBd13Content ||
                               showBd15Content ||
-                              showBd18Content) &&
+                              showBd18Content ||
+                              showEpsFridayWeek) &&
                             !showLastBdSchedule ? (
                               <span className="lookup-hint">
                                 Saved per client and BD; included on auto-send.
@@ -5768,7 +5843,9 @@ export function ClientManagementPanel() {
                           )}
                           {scheduleOnlyEmailDay ? (
                             <span className="lookup-hint">
-                              {`${selectedScheduleId.toUpperCase()} auto-sends at 9:00 am client time on its BD date from the supervisor mailbox (server cron). Schedule is disabled for everyone.`}
+                              {showEpsFridayWeek
+                                ? `${selectedSchedule.label} auto-sends at 10:50 am client time on that Friday from the supervisor mailbox (server cron). One EPS Fridays star enables all weeks. Schedule is disabled.`
+                                : `${selectedScheduleId.toUpperCase()} auto-sends at 9:00 am client time on its BD date from the supervisor mailbox (server cron). Schedule is disabled for everyone.`}
                             </span>
                           ) : null}
                         </div>

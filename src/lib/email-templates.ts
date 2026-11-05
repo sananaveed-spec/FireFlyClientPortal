@@ -20,7 +20,8 @@ export type EmailTemplateId =
   | "template-17"
   | "template-18"
   | "template-19"
-  | "template-20";
+  | "template-20"
+  | "template-22";
 
 export type EmailTemplate = {
   id: string;
@@ -417,6 +418,20 @@ This proposal is going to expire on [Expiry Date].
 • Expiry date: [Expiry Date]
 
 Please reply if you would like to renew or discuss next steps.
+
+Thank you.`,
+  },
+  {
+    id: "template-22",
+    title: "Friday Email",
+    whenSent:
+      "EPS only — each Week-N Friday of the month at 10:50 AM client time (automatic).",
+    subject: "[Client Name]: Friday email for [Period]",
+    body: `Hi [Contact First Name],
+
+This is your Friday update for [Period].
+
+Please reply if you have any questions.
 
 Thank you.`,
   },

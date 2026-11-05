@@ -1,8 +1,10 @@
 import { currentMonthKey } from "@/lib/client-request-lists";
+import { isEpsFridayWeekScheduleId } from "@/lib/eps-friday-weeks";
 
 /**
  * Schedule ids that auto-send without supervisor click (email-capable BDs).
  * Status-only BD5 / BD9 are excluded. Last-N BD team mail stays manual.
+ * EPS Week-N Friday ids (`eps-week-N-friday`) are also auto-send (EPS only).
  */
 export const BD_AUTO_SEND_SCHEDULE_IDS = [
   "bd1",
@@ -14,12 +16,18 @@ export const BD_AUTO_SEND_SCHEDULE_IDS = [
   "bd18",
 ] as const;
 
-export type BdAutoSendScheduleId = (typeof BD_AUTO_SEND_SCHEDULE_IDS)[number];
+export type BdAutoSendScheduleId =
+  | (typeof BD_AUTO_SEND_SCHEDULE_IDS)[number]
+  | string;
 
 export function isBdAutoSendScheduleId(
   value: string,
 ): value is BdAutoSendScheduleId {
-  return (BD_AUTO_SEND_SCHEDULE_IDS as readonly string[]).includes(value);
+  const id = value.trim();
+  return (
+    (BD_AUTO_SEND_SCHEDULE_IDS as readonly string[]).includes(id) ||
+    isEpsFridayWeekScheduleId(id)
+  );
 }
 
 export type BdAutoEmailAttempt = {

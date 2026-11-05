@@ -1,4 +1,5 @@
 import type { ClientCountry } from "@/lib/client-profiles";
+import { getEpsFridayDateForSchedule } from "@/lib/eps-friday-weeks";
 import {
   HOLIDAY_STATE_ALL,
   holidayUsesRegion,
@@ -244,6 +245,12 @@ export function getScheduleBusinessDate(
   clientState: string,
   now: Date = new Date(),
 ): Date | null {
+  // EPS Week-N Friday = Nth calendar Friday (no holiday shift).
+  const epsFriday = getEpsFridayDateForSchedule(scheduleId, now);
+  if (epsFriday) {
+    return epsFriday;
+  }
+
   const year = now.getFullYear();
   const monthIndex = now.getMonth();
   // Weekend-only count for the BD ordinal (empty holiday set).

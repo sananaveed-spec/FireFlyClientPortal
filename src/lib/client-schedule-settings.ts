@@ -139,3 +139,20 @@ export function toggleClientScheduleActive(
     activeScheduleIds: allScheduleIds.filter((item) => current.has(item)),
   });
 }
+
+/**
+ * Toggle a single master id (e.g. `eps-fridays`) that gates many sidebar rows.
+ */
+export function toggleMasterScheduleActive(
+  store: ClientScheduleSettingsStore,
+  clientId: string,
+  masterId: string,
+  allScheduleIds: readonly string[],
+): ClientScheduleSettingsStore {
+  return toggleClientScheduleActive(
+    store,
+    clientId,
+    masterId,
+    allScheduleIds,
+  );
+}

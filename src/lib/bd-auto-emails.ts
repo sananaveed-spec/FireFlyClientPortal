@@ -31,6 +31,12 @@ import {
   getUpcomingScheduleBusinessDate,
   formatBusinessDayLabel,
 } from "@/lib/business-days";
+import {
+  EPS_FRIDAYS_TOGGLE_ID,
+  getEpsFridayWeekItemsForMonth,
+  isEpsFridayWeekScheduleId,
+  isEpsFridaysActive,
+} from "@/lib/eps-friday-weeks";
 import { findProfileForResourceClient } from "@/lib/client-management";
 import {
   bd1TemplateToRequestTypeId,
@@ -90,6 +96,7 @@ import { resolveStaffEmail } from "@/lib/staff-assign";
 import {
   calendarYmdFromLocalDate,
   getCalendarYmdInTimeZone,
+  getClientEpsFridaySendSchedule,
   getClientNineAmSchedule,
   resolveClientTimeZone,
 } from "@/lib/time-zones";
@@ -190,6 +197,12 @@ function templateForSchedule(
   scheduleId: BdAutoSendScheduleId,
   profile: ClientProfileEntry,
 ): EmailTemplate | null {
+  if (isEpsFridayWeekScheduleId(String(scheduleId))) {
+    return (
+      findTemplateById(store, "template-22") ??
+      findTemplateByLabelNumber(store, 22)
+    );
+  }
   if (scheduleId === "bd1") {
     return bd1TemplateForProfile(store, profile);
   }
@@ -542,10 +555,16 @@ export async function runBdAutoEmails(options?: {
 }): Promise<BdAutoEmailRunResult> {
   const now = options?.now ?? new Date();
   const force = Boolean(options?.force);
+  const epsWeekIds = getEpsFridayWeekItemsForMonth(now).map((item) => item.id);
   const scheduleIds = options?.scheduleIds?.length
     ? options.scheduleIds
-    : [...BD_AUTO_SEND_SCHEDULE_IDS];
+    : [...BD_AUTO_SEND_SCHEDULE_IDS, ...epsWeekIds];
   const checkedAt = now.toISOString();
+  const knownActiveIds = [
+    ...BD_AUTO_SEND_SCHEDULE_IDS,
+    EPS_FRIDAYS_TOGGLE_ID,
+    ...epsWeekIds,
+  ];
   const result: BdAutoEmailRunResult = {
     ok: true,
     checkedAt,
@@ -634,11 +653,17 @@ export async function runBdAutoEmails(options?: {
     const activeIds = getActiveScheduleIds(
       scheduleSettings,
       resource.id,
-      BD_AUTO_SEND_SCHEDULE_IDS as unknown as string[],
+      knownActiveIds,
     );
+    const epsClient = isEpsClient(profile);
 
     for (const scheduleId of scheduleIds) {
-      // Only evaluate BDs whose this-month date equals today in client TZ.
+      const isEpsFriday = isEpsFridayWeekScheduleId(scheduleId);
+      if (isEpsFriday && !epsClient) {
+        continue;
+      }
+
+      // Only evaluate schedules whose this-month date equals today in client TZ.
       const bdDate = getScheduleBusinessDate(
         scheduleId,
         holidays,
@@ -650,12 +675,17 @@ export async function runBdAutoEmails(options?: {
         continue;
       }
 
-      if (!activeIds.includes(scheduleId)) {
+      const isActive = isEpsFriday
+        ? isEpsFridaysActive(activeIds)
+        : activeIds.includes(scheduleId);
+      if (!isActive) {
         result.skipped.push({
           clientId: resource.id,
           clientName,
           scheduleId,
-          reason: `${scheduleId.toUpperCase()} is Inactive (star not filled).`,
+          reason: isEpsFriday
+            ? "EPS Fridays is Inactive (star not filled)."
+            : `${scheduleId.toUpperCase()} is Inactive (star not filled).`,
         });
         continue;
       }
@@ -701,7 +731,9 @@ export async function runBdAutoEmails(options?: {
         continue;
       }
 
-      const sendSchedule = getClientNineAmSchedule(bdDate, profile.timeZone);
+      const sendSchedule = isEpsFriday
+        ? getClientEpsFridaySendSchedule(bdDate, profile.timeZone)
+        : getClientNineAmSchedule(bdDate, profile.timeZone);
       if (!sendSchedule) {
         result.skipped.push({
           clientId: resource.id,

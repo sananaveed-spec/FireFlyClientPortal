@@ -227,14 +227,15 @@ export const CLIENT_TIME_ZONE_REQUIRED_MESSAGE =
   "Set the client time zone in Client Profile.";
 
 /**
- * 9:00 AM on the schedule BD date in the client timezone, converted to
- * Pakistan for the editable “Scheduled send (Pakistan)” field.
- * Always uses that BD calendar date (does not skip past days).
+ * Wall-clock time on the schedule date in the client timezone.
+ * Always uses that calendar date (does not skip past days).
  * Returns null when the client time zone is missing or unrecognized.
  */
-export function getClientNineAmSchedule(
+export function getClientWallTimeSchedule(
   scheduleDate: Date | null,
   clientTimeZoneLabel: string | undefined | null,
+  hour: number,
+  minute: number = 0,
 ): ClientNineAmSchedule | null {
   if (!scheduleDate) {
     return null;
@@ -250,8 +251,8 @@ export function getClientNineAmSchedule(
     year,
     monthIndex,
     day,
-    CLIENT_SEND_HOUR,
-    0,
+    hour,
+    minute,
     clientIana,
   );
   return {
@@ -265,4 +266,36 @@ export function getClientNineAmSchedule(
     userDateTimeLocal: formatDateTimeLocalInTimeZone(instant, USER_TIME_ZONE),
     userLabel: `${formatUserSendAtLabel(instant)} (Pakistan)`,
   };
+}
+
+/**
+ * 9:00 AM on the schedule BD date in the client timezone, converted to
+ * Pakistan for the editable “Scheduled send (Pakistan)” field.
+ */
+export function getClientNineAmSchedule(
+  scheduleDate: Date | null,
+  clientTimeZoneLabel: string | undefined | null,
+): ClientNineAmSchedule | null {
+  return getClientWallTimeSchedule(
+    scheduleDate,
+    clientTimeZoneLabel,
+    CLIENT_SEND_HOUR,
+    0,
+  );
+}
+
+/** EPS Week-N Friday auto-send: 10:50 AM client time. */
+export const EPS_FRIDAY_SEND_HOUR = 10;
+export const EPS_FRIDAY_SEND_MINUTE = 50;
+
+export function getClientEpsFridaySendSchedule(
+  scheduleDate: Date | null,
+  clientTimeZoneLabel: string | undefined | null,
+): ClientNineAmSchedule | null {
+  return getClientWallTimeSchedule(
+    scheduleDate,
+    clientTimeZoneLabel,
+    EPS_FRIDAY_SEND_HOUR,
+    EPS_FRIDAY_SEND_MINUTE,
+  );
 }

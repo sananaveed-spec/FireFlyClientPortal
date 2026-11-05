@@ -15,6 +15,10 @@ Each run:
 
 **Auto-send BDs today:** BD1, BD7, BD8, BD10, BD13, BD15, BD18  
 
+**EPS only:** Week 1 Friday … Week‑N Friday (every Friday in the month),  
+**10:50 AM client time**, Template 22, one **EPS Fridays** Active star for all weeks.  
+Sidebar rows appear only for EPS clients.
+
 **Not auto-sent:** BD5 / BD9 (status only), Last 1/2/3 BD (team mail stays manual)
 
 When you add another email BD later, we register it in `BD_AUTO_SEND_SCHEDULE_IDS` + its template — **no new cron lines**.
