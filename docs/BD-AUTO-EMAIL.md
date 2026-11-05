@@ -62,8 +62,9 @@ crontab -e
   -H "Authorization: Bearer YOUR_BD_AUTO_EMAIL_CRON_SECRET" \
   http://127.0.0.1:3000/api/bd-auto-emails/run
 
-# Retry / catch-up
-0 20 * * 1-5 curl -fsS -X POST \
+# ~10:50 AM PST (= 18:50 UTC). Also covers EPS Friday send + catch-up.
+# During PDT this is ~11:50 AM Pacific.
+50 18 * * 1-5 curl -fsS -X POST \
   -H "Authorization: Bearer YOUR_BD_AUTO_EMAIL_CRON_SECRET" \
   http://127.0.0.1:3000/api/bd-auto-emails/run
 ```
