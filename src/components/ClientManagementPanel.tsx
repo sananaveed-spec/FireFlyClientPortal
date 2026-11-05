@@ -762,11 +762,18 @@ function findEmailTemplateByLabelNumber(
   store: EmailTemplatesStore,
   labelNumber: number,
 ): EmailTemplate | null {
-  return (
-    store.templates.find(
-      (template) => emailTemplateLabelNumber(template) === labelNumber,
-    ) ?? null
+  const matches = store.templates.filter(
+    (template) => emailTemplateLabelNumber(template) === labelNumber,
   );
+  if (matches.length === 0) {
+    return null;
+  }
+  // Prefer a custom Lookup row when label numbers collide with a seed id
+  // (e.g. seed template-22 vs "Template 22 (Friday Email)").
+  const custom = [...matches]
+    .reverse()
+    .find((template) => !/^template-\d+$/i.test(template.id));
+  return custom ?? matches[matches.length - 1] ?? null;
 }
 
 function findBd1EmailTemplate(
@@ -5910,6 +5917,18 @@ export function ClientManagementPanel() {
                               selected request type. To is the client POC email.
                               Schedule only from the supervisor account (Admins
                               view only; no Send Now).
+                            </>
+                          ) : showEpsFridayWeek ? (
+                            <>
+                              Subject and body are filled from Email Template 22
+                              (Friday Email). Attachments from the Attachments
+                              tab are sent with the email
+                              {epsFridayAttachments.length > 0
+                                ? ` (${epsFridayAttachments.length} file${epsFridayAttachments.length === 1 ? "" : "s"})`
+                                : ""}
+                              . Auto-sends at 10:50 am client time. To is the
+                              client POC email; CC includes Owner, Group ID, and
+                              thomas@ for EPS.
                             </>
                           ) : (
                             <>

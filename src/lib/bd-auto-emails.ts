@@ -178,11 +178,18 @@ function findTemplateByLabelNumber(
   store: EmailTemplatesStore,
   labelNumber: number,
 ): EmailTemplate | null {
-  return (
-    store.templates.find(
-      (template) => emailTemplateLabelNumber(template) === labelNumber,
-    ) ?? null
+  const matches = store.templates.filter(
+    (template) => emailTemplateLabelNumber(template) === labelNumber,
   );
+  if (matches.length === 0) {
+    return null;
+  }
+  // Prefer custom Lookup template when it shares a number with a seed
+  // (e.g. Template 22 Friday Email vs seed template-22).
+  const custom = [...matches]
+    .reverse()
+    .find((template) => !/^template-\d+$/i.test(template.id));
+  return custom ?? matches[matches.length - 1] ?? null;
 }
 
 function bd1TemplateForProfile(
