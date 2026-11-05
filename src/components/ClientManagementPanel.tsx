@@ -444,9 +444,12 @@ function isEpsClientProfile(profile: {
   }
   const legal = profile.legalName?.trim().toLowerCase() || "";
   const operating = profile.operatingName?.trim().toLowerCase() || "";
+  // Match "Electrical Power System" / "Systems" / short "EPS".
   if (
-    legal.includes("electrical power systems") ||
-    operating.includes("electrical power systems")
+    /electrical power systems?\b/.test(legal) ||
+    /electrical power systems?\b/.test(operating) ||
+    legal === "eps" ||
+    operating === "eps"
   ) {
     return true;
   }
@@ -1786,14 +1789,31 @@ export function ClientManagementPanel() {
     ) {
       return "";
     }
-    // BD1 → BD4; BD7 → same BD7 date; BD8/BD10/BD13 → same day.
-    const dueDate = getUpcomingScheduleBusinessDate(
-      selectedScheduleId === "bd1" ? "bd4" : selectedScheduleId,
-      holidays,
-      selected?.profile?.country,
-      selected?.profile?.state ?? "",
-      scheduleNow,
-    );
+    const country = selected?.profile?.country;
+    const state = selected?.profile?.state ?? "";
+    // BD1 → 5th business day of the same scheduled month as BD1.
+    // BD7/BD8/BD10/BD13 → same schedule date.
+    let dueDate: Date | null = null;
+    if (selectedScheduleId === "bd1") {
+      const bd1Date = getUpcomingScheduleBusinessDate(
+        "bd1",
+        holidays,
+        country,
+        state,
+        scheduleNow,
+      );
+      dueDate = bd1Date
+        ? getScheduleBusinessDate("bd5", holidays, country, state, bd1Date)
+        : null;
+    } else {
+      dueDate = getUpcomingScheduleBusinessDate(
+        selectedScheduleId,
+        holidays,
+        country,
+        state,
+        scheduleNow,
+      );
+    }
     if (!dueDate) {
       return "";
     }
@@ -5438,19 +5458,26 @@ export function ClientManagementPanel() {
                             <span className="field-label">Deadline</span>
                             <input
                               className={`field-input${
-                                showBd7Content ? " field-input--readonly" : ""
+                                showBd1TypeContent || showBd7Content
+                                  ? " field-input--readonly"
+                                  : ""
                               }`}
                               type="date"
                               value={effectiveEmailDeadline}
-                              readOnly={showBd7Content}
+                              readOnly={showBd1TypeContent || showBd7Content}
                               disabled={bd15EmailAlreadySent}
                               onChange={(event) => {
-                                if (showBd7Content) {
+                                if (showBd1TypeContent || showBd7Content) {
                                   return;
                                 }
                                 setEmailDeadline(event.target.value);
                               }}
                             />
+                            {showBd1TypeContent ? (
+                              <span className="lookup-hint">
+                                5th business day of the scheduled month (BD5).
+                              </span>
+                            ) : null}
                             {showBd7Content ? (
                               <span className="lookup-hint">
                                 Same as BD7 schedule date.

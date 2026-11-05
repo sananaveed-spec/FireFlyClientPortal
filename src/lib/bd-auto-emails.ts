@@ -9,7 +9,10 @@ import {
   type BdAutoEmailStatusStore,
   type BdAutoSendScheduleId,
 } from "@/lib/bd-auto-email-status";
-import { getUpcomingScheduleBusinessDate } from "@/lib/business-days";
+import {
+  getScheduleBusinessDate,
+  getUpcomingScheduleBusinessDate,
+} from "@/lib/business-days";
 import { findProfileForResourceClient } from "@/lib/client-management";
 import {
   bd1TemplateToRequestTypeId,
@@ -102,9 +105,10 @@ function resolveOwnerEmail(users: PortalUser[]): string {
 function isEpsClient(profile: ClientProfileEntry): boolean {
   const legal = profile.legalName.trim().toLowerCase();
   const operating = profile.operatingName.trim().toLowerCase();
+  // Match "Electrical Power System" / "Systems" / short "EPS".
   if (
-    legal.includes("electrical power systems") ||
-    operating.includes("electrical power systems") ||
+    /electrical power systems?\b/.test(legal) ||
+    /electrical power systems?\b/.test(operating) ||
     operating === "eps" ||
     legal === "eps"
   ) {
@@ -261,14 +265,6 @@ function buildEmailContent(input: {
     "[Contact First Name]";
   const portalLink = profile.portalLink.trim() || "[Portal Link]";
 
-  const dueDate = getUpcomingScheduleBusinessDate(
-    scheduleId === "bd1" ? "bd4" : scheduleId,
-    holidays,
-    profile.country,
-    profile.state,
-    now,
-  );
-  const dueDateLabel = formatDueDateLabel(dueDate);
   const bd1Date = getUpcomingScheduleBusinessDate(
     "bd1",
     holidays,
@@ -276,6 +272,24 @@ function buildEmailContent(input: {
     profile.state,
     now,
   );
+  // BD1 deadline = 5th business day of the same month as BD1.
+  const dueDate =
+    scheduleId === "bd1" && bd1Date
+      ? getScheduleBusinessDate(
+          "bd5",
+          holidays,
+          profile.country,
+          profile.state,
+          bd1Date,
+        )
+      : getUpcomingScheduleBusinessDate(
+          scheduleId,
+          holidays,
+          profile.country,
+          profile.state,
+          now,
+        );
+  const dueDateLabel = formatDueDateLabel(dueDate);
   const bd1DateLabel = formatDueDateLabel(bd1Date);
   const periodDate = now;
 
