@@ -6065,36 +6065,38 @@ export function ClientManagementPanel() {
                               </span>
                             ) : null}
                           </label>
-                          <label className="field">
-                            <span className="field-label">Deadline</span>
-                            <input
-                              className={`field-input${
-                                showBd1TypeContent || showBd7Content
-                                  ? " field-input--readonly"
-                                  : ""
-                              }`}
-                              type="date"
-                              value={effectiveEmailDeadline}
-                              readOnly={showBd1TypeContent || showBd7Content}
-                              disabled={bd15EmailAlreadySent}
-                              onChange={(event) => {
-                                if (showBd1TypeContent || showBd7Content) {
-                                  return;
-                                }
-                                setEmailDeadline(event.target.value);
-                              }}
-                            />
-                            {showBd1TypeContent ? (
-                              <span className="lookup-hint">
-                                5th business day of the scheduled month (BD5).
-                              </span>
-                            ) : null}
-                            {showBd7Content ? (
-                              <span className="lookup-hint">
-                                Same as BD7 schedule date.
-                              </span>
-                            ) : null}
-                          </label>
+                          {!showEpsFridayWeek ? (
+                            <label className="field">
+                              <span className="field-label">Deadline</span>
+                              <input
+                                className={`field-input${
+                                  showBd1TypeContent || showBd7Content
+                                    ? " field-input--readonly"
+                                    : ""
+                                }`}
+                                type="date"
+                                value={effectiveEmailDeadline}
+                                readOnly={showBd1TypeContent || showBd7Content}
+                                disabled={bd15EmailAlreadySent}
+                                onChange={(event) => {
+                                  if (showBd1TypeContent || showBd7Content) {
+                                    return;
+                                  }
+                                  setEmailDeadline(event.target.value);
+                                }}
+                              />
+                              {showBd1TypeContent ? (
+                                <span className="lookup-hint">
+                                  5th business day of the scheduled month (BD5).
+                                </span>
+                              ) : null}
+                              {showBd7Content ? (
+                                <span className="lookup-hint">
+                                  Same as BD7 schedule date.
+                                </span>
+                              ) : null}
+                            </label>
+                          ) : null}
                           <div className="field">
                             <span className="field-label">
                               Send at (client time zone)
