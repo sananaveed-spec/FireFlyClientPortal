@@ -23,6 +23,10 @@ import {
   normalizeBd15EmailStatusStore,
 } from "@/lib/bd15-email-status";
 import {
+  getBdEmailBcc,
+  normalizeBdEmailBccStore,
+} from "@/lib/bd-email-bcc";
+import {
   getScheduleBusinessDate,
   getUpcomingScheduleBusinessDate,
   formatBusinessDayLabel,
@@ -52,6 +56,7 @@ import {
   readBd15EmailAttachmentsFile,
   readBd15EmailStatusFile,
   readBdAutoEmailStatusFile,
+  readBdEmailBccFile,
   readClientProfiles,
   readClientRequestListsFile,
   readClientScheduleSettingsFile,
@@ -573,6 +578,7 @@ export async function runBdAutoEmails(options?: {
     bd8AttachmentsRaw,
     bd15AttachmentsRaw,
     bd15StatusRaw,
+    bdEmailBccRaw,
   ] = await Promise.all([
     readClientProfiles(),
     readResourceClients(),
@@ -585,6 +591,7 @@ export async function runBdAutoEmails(options?: {
     readBd8EmailAttachmentsFile(),
     readBd15EmailAttachmentsFile(),
     readBd15EmailStatusFile(),
+    readBdEmailBccFile(),
   ]);
 
   const users = parsePortalUsers(usersRaw);
@@ -606,6 +613,7 @@ export async function runBdAutoEmails(options?: {
     monthKey,
   );
   let bd15StatusDirty = false;
+  const bdEmailBccStore = normalizeBdEmailBccStore(bdEmailBccRaw);
   const ownerCc = resolveOwnerEmail(users);
   const publicOrigin = publicPortalOrigin();
 
@@ -854,6 +862,25 @@ export async function runBdAutoEmails(options?: {
           (email) => Boolean(email) && email !== toEmail && email !== fromEmail,
         );
       const cc = [...new Set(ccParts)].join(", ");
+      const savedBcc = getBdEmailBcc(
+        bdEmailBccStore,
+        resource.id,
+        scheduleId,
+      );
+      const bcc = [
+        ...new Set(
+          savedBcc
+            .split(/[;,]+/)
+            .map((email) => email.trim().toLowerCase())
+            .filter(
+              (email) =>
+                Boolean(email) &&
+                email !== toEmail &&
+                email !== fromEmail &&
+                !ccParts.includes(email),
+            ),
+        ),
+      ].join(", ");
 
       let signature = await readEmailSignatureForUser(supervisorEmail);
       const supervisorLabel = resource.supervisor.trim();
@@ -889,6 +916,7 @@ export async function runBdAutoEmails(options?: {
           from: supervisorEmail,
           to,
           cc,
+          bcc,
           subject: content.subject,
           bodyText: content.body,
           portalHref: content.portalHref,

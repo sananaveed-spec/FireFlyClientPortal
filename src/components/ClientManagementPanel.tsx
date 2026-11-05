@@ -968,6 +968,8 @@ export function ClientManagementPanel() {
   const [emailTo, setEmailTo] = useState("");
   const [emailCc, setEmailCc] = useState("");
   const [emailBcc, setEmailBcc] = useState("");
+  /** Skip BCC persist until saved value has been loaded for this client/BD. */
+  const emailBccReadyRef = useRef(false);
   const [emailDeadline, setEmailDeadline] = useState("");
   const [emailSendAt, setEmailSendAt] = useState("");
   const [emailSubject, setEmailSubject] = useState("");
@@ -2312,7 +2314,7 @@ export function ClientManagementPanel() {
             Boolean(email) && email !== toEmail && email !== fromEmail,
         );
       setEmailCc([...new Set(ccEmails)].join(", "));
-      setEmailBcc("");
+      // BCC is user-editable and persisted — do not clear here.
     } else {
       setEmailTo("");
       setEmailCc("");
@@ -2339,6 +2341,129 @@ export function ClientManagementPanel() {
     scheduleOwnerCcEmail,
     selectedGroupIdCc,
     selectedIsEpsClient,
+  ]);
+
+  // Load persisted BCC for BD email tabs (survives refresh / re-open).
+  useEffect(() => {
+    if (
+      !selectedId ||
+      showLastBdSchedule ||
+      !(
+        showBd1TypeContent ||
+        showBd7Content ||
+        showBd8Content ||
+        showBd10Content ||
+        showBd13Content ||
+        showBd15Content ||
+        showBd18Content
+      )
+    ) {
+      emailBccReadyRef.current = false;
+      return;
+    }
+
+    let cancelled = false;
+    emailBccReadyRef.current = false;
+    setEmailBcc("");
+    void (async () => {
+      try {
+        const response = await portalFetch(
+          `/api/bd-email-bcc?clientId=${encodeURIComponent(selectedId)}&scheduleId=${encodeURIComponent(selectedScheduleId)}`,
+          { cache: "no-store" },
+        );
+        const data = (await response.json()) as {
+          bcc?: string;
+          error?: string;
+        };
+        if (cancelled) {
+          return;
+        }
+        setEmailBcc(
+          response.ok && typeof data.bcc === "string" ? data.bcc : "",
+        );
+      } catch {
+        if (!cancelled) {
+          setEmailBcc("");
+        }
+      } finally {
+        if (!cancelled) {
+          emailBccReadyRef.current = true;
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      emailBccReadyRef.current = false;
+    };
+  }, [
+    selectedId,
+    selectedScheduleId,
+    showLastBdSchedule,
+    showBd1TypeContent,
+    showBd7Content,
+    showBd8Content,
+    showBd10Content,
+    showBd13Content,
+    showBd15Content,
+    showBd18Content,
+  ]);
+
+  // Persist BCC after the user edits it (debounced).
+  useEffect(() => {
+    if (
+      !selectedId ||
+      !emailBccReadyRef.current ||
+      showLastBdSchedule ||
+      !(
+        showBd1TypeContent ||
+        showBd7Content ||
+        showBd8Content ||
+        showBd10Content ||
+        showBd13Content ||
+        showBd15Content ||
+        showBd18Content
+      )
+    ) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      if (!emailBccReadyRef.current) {
+        return;
+      }
+      void (async () => {
+        try {
+          await portalFetch("/api/bd-email-bcc", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              clientId: selectedId,
+              scheduleId: selectedScheduleId,
+              bcc: emailBcc,
+            }),
+          });
+        } catch {
+          // Best-effort save; field still keeps local value.
+        }
+      })();
+    }, 500);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [
+    emailBcc,
+    selectedId,
+    selectedScheduleId,
+    showLastBdSchedule,
+    showBd1TypeContent,
+    showBd7Content,
+    showBd8Content,
+    showBd10Content,
+    showBd13Content,
+    showBd15Content,
+    showBd18Content,
   ]);
 
   const selectedSchedule =
@@ -5486,6 +5611,18 @@ export function ClientManagementPanel() {
                               }
                               placeholder="email@example.com, email2@example.com"
                             />
+                            {(showBd1TypeContent ||
+                              showBd7Content ||
+                              showBd8Content ||
+                              showBd10Content ||
+                              showBd13Content ||
+                              showBd15Content ||
+                              showBd18Content) &&
+                            !showLastBdSchedule ? (
+                              <span className="lookup-hint">
+                                Saved per client and BD; included on auto-send.
+                              </span>
+                            ) : null}
                           </label>
                           <label className="field">
                             <span className="field-label">Deadline</span>
