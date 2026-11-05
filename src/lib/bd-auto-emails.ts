@@ -203,9 +203,10 @@ function templateForSchedule(
   profile: ClientProfileEntry,
 ): EmailTemplate | null {
   if (isEpsFridayWeekScheduleId(String(scheduleId))) {
+    // Prefer live Lookup Data Template 22 (label), then seed id.
     return (
-      findTemplateById(store, "template-22") ??
-      findTemplateByLabelNumber(store, 22)
+      findTemplateByLabelNumber(store, 22) ??
+      findTemplateById(store, "template-22")
     );
   }
   if (scheduleId === "bd1") {
@@ -354,6 +355,18 @@ function formatDueDateLabel(date: Date | null): string {
   return formatBusinessDayLabel(date);
 }
 
+/** Short date for Template 22 `[date]` (e.g. Nov 7, 2026). */
+function formatEpsFridayDateLabel(date: Date | null): string {
+  if (!date) {
+    return "[date]";
+  }
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
 function publicPortalOrigin(): string {
   const raw =
     process.env.IGNITION_PUBLIC_BASE_URL?.trim() ||
@@ -435,7 +448,9 @@ function buildEmailContent(input: {
         );
   const dueDateLabel = formatDueDateLabel(dueDate);
   const bd1DateLabel = formatDueDateLabel(bd1Date);
+  const fridayDateLabel = formatEpsFridayDateLabel(dueDate);
   const periodDate = now;
+  const isEpsFriday = isEpsFridayWeekScheduleId(String(scheduleId));
 
   let emailLabels: string[] = [];
   if (scheduleId === "bd7") {
@@ -456,7 +471,11 @@ function buildEmailContent(input: {
     emailLabels = (period.length > 0 ? period : list.requestItems).map(
       (item) => item.label,
     );
-  } else if (scheduleId === "bd15" || scheduleId === "bd18") {
+  } else if (
+    scheduleId === "bd15" ||
+    scheduleId === "bd18" ||
+    isEpsFriday
+  ) {
     emailLabels = [];
   } else {
     const listId = requestListScheduleIdForBd1(profile);
@@ -490,6 +509,7 @@ function buildEmailContent(input: {
           .replace(/\[Due Date\]/gi, dueDateLabel)
           .replace(/\[Deadline\]/gi, dueDateLabel)
           .replace(/\[BD1 Date\]/gi, bd1DateLabel)
+          .replace(/\[date\]/gi, fridayDateLabel)
           .replace(/\[Number\]/gi, questionCount)
           .replace(/\[Total Amount\]/gi, "[Total Amount]")
           .replace(/(?:•\t*\s*)?\[Question List Items\]/gi, questionListText)

@@ -424,16 +424,19 @@ Thank you.`,
   {
     id: "template-22",
     title: "Friday Email",
-    whenSent:
-      "EPS only — each Week-N Friday of the month at 10:50 AM client time (automatic).",
-    subject: "[Client Name]: Friday email for [Period]",
+    whenSent: "Every Friday at 10:50 AM Central",
+    subject: "Electrical Power Systems: Weekly reports",
     body: `Hi [Contact First Name],
 
-This is your Friday update for [Period].
+Attached are this week's reports, ahead of our call at 11:00 AM Central today:
 
-Please reply if you have any questions.
+• Uncategorized transactions sheet - [date]
+• Undeposited Funds report - [date]
+• Check Detail report - [date]
+• A/R Aging report - [date]
+• A/P Aging report - [date]
 
-Thank you.`,
+Lets discuss these during our meeting.`,
   },
 ];
 

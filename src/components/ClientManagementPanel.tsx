@@ -2048,8 +2048,8 @@ export function ClientManagementPanel() {
     const template = showLastBdSchedule
       ? findEmailTemplateById(emailTemplates, "template-18")
       : showEpsFridayWeek
-        ? findEmailTemplateById(emailTemplates, "template-22") ??
-          findEmailTemplateByLabelNumber(emailTemplates, 22)
+        ? findEmailTemplateByLabelNumber(emailTemplates, 22) ??
+          findEmailTemplateById(emailTemplates, "template-22")
         : selectedScheduleId === "bd15"
           ? findEmailTemplateById(emailTemplates, "template-11")
           : selectedScheduleId === "bd18"
@@ -2100,6 +2100,13 @@ export function ClientManagementPanel() {
     const bd1DateLabel = bd1ForPeriod
       ? formatBusinessDayLabel(bd1ForPeriod)
       : "[BD1 Date]";
+    const fridayDateLabel = showEpsFridayWeek
+      ? scheduleBdDate.toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        })
+      : "[date]";
     const dueDate = emailDeadlineLabel;
     const emailMonthKey = currentMonthKey(periodDate);
     const workingMonthKey = currentMonthKey(scheduleNow);
@@ -2272,6 +2279,7 @@ export function ClientManagementPanel() {
             .replace(/\[Due Date\]/gi, dueDate)
             .replace(/\[Deadline\]/gi, dueDate)
             .replace(/\[BD1 Date\]/gi, bd1DateLabel)
+            .replace(/\[date\]/gi, fridayDateLabel)
             .replace(
               /\[Last BD Label\]/gi,
               lastBdLabel(selectedScheduleId),
