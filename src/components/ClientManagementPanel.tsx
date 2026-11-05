@@ -1032,7 +1032,7 @@ export function ClientManagementPanel() {
   const showBd5Content = selectedScheduleId === "bd5";
   const showBd7Content = selectedScheduleId === "bd7";
   const showBd8Content = selectedScheduleId === "bd8";
-  /** BD1 / BD7 / BD8: Schedule only (supervisor); Admin view-only. */
+  /** BD1 / BD7 / BD8: server auto-send; Schedule disabled for everyone. */
   const scheduleOnlyEmailDay =
     showBd1TypeContent || showBd7Content || showBd8Content;
   const showBd15Content = selectedScheduleId === "bd15";
@@ -3569,6 +3569,18 @@ export function ClientManagementPanel() {
   }
 
   async function handleScheduleEmail() {
+    if (scheduleOnlyEmailDay) {
+      const scheduleOnlyLabel = showBd8Content
+        ? "BD8"
+        : showBd7Content
+          ? "BD7"
+          : "BD1";
+      setEmailSendError(
+        `${scheduleOnlyLabel} is sent automatically by the server at 9:00 am client time. Schedule is disabled.`,
+      );
+      setEmailSendMessage(null);
+      return;
+    }
     if (!canSendAsSupervisor) {
       setEmailSendError(
         emailSendBlockedReason ||
@@ -5537,28 +5549,26 @@ export function ClientManagementPanel() {
                               {sendingEmail ? "Sending…" : "Send Now"}
                             </button>
                           )}
-                          <button
-                            type="button"
-                            className={
-                              scheduleOnlyEmailDay
-                                ? "button primary"
-                                : "button secondary-solid"
-                            }
-                            disabled={
-                              !canSendAsSupervisor ||
-                              reminderEmailDisabled ||
-                              !isSelectedScheduleActive ||
-                              sendingEmail ||
-                              schedulingEmail ||
-                              !emailTo.trim() ||
-                              !emailSubject.trim() ||
-                              !effectiveEmailSendAt.trim() ||
-                              Boolean(clientTimeZoneError)
-                            }
-                            onClick={() => void handleScheduleEmail()}
-                          >
-                            {schedulingEmail ? "Scheduling…" : "Schedule"}
-                          </button>
+                          {scheduleOnlyEmailDay ? null : (
+                            <button
+                              type="button"
+                              className="button secondary-solid"
+                              disabled={
+                                !canSendAsSupervisor ||
+                                reminderEmailDisabled ||
+                                !isSelectedScheduleActive ||
+                                sendingEmail ||
+                                schedulingEmail ||
+                                !emailTo.trim() ||
+                                !emailSubject.trim() ||
+                                !effectiveEmailSendAt.trim() ||
+                                Boolean(clientTimeZoneError)
+                              }
+                              onClick={() => void handleScheduleEmail()}
+                            >
+                              {schedulingEmail ? "Scheduling…" : "Schedule"}
+                            </button>
+                          )}
                           {scheduleOnlyEmailDay ? (
                             <span className="lookup-hint">
                               {`${
@@ -5567,7 +5577,7 @@ export function ClientManagementPanel() {
                                   : showBd7Content
                                     ? "BD7"
                                     : "BD1"
-                              } auto-sends at 9:00 am client time from the supervisor mailbox (server cron). Schedule is optional for supervisors.`}
+                              } auto-sends at 9:00 am client time from the supervisor mailbox (server cron). Schedule is disabled for everyone.`}
                             </span>
                           ) : null}
                         </div>
