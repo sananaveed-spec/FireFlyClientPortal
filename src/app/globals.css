@@ -1165,7 +1165,8 @@ h2,
 }
 
 .schedule-family--documents,
-.schedule-family--questions {
+.schedule-family--questions,
+.schedule-family--epsFridays {
   background: #f7f9fc;
   border-color: rgba(10, 22, 40, 0.16);
 }
