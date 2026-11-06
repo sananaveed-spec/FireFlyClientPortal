@@ -53,8 +53,10 @@ import {
 } from "@/lib/client-profiles";
 import {
   createManualOneTimeTask,
+  hasQboSetupOneTimeTask,
   normalizeOneTimeTasks,
   oneTimeTasksStatusLabel,
+  resourceServicesIncludeBookkeeping,
   toggleOneTimeTaskCompletion,
   type OneTimeTaskItem,
 } from "@/lib/one-time-tasks";
@@ -3160,15 +3162,72 @@ export function ClientManagementPanel() {
     }
   }
 
-  function openOneTimeTasksList() {
+  async function openOneTimeTasksList() {
     if (!selected?.profile) {
       setError("Link a Client Profile to manage One-Time Tasks.");
       return;
     }
-    setOneTimeTasksDraft(normalizeOneTimeTasks(selected.profile.oneTimeTasks));
     setOneTimeTasksNewLabel("");
     setOneTimeTasksError(null);
     setOneTimeTasksOpen(true);
+
+    let tasks = normalizeOneTimeTasks(selected.profile.oneTimeTasks);
+    setOneTimeTasksDraft(tasks);
+
+    const resourceHasBookkeeping = resourceServicesIncludeBookkeeping(
+      selected.resource.bookkeeping,
+    );
+    const hasAcceptedProposal = Boolean(
+      selected.profile.activeProposalSlug.trim(),
+    );
+    // Seed default QBO Setup when Resource Allocation has Bookkeeping, or
+    // when an accepted Ignition proposal is linked (common bookkeeping path).
+    const needsSeed =
+      !hasQboSetupOneTimeTask(tasks) &&
+      (resourceHasBookkeeping || hasAcceptedProposal);
+
+    if (!needsSeed || !canEdit) {
+      return;
+    }
+
+    setOneTimeTasksSaving(true);
+    try {
+      const response = await portalFetch("/api/client-profiles/one-time-tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "seed",
+          profileId: selected.profile.id,
+          forceBookkeeping: resourceHasBookkeeping || hasAcceptedProposal,
+          bookkeepingServices: selected.resource.bookkeeping,
+        }),
+      });
+      const data = (await response.json()) as {
+        error?: string;
+        oneTimeTasks?: OneTimeTaskItem[];
+        profile?: ClientProfileEntry;
+      };
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to load default one-time tasks.");
+      }
+      tasks = normalizeOneTimeTasks(data.oneTimeTasks);
+      setOneTimeTasksDraft(tasks);
+      if (data.profile) {
+        setProfiles((current) =>
+          current.map((profile) =>
+            profile.id === data.profile!.id ? data.profile! : profile,
+          ),
+        );
+      }
+    } catch (seedError) {
+      setOneTimeTasksError(
+        seedError instanceof Error
+          ? seedError.message
+          : "Failed to load default one-time tasks.",
+      );
+    } finally {
+      setOneTimeTasksSaving(false);
+    }
   }
 
   function closeOneTimeTasksList() {
@@ -3231,7 +3290,7 @@ export function ClientManagementPanel() {
         type="button"
         className="table-link-button"
         title={status || "View one-time tasks"}
-        onClick={openOneTimeTasksList}
+        onClick={() => void openOneTimeTasksList()}
       >
         {tasks.length === 0
           ? "View list"
@@ -6463,19 +6522,29 @@ export function ClientManagementPanel() {
           onClick={closeOneTimeTasksList}
         >
           <div
-            className="dialog-panel dialog-panel--wide"
+            className="dialog-panel dialog-panel--wide one-time-tasks-dialog"
             role="dialog"
             aria-modal="true"
             aria-labelledby="cm-one-time-tasks-title"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="dialog-header">
-              <h2 id="cm-one-time-tasks-title" className="dialog-title">
-                One-Time Tasks
-                {oneTimeTasksDraft.length > 0
-                  ? ` · ${oneTimeTasksStatusLabel(oneTimeTasksDraft) || "Pending"}`
-                  : ""}
-              </h2>
+              <div className="one-time-tasks-title-row">
+                <h2 id="cm-one-time-tasks-title" className="dialog-title">
+                  One-Time Tasks
+                </h2>
+                {oneTimeTasksDraft.length > 0 ? (
+                  <span
+                    className={`one-time-tasks-status one-time-tasks-status--${(
+                      oneTimeTasksStatusLabel(oneTimeTasksDraft) || "pending"
+                    )
+                      .toLowerCase()
+                      .replace(/\s+/g, "-")}`}
+                  >
+                    {oneTimeTasksStatusLabel(oneTimeTasksDraft) || "Pending"}
+                  </span>
+                ) : null}
+              </div>
               <button
                 type="button"
                 className="dialog-close"
@@ -6486,16 +6555,33 @@ export function ClientManagementPanel() {
                 ×
               </button>
             </div>
-            <p className="lookup-hint">
-              Status is <strong>Completed</strong> only when every checkbox is
-              checked. Checking a box saves date, time, and your name.
+            <p className="one-time-tasks-intro">
+              Mark each item when finished. Checking a box saves the date,
+              time, and your name. Status becomes <strong>Completed</strong>{" "}
+              only when every item is checked.
             </p>
-            {oneTimeTasksDraft.length === 0 ? (
-              <p className="lookup-hint">No tasks yet. Add one below.</p>
+            {oneTimeTasksSaving && oneTimeTasksDraft.length === 0 ? (
+              <p className="one-time-tasks-empty">Loading default tasks…</p>
+            ) : oneTimeTasksDraft.length === 0 ? (
+              <div className="one-time-tasks-empty">
+                <p>No tasks yet.</p>
+                <p>
+                  For bookkeeping clients, QBO Setup is added automatically when
+                  Resource Allocation includes Bookkeeping or an Ignition
+                  proposal with bookkeeping is linked.
+                </p>
+              </div>
             ) : (
               <ul className="one-time-tasks-list">
                 {oneTimeTasksDraft.map((task) => (
-                  <li key={task.id} className="one-time-tasks-item">
+                  <li
+                    key={task.id}
+                    className={
+                      task.completed
+                        ? "one-time-tasks-item one-time-tasks-item--done"
+                        : "one-time-tasks-item"
+                    }
+                  >
                     <label className="one-time-tasks-check">
                       <input
                         type="checkbox"
@@ -6514,10 +6600,10 @@ export function ClientManagementPanel() {
                           void persistOneTimeTasksDraft(next);
                         }}
                       />
-                      <span>{task.label}</span>
+                      <span className="one-time-tasks-label">{task.label}</span>
                     </label>
                     {task.completed ? (
-                      <p className="lookup-hint one-time-tasks-meta">
+                      <p className="one-time-tasks-meta">
                         Completed{" "}
                         {task.completedAt
                           ? new Date(task.completedAt).toLocaleString()
@@ -6533,13 +6619,13 @@ export function ClientManagementPanel() {
             )}
             {canEdit ? (
               <div className="one-time-tasks-add">
-                <label className="field">
-                  <span className="field-label">Add checkbox</span>
+                <label className="field one-time-tasks-add-field">
+                  <span className="field-label">Add another task</span>
                   <input
                     className="field-input"
                     value={oneTimeTasksNewLabel}
                     disabled={oneTimeTasksSaving}
-                    placeholder="New one-time task…"
+                    placeholder="Type a new one-time task…"
                     onChange={(event) =>
                       setOneTimeTasksNewLabel(event.target.value)
                     }
@@ -6561,7 +6647,7 @@ export function ClientManagementPanel() {
                 </label>
                 <button
                   type="button"
-                  className="secondary-button"
+                  className="button secondary-solid"
                   disabled={
                     oneTimeTasksSaving || !oneTimeTasksNewLabel.trim()
                   }
@@ -6589,11 +6675,11 @@ export function ClientManagementPanel() {
             <div className="dialog-actions">
               <button
                 type="button"
-                className="primary-button"
+                className="button primary"
                 disabled={oneTimeTasksSaving}
                 onClick={closeOneTimeTasksList}
               >
-                Close
+                Done
               </button>
             </div>
           </div>

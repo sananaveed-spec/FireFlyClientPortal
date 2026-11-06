@@ -118,6 +118,19 @@ export function proposalServicesIncludeBookkeeping(
 }
 
 /**
+ * True when Resource Allocation has Bookkeeping services selected.
+ * Any value in that multi-select counts (Monthly / Weekly / etc.).
+ */
+export function resourceServicesIncludeBookkeeping(
+  bookkeeping: ReadonlyArray<string> | undefined | null,
+): boolean {
+  return (
+    Array.isArray(bookkeeping) &&
+    bookkeeping.some((item) => String(item ?? "").trim().length > 0)
+  );
+}
+
+/**
  * If bookkeeping is on the proposal and QBO Setup is not already listed,
  * append the single auto checkbox (does not add duplicates).
  */

@@ -78,6 +78,7 @@ import {
 } from "@/lib/lookup-data";
 import {
   createManualOneTimeTask,
+  hasQboSetupOneTimeTask,
   normalizeOneTimeTasks,
   oneTimeTasksStatusLabel,
   toggleOneTimeTaskCompletion,
@@ -766,11 +767,62 @@ export function ClientProfilePanel() {
     setFormOpen(true);
   }
 
-  function openOneTimeTasksList(profile: ClientProfileEntry) {
+  async function openOneTimeTasksList(profile: ClientProfileEntry) {
     setOneTimeTasksProfileId(profile.id);
-    setOneTimeTasksDraft(normalizeOneTimeTasks(profile.oneTimeTasks));
     setOneTimeTasksNewLabel("");
     setOneTimeTasksError(null);
+    let tasks = normalizeOneTimeTasks(profile.oneTimeTasks);
+    setOneTimeTasksDraft(tasks);
+
+    if (!canEdit || hasQboSetupOneTimeTask(tasks)) {
+      return;
+    }
+    if (!profile.activeProposalSlug.trim()) {
+      return;
+    }
+
+    setOneTimeTasksSaving(true);
+    try {
+      const response = await portalFetch("/api/client-profiles/one-time-tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "seed",
+          profileId: profile.id,
+        }),
+      });
+      const data = (await response.json()) as {
+        error?: string;
+        oneTimeTasks?: OneTimeTaskItem[];
+        profile?: ClientProfileEntry;
+      };
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to load default one-time tasks.");
+      }
+      tasks = normalizeOneTimeTasks(data.oneTimeTasks);
+      setOneTimeTasksDraft(tasks);
+      if (data.profile) {
+        setProfiles((current) =>
+          current.map((item) =>
+            item.id === data.profile!.id ? data.profile! : item,
+          ),
+        );
+        if (editingId === data.profile.id) {
+          setForm((current) => ({
+            ...current,
+            oneTimeTasks: tasks,
+          }));
+        }
+      }
+    } catch (err) {
+      setOneTimeTasksError(
+        err instanceof Error
+          ? err.message
+          : "Failed to load default one-time tasks.",
+      );
+    } finally {
+      setOneTimeTasksSaving(false);
+    }
   }
 
   function closeOneTimeTasksList() {
@@ -3042,7 +3094,7 @@ export function ClientProfilePanel() {
                         (item) => item.id === editingId,
                       );
                       if (profile) {
-                        openOneTimeTasksList({
+                        void openOneTimeTasksList({
                           ...profile,
                           oneTimeTasks: normalizeOneTimeTasks(form.oneTimeTasks),
                         });
@@ -3351,7 +3403,9 @@ export function ClientProfilePanel() {
                           },
                         },
                         {
-                          onView: openOneTimeTasksList,
+                          onView: (row) => {
+                            void openOneTimeTasksList(row);
+                          },
                         },
                       )}
                     </td>

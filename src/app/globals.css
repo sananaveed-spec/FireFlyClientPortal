@@ -2703,47 +2703,148 @@ h2,
   width: min(100%, 52rem);
 }
 
+.one-time-tasks-dialog {
+  width: min(100%, 40rem);
+}
+
+.one-time-tasks-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 0.85rem;
+  min-width: 0;
+}
+
+.one-time-tasks-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid transparent;
+}
+
+.one-time-tasks-status--pending {
+  color: #8a4b00;
+  background: #fff4e8;
+  border-color: #f0c48a;
+}
+
+.one-time-tasks-status--in-progress {
+  color: #0b4f8a;
+  background: #e8f3fc;
+  border-color: #9bc7ea;
+}
+
+.one-time-tasks-status--completed {
+  color: #1f7a4d;
+  background: color-mix(in srgb, #1f7a4d 12%, white);
+  border-color: color-mix(in srgb, #1f7a4d 30%, white);
+}
+
+.one-time-tasks-intro {
+  margin: 0 0 1rem;
+  color: var(--muted, #5b6472);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.one-time-tasks-empty {
+  margin: 0 0 1.1rem;
+  padding: 1rem 1.05rem;
+  border: 1px dashed var(--line);
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--bg-elevated) 88%, var(--line));
+  color: var(--muted, #5b6472);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.one-time-tasks-empty p {
+  margin: 0;
+}
+
+.one-time-tasks-empty p + p {
+  margin-top: 0.45rem;
+}
+
 .one-time-tasks-list {
   list-style: none;
-  margin: 0 0 1rem;
+  margin: 0 0 1.15rem;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.7rem;
+  max-height: min(50vh, 22rem);
+  overflow-y: auto;
 }
 
 .one-time-tasks-item {
   margin: 0;
-  padding: 0.65rem 0.75rem;
+  padding: 0.85rem 0.95rem;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-elevated) 92%, var(--line));
+  border-radius: 0.75rem;
+  background: var(--bg-elevated, #fff);
+  box-shadow: 0 1px 0 rgba(10, 22, 40, 0.03);
+}
+
+.one-time-tasks-item--done {
+  background: color-mix(in srgb, #1f7a4d 7%, white);
+  border-color: color-mix(in srgb, #1f7a4d 28%, white);
 }
 
 .one-time-tasks-check {
   display: flex;
   align-items: flex-start;
-  gap: 0.55rem;
-  font-size: 0.92rem;
-  line-height: 1.4;
+  gap: 0.7rem;
+  font-size: 0.95rem;
+  line-height: 1.45;
   cursor: pointer;
 }
 
 .one-time-tasks-check input {
-  margin-top: 0.2rem;
+  margin-top: 0.22rem;
+  width: 1.05rem;
+  height: 1.05rem;
   flex-shrink: 0;
+  accent-color: #1f7a4d;
+}
+
+.one-time-tasks-label {
+  min-width: 0;
 }
 
 .one-time-tasks-meta {
-  margin: 0.35rem 0 0 1.55rem;
+  margin: 0.45rem 0 0 1.75rem;
+  color: var(--muted, #5b6472);
+  font-size: 0.82rem;
+  line-height: 1.35;
 }
 
 .one-time-tasks-add {
   display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 0.65rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
   align-items: end;
-  margin-bottom: 0.75rem;
+  margin: 0 0 0.35rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--line);
+}
+
+.one-time-tasks-add-field {
+  margin: 0;
+}
+
+.one-time-tasks-add .button {
+  min-height: 2.5rem;
+  padding-inline: 1.1rem;
+}
+
+.one-time-tasks-dialog .dialog-actions {
+  margin-top: 1rem;
+  justify-content: flex-end;
 }
 
 .dialog-header {
