@@ -52,6 +52,13 @@ import {
   type ClientProfileEntry,
 } from "@/lib/client-profiles";
 import {
+  createManualOneTimeTask,
+  normalizeOneTimeTasks,
+  oneTimeTasksStatusLabel,
+  toggleOneTimeTaskCompletion,
+  type OneTimeTaskItem,
+} from "@/lib/one-time-tasks";
+import {
   addRequestBulletToList,
   BD9_EXCEL_SOURCE_PREFIX,
   BD13_LATE_SOURCE_PREFIX,
@@ -425,6 +432,7 @@ const CLIENT_INFO_FIELDS: { key: string; label: string }[] = [
   { key: "pointOfContact", label: "Point of Contact" },
   { key: "pocEmail", label: "POC Email" },
   { key: "portalLink", label: "Portal Link" },
+  { key: "oneTimeTasks", label: "One-Time Tasks" },
 ];
 
 /** Fallback if no User Management user has Position = Owner. */
@@ -847,6 +855,14 @@ function clientInfoValue(
         </a>
       );
     }
+    case "oneTimeTasks": {
+      const tasks = normalizeOneTimeTasks(profile?.oneTimeTasks);
+      if (tasks.length === 0) {
+        return "—";
+      }
+      const status = oneTimeTasksStatusLabel(tasks);
+      return status ? `View list · ${status}` : "View list";
+    }
     case "industry":
       return profile?.industry?.trim() || resource.industry?.trim() || "—";
     case "entityType":
@@ -1006,6 +1022,15 @@ export function ClientManagementPanel() {
   const [bd18CommentDraft, setBd18CommentDraft] = useState("");
   const [savingBd18Comment, setSavingBd18Comment] = useState(false);
   const [savingBd1Template, setSavingBd1Template] = useState(false);
+  const [oneTimeTasksOpen, setOneTimeTasksOpen] = useState(false);
+  const [oneTimeTasksDraft, setOneTimeTasksDraft] = useState<OneTimeTaskItem[]>(
+    [],
+  );
+  const [oneTimeTasksNewLabel, setOneTimeTasksNewLabel] = useState("");
+  const [oneTimeTasksSaving, setOneTimeTasksSaving] = useState(false);
+  const [oneTimeTasksError, setOneTimeTasksError] = useState<string | null>(
+    null,
+  );
   const [checkingSharePoint, setCheckingSharePoint] = useState(false);
   const [sharePointCheckMessage, setSharePointCheckMessage] = useState<
     string | null
@@ -3135,6 +3160,88 @@ export function ClientManagementPanel() {
     }
   }
 
+  function openOneTimeTasksList() {
+    if (!selected?.profile) {
+      setError("Link a Client Profile to manage One-Time Tasks.");
+      return;
+    }
+    setOneTimeTasksDraft(normalizeOneTimeTasks(selected.profile.oneTimeTasks));
+    setOneTimeTasksNewLabel("");
+    setOneTimeTasksError(null);
+    setOneTimeTasksOpen(true);
+  }
+
+  function closeOneTimeTasksList() {
+    if (oneTimeTasksSaving) {
+      return;
+    }
+    setOneTimeTasksOpen(false);
+    setOneTimeTasksDraft([]);
+    setOneTimeTasksNewLabel("");
+    setOneTimeTasksError(null);
+  }
+
+  async function persistOneTimeTasksDraft(nextTasks: OneTimeTaskItem[]) {
+    if (!selected?.profile) {
+      setOneTimeTasksError("Link a Client Profile to manage One-Time Tasks.");
+      return;
+    }
+    const updated = normalizeClientProfile({
+      ...selected.profile,
+      oneTimeTasks: nextTasks,
+    });
+    const nextProfiles = profiles.map((profile) =>
+      profile.id === updated.id ? updated : profile,
+    );
+    setOneTimeTasksSaving(true);
+    setOneTimeTasksError(null);
+    try {
+      const response = await portalFetch("/api/client-profiles", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profiles: nextProfiles }),
+      });
+      const data = (await response.json()) as ProfilesResponse;
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to save one-time tasks.");
+      }
+      setProfiles(
+        Array.isArray(data.profiles) ? data.profiles : nextProfiles,
+      );
+      setOneTimeTasksDraft(nextTasks);
+    } catch (saveError) {
+      setOneTimeTasksError(
+        saveError instanceof Error
+          ? saveError.message
+          : "Failed to save one-time tasks.",
+      );
+    } finally {
+      setOneTimeTasksSaving(false);
+    }
+  }
+
+  function renderOneTimeTasksCell(): ReactNode {
+    if (!selected?.profile) {
+      return "—";
+    }
+    const tasks = normalizeOneTimeTasks(selected.profile.oneTimeTasks);
+    const status = oneTimeTasksStatusLabel(tasks);
+    return (
+      <button
+        type="button"
+        className="table-link-button"
+        title={status || "View one-time tasks"}
+        onClick={openOneTimeTasksList}
+      >
+        {tasks.length === 0
+          ? "View list"
+          : status
+            ? `View list · ${status}`
+            : "View list"}
+      </button>
+    );
+  }
+
   async function persistList(nextList: ClientRequestList) {
     if (!selected || !activeRequestScheduleId) {
       return;
@@ -4373,6 +4480,8 @@ export function ClientManagementPanel() {
                                     ) : (
                                       "—"
                                     )
+                                  ) : left.key === "oneTimeTasks" ? (
+                                    renderOneTimeTasksCell()
                                   ) : (
                                     left.value
                                   )}
@@ -4407,6 +4516,8 @@ export function ClientManagementPanel() {
                                     ) : (
                                       "—"
                                     )
+                                  ) : right?.key === "oneTimeTasks" ? (
+                                    renderOneTimeTasksCell()
                                   ) : (
                                     right?.value ?? ""
                                   )}
@@ -6344,6 +6455,150 @@ export function ClientManagementPanel() {
           </div>
         </div>
       )}
+
+      {oneTimeTasksOpen ? (
+        <div
+          className="dialog-backdrop"
+          role="presentation"
+          onClick={closeOneTimeTasksList}
+        >
+          <div
+            className="dialog-panel dialog-panel--wide"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cm-one-time-tasks-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="dialog-header">
+              <h2 id="cm-one-time-tasks-title" className="dialog-title">
+                One-Time Tasks
+                {oneTimeTasksDraft.length > 0
+                  ? ` · ${oneTimeTasksStatusLabel(oneTimeTasksDraft) || "Pending"}`
+                  : ""}
+              </h2>
+              <button
+                type="button"
+                className="dialog-close"
+                aria-label="Close"
+                disabled={oneTimeTasksSaving}
+                onClick={closeOneTimeTasksList}
+              >
+                ×
+              </button>
+            </div>
+            <p className="lookup-hint">
+              Status is <strong>Completed</strong> only when every checkbox is
+              checked. Checking a box saves date, time, and your name.
+            </p>
+            {oneTimeTasksDraft.length === 0 ? (
+              <p className="lookup-hint">No tasks yet. Add one below.</p>
+            ) : (
+              <ul className="one-time-tasks-list">
+                {oneTimeTasksDraft.map((task) => (
+                  <li key={task.id} className="one-time-tasks-item">
+                    <label className="one-time-tasks-check">
+                      <input
+                        type="checkbox"
+                        checked={task.completed}
+                        disabled={!canEdit || oneTimeTasksSaving}
+                        onChange={(event) => {
+                          const next = toggleOneTimeTaskCompletion(
+                            oneTimeTasksDraft,
+                            task.id,
+                            event.target.checked,
+                            {
+                              name: portalName || msalName || signedInEmail,
+                              email: signedInEmail,
+                            },
+                          );
+                          void persistOneTimeTasksDraft(next);
+                        }}
+                      />
+                      <span>{task.label}</span>
+                    </label>
+                    {task.completed ? (
+                      <p className="lookup-hint one-time-tasks-meta">
+                        Completed{" "}
+                        {task.completedAt
+                          ? new Date(task.completedAt).toLocaleString()
+                          : ""}
+                        {task.completedByName
+                          ? ` · ${task.completedByName}`
+                          : ""}
+                      </p>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {canEdit ? (
+              <div className="one-time-tasks-add">
+                <label className="field">
+                  <span className="field-label">Add checkbox</span>
+                  <input
+                    className="field-input"
+                    value={oneTimeTasksNewLabel}
+                    disabled={oneTimeTasksSaving}
+                    placeholder="New one-time task…"
+                    onChange={(event) =>
+                      setOneTimeTasksNewLabel(event.target.value)
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        const label = oneTimeTasksNewLabel.trim();
+                        if (!label || oneTimeTasksSaving) {
+                          return;
+                        }
+                        setOneTimeTasksNewLabel("");
+                        void persistOneTimeTasksDraft([
+                          ...oneTimeTasksDraft,
+                          createManualOneTimeTask(label),
+                        ]);
+                      }
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={
+                    oneTimeTasksSaving || !oneTimeTasksNewLabel.trim()
+                  }
+                  onClick={() => {
+                    const label = oneTimeTasksNewLabel.trim();
+                    if (!label) {
+                      return;
+                    }
+                    setOneTimeTasksNewLabel("");
+                    void persistOneTimeTasksDraft([
+                      ...oneTimeTasksDraft,
+                      createManualOneTimeTask(label),
+                    ]);
+                  }}
+                >
+                  Add
+                </button>
+              </div>
+            ) : null}
+            {oneTimeTasksError ? (
+              <p className="form-message error" role="alert">
+                {oneTimeTasksError}
+              </p>
+            ) : null}
+            <div className="dialog-actions">
+              <button
+                type="button"
+                className="primary-button"
+                disabled={oneTimeTasksSaving}
+                onClick={closeOneTimeTasksList}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
