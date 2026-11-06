@@ -8,6 +8,7 @@ import { seedOneTimeTasksFromAcceptedProposal } from "@/lib/ignition/seed-one-ti
 import {
   ensureQboSetupTaskFromBookkeeping,
   hasQboSetupOneTimeTask,
+  mergeProtectedOneTimeTasks,
   normalizeOneTimeTasks,
   type OneTimeTaskItem,
 } from "@/lib/one-time-tasks";
@@ -111,7 +112,10 @@ export async function POST(request: Request) {
       if (gate instanceof NextResponse) {
         return gate;
       }
-      const tasks = normalizeOneTimeTasks(body.tasks);
+      const tasks = mergeProtectedOneTimeTasks(
+        normalizeOneTimeTasks(profile.oneTimeTasks),
+        normalizeOneTimeTasks(body.tasks),
+      );
       const updated: ClientProfileEntry = normalizeClientProfile({
         ...profile,
         oneTimeTasks: tasks,

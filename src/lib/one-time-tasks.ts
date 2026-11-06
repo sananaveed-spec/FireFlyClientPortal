@@ -108,6 +108,83 @@ export function hasQboSetupOneTimeTask(tasks: readonly OneTimeTaskItem[]): boole
   return tasks.some((task) => task.kind === QBO_SETUP_TASK_KIND);
 }
 
+/** Default seeded tasks (e.g. QBO Setup) cannot be edited or deleted. */
+export function isProtectedOneTimeTask(task: Pick<OneTimeTaskItem, "kind" | "source">): boolean {
+  return (
+    task.kind === QBO_SETUP_TASK_KIND || task.source === "ignition_bookkeeping"
+  );
+}
+
+export function isManualOneTimeTask(task: Pick<OneTimeTaskItem, "kind" | "source">): boolean {
+  return !isProtectedOneTimeTask(task);
+}
+
+export function updateOneTimeTaskLabel(
+  tasks: OneTimeTaskItem[],
+  taskId: string,
+  label: string,
+): OneTimeTaskItem[] {
+  const nextLabel = label.trim();
+  if (!nextLabel) {
+    return tasks;
+  }
+  return tasks.map((task) => {
+    if (task.id !== taskId || isProtectedOneTimeTask(task)) {
+      return task;
+    }
+    return { ...task, label: nextLabel };
+  });
+}
+
+export function removeOneTimeTask(
+  tasks: OneTimeTaskItem[],
+  taskId: string,
+): OneTimeTaskItem[] {
+  return tasks.filter((task) => {
+    if (task.id !== taskId) {
+      return true;
+    }
+    // Never drop protected default tasks.
+    return isProtectedOneTimeTask(task);
+  });
+}
+
+/**
+ * When saving, keep any protected defaults that were omitted from the payload.
+ */
+export function mergeProtectedOneTimeTasks(
+  previous: OneTimeTaskItem[],
+  next: OneTimeTaskItem[],
+): OneTimeTaskItem[] {
+  const protectedPrevious = previous.filter(isProtectedOneTimeTask);
+  const nextIds = new Set(next.map((task) => task.id));
+  const missing = protectedPrevious.filter((task) => !nextIds.has(task.id));
+  if (missing.length === 0) {
+    return next.map((task) => {
+      if (!isProtectedOneTimeTask(task)) {
+        return task;
+      }
+      const prior = previous.find((item) => item.id === task.id);
+      if (!prior) {
+        return {
+          ...task,
+          kind: QBO_SETUP_TASK_KIND,
+          label: QBO_SETUP_TASK_LABEL,
+          source: "ignition_bookkeeping" as const,
+        };
+      }
+      return {
+        ...prior,
+        completed: task.completed,
+        completedAt: task.completedAt,
+        completedByName: task.completedByName,
+        completedByEmail: task.completedByEmail,
+      };
+    });
+  }
+  return [...missing, ...next];
+}
+
 /** True when Ignition proposal service names look like bookkeeping. */
 export function proposalServicesIncludeBookkeeping(
   services: ReadonlyArray<{ name?: string }>,

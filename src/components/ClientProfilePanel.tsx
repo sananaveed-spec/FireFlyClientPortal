@@ -79,9 +79,14 @@ import {
 import {
   createManualOneTimeTask,
   hasQboSetupOneTimeTask,
+  isManualOneTimeTask,
+  isProtectedOneTimeTask,
+  mergeProtectedOneTimeTasks,
   normalizeOneTimeTasks,
   oneTimeTasksStatusLabel,
+  removeOneTimeTask,
   toggleOneTimeTaskCompletion,
+  updateOneTimeTaskLabel,
   type OneTimeTaskItem,
 } from "@/lib/one-time-tasks";
 import { getRegionsForCountry } from "@/lib/regions";
@@ -606,6 +611,10 @@ export function ClientProfilePanel() {
     [],
   );
   const [oneTimeTasksNewLabel, setOneTimeTasksNewLabel] = useState("");
+  const [oneTimeTasksEditingId, setOneTimeTasksEditingId] = useState<
+    string | null
+  >(null);
+  const [oneTimeTasksEditLabel, setOneTimeTasksEditLabel] = useState("");
   const [oneTimeTasksSaving, setOneTimeTasksSaving] = useState(false);
   const [oneTimeTasksError, setOneTimeTasksError] = useState<string | null>(
     null,
@@ -770,6 +779,8 @@ export function ClientProfilePanel() {
   async function openOneTimeTasksList(profile: ClientProfileEntry) {
     setOneTimeTasksProfileId(profile.id);
     setOneTimeTasksNewLabel("");
+    setOneTimeTasksEditingId(null);
+    setOneTimeTasksEditLabel("");
     setOneTimeTasksError(null);
     let tasks = normalizeOneTimeTasks(profile.oneTimeTasks);
     setOneTimeTasksDraft(tasks);
@@ -832,6 +843,8 @@ export function ClientProfilePanel() {
     setOneTimeTasksProfileId(null);
     setOneTimeTasksDraft([]);
     setOneTimeTasksNewLabel("");
+    setOneTimeTasksEditingId(null);
+    setOneTimeTasksEditLabel("");
     setOneTimeTasksError(null);
   }
 
@@ -844,9 +857,13 @@ export function ClientProfilePanel() {
       setOneTimeTasksError("Client profile not found.");
       return;
     }
+    const safeTasks = mergeProtectedOneTimeTasks(
+      normalizeOneTimeTasks(profile.oneTimeTasks),
+      nextTasks,
+    );
     const updated: ClientProfileEntry = {
       ...profile,
-      oneTimeTasks: nextTasks,
+      oneTimeTasks: safeTasks,
     };
     const next = profiles.map((item) =>
       item.id === updated.id ? updated : item,
@@ -856,9 +873,9 @@ export function ClientProfilePanel() {
     try {
       await persistProfiles(next);
       setProfiles(next);
-      setOneTimeTasksDraft(nextTasks);
+      setOneTimeTasksDraft(safeTasks);
       if (editingId === updated.id) {
-        setForm((current) => ({ ...current, oneTimeTasks: nextTasks }));
+        setForm((current) => ({ ...current, oneTimeTasks: safeTasks }));
       }
     } catch (err) {
       setOneTimeTasksError(
@@ -3486,49 +3503,166 @@ export function ClientProfilePanel() {
               <p className="lookup-hint">No tasks yet. Add one below.</p>
             ) : (
               <ul className="one-time-tasks-list">
-                {oneTimeTasksDraft.map((task) => (
-                  <li key={task.id} className="one-time-tasks-item">
-                    <label className="one-time-tasks-check">
-                      <input
-                        type="checkbox"
-                        checked={task.completed}
-                        disabled={!canEdit || oneTimeTasksSaving}
-                        onChange={(event) => {
-                          const next = toggleOneTimeTaskCompletion(
-                            oneTimeTasksDraft,
-                            task.id,
-                            event.target.checked,
-                            actor,
-                          );
-                          void persistOneTimeTasksDraft(next);
-                        }}
-                      />
-                      <span>{task.label}</span>
-                    </label>
-                    {task.completed ? (
-                      <p className="lookup-hint one-time-tasks-meta">
-                        Completed{" "}
-                        {task.completedAt
-                          ? new Date(task.completedAt).toLocaleString()
-                          : ""}
-                        {task.completedByName
-                          ? ` · ${task.completedByName}`
-                          : ""}
-                      </p>
-                    ) : null}
-                  </li>
-                ))}
+                {oneTimeTasksDraft.map((task) => {
+                  const manual = isManualOneTimeTask(task);
+                  const editing = oneTimeTasksEditingId === task.id;
+                  return (
+                    <li
+                      key={task.id}
+                      className={
+                        task.completed
+                          ? "one-time-tasks-item one-time-tasks-item--done"
+                          : "one-time-tasks-item"
+                      }
+                    >
+                      <div className="one-time-tasks-item-row">
+                        <label className="one-time-tasks-check">
+                          <input
+                            type="checkbox"
+                            checked={task.completed}
+                            disabled={!canEdit || oneTimeTasksSaving}
+                            onChange={(event) => {
+                              const next = toggleOneTimeTaskCompletion(
+                                oneTimeTasksDraft,
+                                task.id,
+                                event.target.checked,
+                                actor,
+                              );
+                              void persistOneTimeTasksDraft(next);
+                            }}
+                          />
+                          {editing ? (
+                            <input
+                              className="field-input one-time-tasks-edit-input"
+                              value={oneTimeTasksEditLabel}
+                              disabled={oneTimeTasksSaving}
+                              autoFocus
+                              onChange={(event) =>
+                                setOneTimeTasksEditLabel(event.target.value)
+                              }
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                  event.preventDefault();
+                                  const next = updateOneTimeTaskLabel(
+                                    oneTimeTasksDraft,
+                                    task.id,
+                                    oneTimeTasksEditLabel,
+                                  );
+                                  setOneTimeTasksEditingId(null);
+                                  setOneTimeTasksEditLabel("");
+                                  void persistOneTimeTasksDraft(next);
+                                }
+                                if (event.key === "Escape") {
+                                  setOneTimeTasksEditingId(null);
+                                  setOneTimeTasksEditLabel("");
+                                }
+                              }}
+                            />
+                          ) : (
+                            <span className="one-time-tasks-label">
+                              {task.label}
+                              {isProtectedOneTimeTask(task) ? (
+                                <span className="one-time-tasks-lock">
+                                  {" "}
+                                  · Default
+                                </span>
+                              ) : null}
+                            </span>
+                          )}
+                        </label>
+                        {canEdit && manual ? (
+                          <div className="one-time-tasks-item-actions">
+                            {editing ? (
+                              <>
+                                <button
+                                  type="button"
+                                  className="table-link-button"
+                                  disabled={
+                                    oneTimeTasksSaving ||
+                                    !oneTimeTasksEditLabel.trim()
+                                  }
+                                  onClick={() => {
+                                    const next = updateOneTimeTaskLabel(
+                                      oneTimeTasksDraft,
+                                      task.id,
+                                      oneTimeTasksEditLabel,
+                                    );
+                                    setOneTimeTasksEditingId(null);
+                                    setOneTimeTasksEditLabel("");
+                                    void persistOneTimeTasksDraft(next);
+                                  }}
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  type="button"
+                                  className="table-link-button"
+                                  disabled={oneTimeTasksSaving}
+                                  onClick={() => {
+                                    setOneTimeTasksEditingId(null);
+                                    setOneTimeTasksEditLabel("");
+                                  }}
+                                >
+                                  Cancel
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  type="button"
+                                  className="table-link-button"
+                                  disabled={oneTimeTasksSaving}
+                                  onClick={() => {
+                                    setOneTimeTasksEditingId(task.id);
+                                    setOneTimeTasksEditLabel(task.label);
+                                  }}
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  className="table-link-button one-time-tasks-delete"
+                                  disabled={oneTimeTasksSaving}
+                                  onClick={() => {
+                                    const next = removeOneTimeTask(
+                                      oneTimeTasksDraft,
+                                      task.id,
+                                    );
+                                    void persistOneTimeTasksDraft(next);
+                                  }}
+                                >
+                                  Delete
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
+                      {task.completed ? (
+                        <p className="one-time-tasks-meta">
+                          Completed{" "}
+                          {task.completedAt
+                            ? new Date(task.completedAt).toLocaleString()
+                            : ""}
+                          {task.completedByName
+                            ? ` · ${task.completedByName}`
+                            : ""}
+                        </p>
+                      ) : null}
+                    </li>
+                  );
+                })}
               </ul>
             )}
             {canEdit ? (
               <div className="one-time-tasks-add">
-                <label className="field">
-                  <span className="field-label">Add checkbox</span>
+                <label className="field one-time-tasks-add-field">
+                  <span className="field-label">Add another task</span>
                   <input
                     className="field-input"
                     value={oneTimeTasksNewLabel}
                     disabled={oneTimeTasksSaving}
-                    placeholder="New one-time task…"
+                    placeholder="Type a new one-time task…"
                     onChange={(event) =>
                       setOneTimeTasksNewLabel(event.target.value)
                     }
@@ -3550,7 +3684,7 @@ export function ClientProfilePanel() {
                 </label>
                 <button
                   type="button"
-                  className="secondary-button"
+                  className="button secondary-solid"
                   disabled={
                     oneTimeTasksSaving || !oneTimeTasksNewLabel.trim()
                   }
