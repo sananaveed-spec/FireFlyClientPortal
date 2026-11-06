@@ -76,6 +76,13 @@ import {
   getLookupOptions,
   type LookupDataStore,
 } from "@/lib/lookup-data";
+import {
+  createManualOneTimeTask,
+  normalizeOneTimeTasks,
+  oneTimeTasksStatusLabel,
+  toggleOneTimeTaskCompletion,
+  type OneTimeTaskItem,
+} from "@/lib/one-time-tasks";
 import { getRegionsForCountry } from "@/lib/regions";
 import {
   formatYearEnd,
@@ -166,6 +173,7 @@ const TABLE_COLUMNS: { key: keyof ClientProfileEntry; label: string }[] = [
   { key: "website", label: "Website" },
   { key: "portalLink", label: "Portal Link" },
   { key: "activeProposalReference", label: "Active Proposal" },
+  { key: "oneTimeTasks", label: "One-Time Tasks" },
   { key: "canadianBusinessNumber", label: "Canadian Business Number" },
   { key: "gstHst", label: "GST/HST" },
   { key: "payrollProvider", label: "Payroll Provider" },
@@ -288,6 +296,14 @@ function formatProfileCell(
     const accounts = normalizeFinancialAccounts(value);
     return formatFinancialAccountsList(accounts);
   }
+  if (key === "oneTimeTasks") {
+    const tasks = normalizeOneTimeTasks(value);
+    if (tasks.length === 0) {
+      return "";
+    }
+    const status = oneTimeTasksStatusLabel(tasks);
+    return status ? `View list (${status})` : "View list";
+  }
   const text = String(value ?? "").trim();
   if (!text) {
     return "";
@@ -348,12 +364,39 @@ type ProposalCellActions = {
   onView: (profile: ClientProfileEntry) => void;
 };
 
+type OneTimeTasksCellActions = {
+  onView: (profile: ClientProfileEntry) => void;
+};
+
 function renderProfileCell(
   key: keyof ClientProfileEntry,
   value: unknown,
   profile?: ClientProfileEntry,
   proposalActions?: ProposalCellActions,
+  oneTimeTasksActions?: OneTimeTasksCellActions,
 ): ReactNode {
+  if (key === "oneTimeTasks") {
+    const tasks = normalizeOneTimeTasks(
+      profile?.oneTimeTasks ?? value,
+    );
+    if (tasks.length === 0) {
+      return "—";
+    }
+    const status = oneTimeTasksStatusLabel(tasks);
+    if (profile && oneTimeTasksActions) {
+      return (
+        <button
+          type="button"
+          className="table-link-button"
+          title={status || "View one-time tasks"}
+          onClick={() => oneTimeTasksActions.onView(profile)}
+        >
+          View list{status ? ` · ${status}` : ""}
+        </button>
+      );
+    }
+    return status ? `View list · ${status}` : "View list";
+  }
   if (key === "activeProposalReference") {
     const reference =
       profile?.activeProposalReference?.trim() ||
@@ -555,6 +598,17 @@ export function ClientProfilePanel() {
   );
   const [proposalViewer, setProposalViewer] =
     useState<IgnitionProposalViewerTarget | null>(null);
+  const [oneTimeTasksProfileId, setOneTimeTasksProfileId] = useState<
+    string | null
+  >(null);
+  const [oneTimeTasksDraft, setOneTimeTasksDraft] = useState<OneTimeTaskItem[]>(
+    [],
+  );
+  const [oneTimeTasksNewLabel, setOneTimeTasksNewLabel] = useState("");
+  const [oneTimeTasksSaving, setOneTimeTasksSaving] = useState(false);
+  const [oneTimeTasksError, setOneTimeTasksError] = useState<string | null>(
+    null,
+  );
   const [importMatchMode, setImportMatchMode] =
     useState<ImportMatchMode>("replace");
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -705,10 +759,62 @@ export function ClientProfilePanel() {
       activeProposalReference: profile.activeProposalReference || "",
       activeProposalViewUrl: profile.activeProposalViewUrl || "",
       activeProposalPdfUrl: profile.activeProposalPdfUrl || "",
+      oneTimeTasks: normalizeOneTimeTasks(profile.oneTimeTasks),
     });
     syncYearEndParts(profile.fiscalYearEnd);
     setError(null);
     setFormOpen(true);
+  }
+
+  function openOneTimeTasksList(profile: ClientProfileEntry) {
+    setOneTimeTasksProfileId(profile.id);
+    setOneTimeTasksDraft(normalizeOneTimeTasks(profile.oneTimeTasks));
+    setOneTimeTasksNewLabel("");
+    setOneTimeTasksError(null);
+  }
+
+  function closeOneTimeTasksList() {
+    if (oneTimeTasksSaving) {
+      return;
+    }
+    setOneTimeTasksProfileId(null);
+    setOneTimeTasksDraft([]);
+    setOneTimeTasksNewLabel("");
+    setOneTimeTasksError(null);
+  }
+
+  async function persistOneTimeTasksDraft(nextTasks: OneTimeTaskItem[]) {
+    if (!oneTimeTasksProfileId) {
+      return;
+    }
+    const profile = profiles.find((item) => item.id === oneTimeTasksProfileId);
+    if (!profile) {
+      setOneTimeTasksError("Client profile not found.");
+      return;
+    }
+    const updated: ClientProfileEntry = {
+      ...profile,
+      oneTimeTasks: nextTasks,
+    };
+    const next = profiles.map((item) =>
+      item.id === updated.id ? updated : item,
+    );
+    setOneTimeTasksSaving(true);
+    setOneTimeTasksError(null);
+    try {
+      await persistProfiles(next);
+      setProfiles(next);
+      setOneTimeTasksDraft(nextTasks);
+      if (editingId === updated.id) {
+        setForm((current) => ({ ...current, oneTimeTasks: nextTasks }));
+      }
+    } catch (err) {
+      setOneTimeTasksError(
+        err instanceof Error ? err.message : "Failed to save one-time tasks.",
+      );
+    } finally {
+      setOneTimeTasksSaving(false);
+    }
   }
 
   function openActiveProposal(
@@ -1432,10 +1538,11 @@ export function ClientProfilePanel() {
         [];
       headers.forEach((header, index) => {
         const key = labelToKey.get(header);
-        // Ignition proposal links are filled by Sync — skip on CSV import.
+        // Ignition proposal links / one-time tasks are filled in-app — skip CSV.
         if (
           key &&
           key !== "ignitionClientSlug" &&
+          key !== "oneTimeTasks" &&
           !String(key).startsWith("activeProposal")
         ) {
           columnIndexes.push({ key, index });
@@ -1721,6 +1828,11 @@ export function ClientProfilePanel() {
       activeProposalReference: existing?.activeProposalReference ?? "",
       activeProposalViewUrl: existing?.activeProposalViewUrl ?? "",
       activeProposalPdfUrl: existing?.activeProposalPdfUrl ?? "",
+      oneTimeTasks: normalizeOneTimeTasks(
+        form.oneTimeTasks?.length
+          ? form.oneTimeTasks
+          : existing?.oneTimeTasks,
+      ),
       createdAt: existing?.createdAt ?? new Date().toISOString(),
     };
 
@@ -2899,6 +3011,52 @@ export function ClientProfilePanel() {
           </FormSection>
 
           <FormSection
+            title="One-Time Tasks"
+            description="Onboarding checklist. Bookkeeping proposals auto-add QBO Setup."
+          >
+            <div className="field">
+              <span className="field-label">One-Time Tasks</span>
+              {normalizeOneTimeTasks(form.oneTimeTasks).length === 0 ? (
+                <p className="lookup-hint">
+                  No tasks yet. After an Ignition bookkeeping proposal is
+                  accepted (Add to system / sync), QBO Setup appears here. You
+                  can also open View list from the table to add tasks.
+                </p>
+              ) : (
+                <p className="lookup-hint">
+                  Status:{" "}
+                  <strong>
+                    {oneTimeTasksStatusLabel(
+                      normalizeOneTimeTasks(form.oneTimeTasks),
+                    ) || "Pending"}
+                  </strong>
+                  {" · "}
+                  <button
+                    type="button"
+                    className="table-link-button"
+                    onClick={() => {
+                      if (!editingId) {
+                        return;
+                      }
+                      const profile = profiles.find(
+                        (item) => item.id === editingId,
+                      );
+                      if (profile) {
+                        openOneTimeTasksList({
+                          ...profile,
+                          oneTimeTasks: normalizeOneTimeTasks(form.oneTimeTasks),
+                        });
+                      }
+                    }}
+                  >
+                    View list
+                  </button>
+                </p>
+              )}
+            </div>
+          </FormSection>
+
+          <FormSection
             title="Payroll"
             description="Payroll provider and whether reports are needed from it."
           >
@@ -3192,6 +3350,9 @@ export function ClientProfilePanel() {
                             void openActiveProposal(row, "view");
                           },
                         },
+                        {
+                          onView: openOneTimeTasksList,
+                        },
                       )}
                     </td>
                   ))}
@@ -3230,6 +3391,147 @@ export function ClientProfilePanel() {
           >
             Next
           </button>
+        </div>
+      ) : null}
+
+      {oneTimeTasksProfileId ? (
+        <div
+          className="dialog-backdrop"
+          role="presentation"
+          onClick={closeOneTimeTasksList}
+        >
+          <div
+            className="dialog-panel dialog-panel--wide"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="one-time-tasks-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="dialog-header">
+              <h2 id="one-time-tasks-title" className="dialog-title">
+                One-Time Tasks
+                {oneTimeTasksDraft.length > 0
+                  ? ` · ${oneTimeTasksStatusLabel(oneTimeTasksDraft) || "Pending"}`
+                  : ""}
+              </h2>
+              <button
+                type="button"
+                className="dialog-close"
+                aria-label="Close"
+                disabled={oneTimeTasksSaving}
+                onClick={closeOneTimeTasksList}
+              >
+                ×
+              </button>
+            </div>
+            <p className="lookup-hint">
+              Status is <strong>Completed</strong> only when every checkbox is
+              checked. Checking a box saves date, time, and your name.
+            </p>
+            {oneTimeTasksDraft.length === 0 ? (
+              <p className="lookup-hint">No tasks yet. Add one below.</p>
+            ) : (
+              <ul className="one-time-tasks-list">
+                {oneTimeTasksDraft.map((task) => (
+                  <li key={task.id} className="one-time-tasks-item">
+                    <label className="one-time-tasks-check">
+                      <input
+                        type="checkbox"
+                        checked={task.completed}
+                        disabled={!canEdit || oneTimeTasksSaving}
+                        onChange={(event) => {
+                          const next = toggleOneTimeTaskCompletion(
+                            oneTimeTasksDraft,
+                            task.id,
+                            event.target.checked,
+                            actor,
+                          );
+                          void persistOneTimeTasksDraft(next);
+                        }}
+                      />
+                      <span>{task.label}</span>
+                    </label>
+                    {task.completed ? (
+                      <p className="lookup-hint one-time-tasks-meta">
+                        Completed{" "}
+                        {task.completedAt
+                          ? new Date(task.completedAt).toLocaleString()
+                          : ""}
+                        {task.completedByName
+                          ? ` · ${task.completedByName}`
+                          : ""}
+                      </p>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {canEdit ? (
+              <div className="one-time-tasks-add">
+                <label className="field">
+                  <span className="field-label">Add checkbox</span>
+                  <input
+                    className="field-input"
+                    value={oneTimeTasksNewLabel}
+                    disabled={oneTimeTasksSaving}
+                    placeholder="New one-time task…"
+                    onChange={(event) =>
+                      setOneTimeTasksNewLabel(event.target.value)
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        const label = oneTimeTasksNewLabel.trim();
+                        if (!label || oneTimeTasksSaving) {
+                          return;
+                        }
+                        setOneTimeTasksNewLabel("");
+                        void persistOneTimeTasksDraft([
+                          ...oneTimeTasksDraft,
+                          createManualOneTimeTask(label),
+                        ]);
+                      }
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={
+                    oneTimeTasksSaving || !oneTimeTasksNewLabel.trim()
+                  }
+                  onClick={() => {
+                    const label = oneTimeTasksNewLabel.trim();
+                    if (!label) {
+                      return;
+                    }
+                    setOneTimeTasksNewLabel("");
+                    void persistOneTimeTasksDraft([
+                      ...oneTimeTasksDraft,
+                      createManualOneTimeTask(label),
+                    ]);
+                  }}
+                >
+                  Add
+                </button>
+              </div>
+            ) : null}
+            {oneTimeTasksError ? (
+              <p className="form-message error" role="alert">
+                {oneTimeTasksError}
+              </p>
+            ) : null}
+            <div className="dialog-actions">
+              <button
+                type="button"
+                className="primary-button"
+                disabled={oneTimeTasksSaving}
+                onClick={closeOneTimeTasksList}
+              >
+                Close
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
 

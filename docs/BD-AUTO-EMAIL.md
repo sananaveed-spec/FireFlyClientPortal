@@ -62,9 +62,9 @@ crontab -e
   -H "Authorization: Bearer YOUR_BD_AUTO_EMAIL_CRON_SECRET" \
   http://127.0.0.1:3000/api/bd-auto-emails/run
 
-# ~10:50 AM PST (= 18:50 UTC). Also covers EPS Friday send + catch-up.
-# During PDT this is ~11:50 AM Pacific.
-50 18 * * 1-5 curl -fsS -X POST \
+# ~10:50 AM CST (= 16:50 UTC). EPS Friday send + catch-up.
+# During Central Daylight Time (CDT / UTC-5) use: 50 15 * * 1-5
+50 16 * * 1-5 curl -fsS -X POST \
   -H "Authorization: Bearer YOUR_BD_AUTO_EMAIL_CRON_SECRET" \
   http://127.0.0.1:3000/api/bd-auto-emails/run
 ```

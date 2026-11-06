@@ -30,6 +30,10 @@
 /data/bd8-email-attachments.json
 /data/bd15-email-attachments.json
 /data/bd15-email-status.json
+/data/eps-friday-attachments.json
+/data/bd-auto-email-status.json
+/data/ignition-pending-adds.json
+/data/dashboard-notifications.json
 
 # misc
 .DS_Store

@@ -661,8 +661,8 @@ export function IgnitionPanel() {
             {webhookReceiveUrl ||
               "https://clientportal.fireflyaccountancy.com/api/ignition/webhooks"}
           </code>{" "}
-          — new clients are added to Client Info and the team sees a dashboard
-          banner.
+          — admins get a dashboard banner to <strong>Add to system</strong> and
+          choose FireFly SharePoint, Other portal link, or Skip.
         </p>
       )}
 

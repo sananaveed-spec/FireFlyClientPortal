@@ -1,4 +1,10 @@
+import {
+  normalizeOneTimeTasks,
+  type OneTimeTaskItem,
+} from "@/lib/one-time-tasks";
 import { normalizeYearEnd } from "@/lib/year-end";
+
+export type { OneTimeTaskItem };
 
 export type ClientCountry = "US" | "CA" | "Not Sure";
 
@@ -515,6 +521,8 @@ export type ClientProfileEntry = {
   activeProposalViewUrl: string;
   /** Opens the proposal PDF in Ignition (requires Ignition login). */
   activeProposalPdfUrl: string;
+  /** One-time onboarding checklist (e.g. QBO Setup from bookkeeping proposals). */
+  oneTimeTasks: OneTimeTaskItem[];
   createdAt: string;
 };
 
@@ -699,6 +707,7 @@ export function createEmptyClientProfileForm(
     activeProposalReference: "",
     activeProposalViewUrl: "",
     activeProposalPdfUrl: "",
+    oneTimeTasks: [],
   };
 }
 
@@ -788,6 +797,7 @@ export function normalizeClientProfile(
     ).trim(),
     activeProposalViewUrl: String(value.activeProposalViewUrl ?? "").trim(),
     activeProposalPdfUrl: String(value.activeProposalPdfUrl ?? "").trim(),
+    oneTimeTasks: normalizeOneTimeTasks(value.oneTimeTasks),
     createdAt:
       typeof value.createdAt === "string" && value.createdAt
         ? value.createdAt

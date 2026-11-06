@@ -2,7 +2,11 @@ import { copyFile, mkdir, readFile, unlink, writeFile } from "fs/promises";
 import path from "path";
 import { getDataDir } from "@/lib/data-store";
 
-export type DashboardNotificationKind = "ignition_new_client";
+export type DashboardNotificationKind =
+  | "ignition_new_client"
+  | "ignition_proposal_accepted";
+
+export type DashboardNotificationAction = "add_to_system" | "";
 
 export type DashboardNotification = {
   id: string;
@@ -11,6 +15,9 @@ export type DashboardNotification = {
   message: string;
   clientName: string;
   clientProfileId: string;
+  /** Links notification to ignition-pending-adds.json when action is required. */
+  pendingAddId: string;
+  action: DashboardNotificationAction;
   createdAt: string;
   /** ISO when dismissed; empty = still active. */
   dismissedAt: string;
@@ -64,16 +71,22 @@ function normalizeNotification(value: unknown): DashboardNotification | null {
   if (!id || (!title && !message)) {
     return null;
   }
+  const kind: DashboardNotificationKind =
+    record.kind === "ignition_proposal_accepted"
+      ? "ignition_proposal_accepted"
+      : "ignition_new_client";
+  const actionRaw = String(record.action ?? "").trim().toLowerCase();
+  const action: DashboardNotificationAction =
+    actionRaw === "add_to_system" ? "add_to_system" : "";
   return {
     id,
-    kind:
-      record.kind === "ignition_new_client"
-        ? "ignition_new_client"
-        : "ignition_new_client",
+    kind,
     title,
     message,
     clientName: String(record.clientName ?? "").trim(),
     clientProfileId: String(record.clientProfileId ?? "").trim(),
+    pendingAddId: String(record.pendingAddId ?? "").trim(),
+    action,
     createdAt:
       String(record.createdAt ?? "").trim() || new Date().toISOString(),
     dismissedAt: String(record.dismissedAt ?? "").trim(),
@@ -129,9 +142,16 @@ export function listActiveDashboardNotifications(
 }
 
 export async function appendDashboardNotifications(
-  entries: Array<Omit<DashboardNotification, "id" | "createdAt" | "dismissedAt"> & {
-    createdAt?: string;
-  }>,
+  entries: Array<
+    Omit<
+      DashboardNotification,
+      "id" | "createdAt" | "dismissedAt" | "pendingAddId" | "action"
+    > & {
+      createdAt?: string;
+      pendingAddId?: string;
+      action?: DashboardNotificationAction;
+    }
+  >,
 ): Promise<DashboardNotification[]> {
   if (entries.length === 0) {
     return [];
@@ -144,6 +164,8 @@ export async function appendDashboardNotifications(
     message: entry.message,
     clientName: entry.clientName,
     clientProfileId: entry.clientProfileId,
+    pendingAddId: String(entry.pendingAddId ?? "").trim(),
+    action: entry.action === "add_to_system" ? "add_to_system" : "",
     createdAt: entry.createdAt ?? new Date().toISOString(),
     dismissedAt: "",
   }));

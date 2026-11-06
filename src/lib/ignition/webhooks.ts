@@ -5,7 +5,6 @@ import {
   appendDashboardNotifications,
 } from "@/lib/dashboard-notifications";
 import {
-  appendHistory,
   getDataDir,
   readClientProfiles,
   writeClientProfiles,
@@ -15,22 +14,17 @@ import {
   getIgnitionPublicBaseUrl,
 } from "@/lib/ignition/config";
 export { getIgnitionPublicBaseUrl } from "@/lib/ignition/config";
+import { enqueueIgnitionPendingAdd } from "@/lib/ignition/pending-adds";
 import {
   applyActiveProposalToProfile,
-  createProfilesForAcceptedIgnitionClients,
   matchIgnitionClientToProfile,
   normalizeIgnitionProposal,
   pickActiveProposalByClient,
   type IgnitionProposalRecord,
 } from "@/lib/ignition/proposals";
+import { seedOneTimeTasksFromAcceptedProposal } from "@/lib/ignition/seed-one-time-tasks";
 import { getValidAccessToken } from "@/lib/ignition/tokens";
-import { isGraphAppOnlyConfigured } from "@/lib/azure-graph-app";
-import {
-  buildSharePointMemberEmails,
-  createClientSharePointSiteAppOnly,
-} from "@/lib/sharepoint-graph";
 import { normalizeEmail, isValidEmail } from "@/lib/portal-users";
-import type { ClientProfileEntry } from "@/lib/client-profiles";
 
 export const IGNITION_WEBHOOK_EVENTS = ["proposal.accepted"] as const;
 
@@ -455,72 +449,9 @@ export type IgnitionWebhookProcessResult = {
 };
 
 /**
- * When a proposal is accepted: if the matched client has no Portal Link yet,
- * create the SharePoint site (app-only), invite Owner + POC as guests, and
- * add default Fire Fly team members.
- */
-async function ensureSharePointForAcceptedClient(
-  profiles: ClientProfileEntry[],
-  ignitionClientId: string,
-): Promise<{ profiles: ClientProfileEntry[]; summary: string }> {
-  const index = profiles.findIndex(
-    (profile) => profile.ignitionClientSlug.trim() === ignitionClientId,
-  );
-  if (index < 0) {
-    return { profiles, summary: "" };
-  }
-
-  const profile = profiles[index]!;
-  if (profile.portalLink.trim()) {
-    return { profiles, summary: "Portal Link already set." };
-  }
-
-  if (!isGraphAppOnlyConfigured()) {
-    console.warn(
-      "Ignition webhook: skipped SharePoint create — set AZURE_CLIENT_SECRET and grant Application Graph permissions.",
-    );
-    return {
-      profiles,
-      summary:
-        "SharePoint not created (AZURE_CLIENT_SECRET / app permissions missing).",
-    };
-  }
-
-  try {
-    const memberEmails = buildSharePointMemberEmails({
-      ownerEmail: profile.ownerEmail,
-      pocEmail: profile.pocEmail,
-    });
-    const created = await createClientSharePointSiteAppOnly(
-      profile.legalName,
-      memberEmails,
-    );
-    const next = [...profiles];
-    next[index] = {
-      ...profile,
-      portalLink: created.webUrl,
-    };
-    const warn =
-      created.memberWarnings.length > 0
-        ? ` Member notes: ${created.memberWarnings.slice(0, 3).join("; ")}`
-        : "";
-    return {
-      profiles: next,
-      summary: `SharePoint created (${created.webUrl}). Owner/POC invited; Fire Fly team added.${warn}`,
-    };
-  } catch (error) {
-    const detail =
-      error instanceof Error ? error.message : "SharePoint create failed.";
-    console.error("Ignition webhook SharePoint create failed:", error);
-    return {
-      profiles,
-      summary: `SharePoint create failed: ${detail}`,
-    };
-  }
-}
-
-/**
  * Process a verified Ignition webhook event (proposal.accepted).
+ * Does not auto-create SharePoint or Client Info — admins get an
+ * “Add to system” notification and choose FireFly SharePoint / Other / Skip.
  */
 export async function processIgnitionWebhookEvent(event: {
   type: string;
@@ -569,89 +500,60 @@ export async function processIgnitionWebhookEvent(event: {
     };
 
   const profiles = await readClientProfiles();
-  const ensured = createProfilesForAcceptedIgnitionClients(
-    profiles,
-    [clientMatch],
-    [proposal],
+  const matchedProfile = profiles.find(
+    (profile) =>
+      matchIgnitionClientToProfile(profile, [clientMatch])?.id ===
+      clientMatch.id,
   );
-  // Only update this Ignition client — do not clear other profiles' proposal links.
-  const activeByClient = pickActiveProposalByClient([proposal]);
-  let nextProfiles = ensured.profiles.map((profile) => {
-    const matched = matchIgnitionClientToProfile(profile, [clientMatch]);
-    if (!matched || matched.id !== clientMatch.id) {
-      return profile;
-    }
-    return applyActiveProposalToProfile(profile, [clientMatch], activeByClient);
-  });
 
-  const sharePointNotes = await ensureSharePointForAcceptedClient(
-    nextProfiles,
-    clientMatch.id,
-  );
-  nextProfiles = sharePointNotes.profiles;
-  await writeClientProfiles(nextProfiles);
-
-  if (ensured.created.length > 0) {
-    await appendDashboardNotifications(
-      ensured.created.map((item) => ({
-        kind: "ignition_new_client" as const,
-        title: "New client added from Ignition",
-        message: `${item.legalName} was added to Client Info after an accepted proposal${
-          item.proposalReference ? ` (${item.proposalReference})` : ""
-        }.${sharePointNotes.summary ? ` ${sharePointNotes.summary}` : ""}`,
-        clientName: item.legalName,
-        clientProfileId: item.profileId,
-      })),
+  let updatedExisting = false;
+  if (matchedProfile) {
+    const activeByClient = pickActiveProposalByClient([proposal]);
+    let updatedProfile = applyActiveProposalToProfile(
+      matchedProfile,
+      [clientMatch],
+      activeByClient,
     );
-
-    for (const item of ensured.created) {
-      try {
-        await appendHistory({
-          employeeName: "Ignition webhook",
-          employeeEmail: "",
-          project: item.legalName,
-          entityType: "clientProfile",
-          entityLabel: item.legalName,
-          action: "created",
-          summary: `Client profile auto-created from accepted Ignition proposal: ${item.legalName}`,
-          details: [
-            item.uniqueId ? `Unique ID: ${item.uniqueId}` : "",
-            item.proposalReference
-              ? `Proposal: ${item.proposalReference}`
-              : "",
-            item.ignitionClientSlug
-              ? `Ignition client: ${item.ignitionClientSlug}`
-              : "",
-          ]
-            .filter(Boolean)
-            .join("\n"),
-          comment:
-            "Created automatically by Ignition proposal.accepted webhook.",
-        });
-      } catch (error) {
-        console.error("Ignition webhook history failed:", error);
-      }
-    }
-  } else {
-    // Existing client: still surface a lighter team notice that a proposal was accepted.
-    const matchedProfile = nextProfiles.find(
-      (profile) => profile.ignitionClientSlug === clientMatch.id,
+    updatedProfile = await seedOneTimeTasksFromAcceptedProposal(
+      updatedProfile,
+      proposal.slug,
     );
-    if (matchedProfile) {
+    const nextProfiles = profiles.map((profile) =>
+      profile.id === updatedProfile.id ? updatedProfile : profile,
+    );
+    await writeClientProfiles(nextProfiles);
+    updatedExisting = true;
+
+    if (updatedProfile.portalLink.trim()) {
       await appendDashboardNotifications([
         {
-          kind: "ignition_new_client",
+          kind: "ignition_proposal_accepted",
           title: "Ignition proposal accepted",
-          message: `${matchedProfile.legalName}: proposal ${
+          message: `${updatedProfile.legalName}: proposal ${
             proposal.referenceNumber || proposal.name || proposal.slug
-          } was accepted. Client Info is up to date.${
-            sharePointNotes.summary ? ` ${sharePointNotes.summary}` : ""
-          }`,
-          clientName: matchedProfile.legalName,
-          clientProfileId: matchedProfile.id,
+          } was accepted. Client Info is up to date.`,
+          clientName: updatedProfile.legalName,
+          clientProfileId: updatedProfile.id,
         },
       ]);
+    } else {
+      await enqueueIgnitionPendingAdd({
+        ignitionClientSlug: clientMatch.id,
+        clientName: updatedProfile.legalName || clientMatch.name,
+        clientEmail: clientMatch.email,
+        proposal,
+        existingProfileId: updatedProfile.id,
+        source: "webhook",
+      });
     }
+  } else {
+    await enqueueIgnitionPendingAdd({
+      ignitionClientSlug: clientMatch.id,
+      clientName: clientMatch.name || proposal.clientName,
+      clientEmail: clientMatch.email,
+      proposal,
+      source: "webhook",
+    });
   }
 
   await writeIgnitionWebhooksStore({
@@ -661,12 +563,8 @@ export async function processIgnitionWebhookEvent(event: {
 
   return {
     handled: true,
-    createdClients: ensured.created.map((item) => ({
-      profileId: item.profileId,
-      legalName: item.legalName,
-      uniqueId: item.uniqueId,
-    })),
-    updatedExisting: ensured.created.length === 0,
+    createdClients: [],
+    updatedExisting,
   };
 }
 
