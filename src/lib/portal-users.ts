@@ -4,12 +4,17 @@ export const PORTAL_ROLES = ["admin", "team"] as const;
 
 export type PortalRole = (typeof PORTAL_ROLES)[number];
 
+export const PORTAL_RELIGIONS = ["Muslim", "Hindu", "Christian"] as const;
+
+export type PortalReligion = (typeof PORTAL_RELIGIONS)[number];
+
 export type PortalUser = {
   email: string;
   role: PortalRole;
   name: string;
   position: string;
   phone: string;
+  religion: PortalReligion | "";
 };
 
 /** Seed admins when the users file is empty or invalid. */
@@ -40,6 +45,17 @@ export function isPortalRole(value: unknown): value is PortalRole {
   );
 }
 
+export function isPortalReligion(value: unknown): value is PortalReligion {
+  return (
+    typeof value === "string" &&
+    (PORTAL_RELIGIONS as readonly string[]).includes(value)
+  );
+}
+
+export function parsePortalReligion(value: unknown): PortalReligion | "" {
+  return isPortalReligion(value) ? value : "";
+}
+
 export function sortPortalUsers(users: PortalUser[]): PortalUser[] {
   return [...users].sort((a, b) => a.email.localeCompare(b.email));
 }
@@ -52,6 +68,7 @@ export function defaultAdminUsers(): PortalUser[] {
       name: "",
       position: "",
       phone: "",
+      religion: "" as const,
     })),
   );
 }
@@ -75,6 +92,7 @@ export function parsePortalUsers(parsed: unknown): PortalUser[] {
         name: "",
         position: "",
         phone: "",
+        religion: "",
       });
       continue;
     }
@@ -96,6 +114,7 @@ export function parsePortalUsers(parsed: unknown): PortalUser[] {
       name: String(record.name ?? "").trim(),
       position: String(record.position ?? "").trim(),
       phone: String(record.phone ?? "").trim(),
+      religion: parsePortalReligion(record.religion),
     });
   }
 
@@ -109,6 +128,7 @@ export function normalizePortalUser(input: {
   name?: string;
   position?: string;
   phone?: string;
+  religion?: string;
 }): PortalUser | { error: string } {
   const email = normalizeEmail(input.email);
   if (!isValidEmail(email)) {
@@ -117,12 +137,17 @@ export function normalizePortalUser(input: {
   if (!isPortalRole(input.role)) {
     return { error: "Select a valid role." };
   }
+  const religionRaw = String(input.religion ?? "").trim();
+  if (religionRaw && !isPortalReligion(religionRaw)) {
+    return { error: "Select a valid religion." };
+  }
   return {
     email,
     role: input.role,
     name: String(input.name ?? "").trim(),
     position: String(input.position ?? "").trim(),
     phone: String(input.phone ?? "").trim(),
+    religion: parsePortalReligion(religionRaw),
   };
 }
 

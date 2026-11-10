@@ -32,6 +32,7 @@ export async function upsertPortalUser(input: {
   name?: string;
   position?: string;
   phone?: string;
+  religion?: string;
 }): Promise<{ users: PortalUser[]; saved: boolean; error?: string }> {
   const current = await readPortalUsers();
   const existing = current.find(
@@ -47,6 +48,10 @@ export async function upsertPortalUser(input: {
         ? input.position
         : (existing?.position ?? ""),
     phone: input.phone !== undefined ? input.phone : (existing?.phone ?? ""),
+    religion:
+      input.religion !== undefined
+        ? input.religion
+        : (existing?.religion ?? ""),
   });
   if ("error" in normalized) {
     return { users: current, saved: false, error: normalized.error };

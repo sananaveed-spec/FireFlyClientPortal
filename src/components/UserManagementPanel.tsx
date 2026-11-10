@@ -13,9 +13,11 @@ import {
   isValidEmail,
   normalizeEmail,
   notifyPortalUsersChanged,
+  PORTAL_RELIGIONS,
   PORTAL_ROLES,
   PORTAL_USERS_CHANGED_EVENT,
   ROLE_LABELS,
+  type PortalReligion,
   type PortalRole,
   type PortalUser,
 } from "@/lib/portal-users";
@@ -32,6 +34,7 @@ type EditorState = {
   position: string;
   phone: string;
   role: PortalRole;
+  religion: PortalReligion | "";
 };
 
 function emptyEditor(): EditorState {
@@ -42,6 +45,7 @@ function emptyEditor(): EditorState {
     position: "",
     phone: "",
     role: "team",
+    religion: "",
   };
 }
 
@@ -140,6 +144,7 @@ export function UserManagementPanel() {
       position: selectedUser.position,
       phone: selectedUser.phone,
       role: selectedUser.role,
+      religion: selectedUser.religion || "",
     });
   }
 
@@ -157,6 +162,7 @@ export function UserManagementPanel() {
     name: string;
     position: string;
     phone: string;
+    religion: PortalReligion | "";
   }): Promise<boolean> {
     setSaving(true);
     setError(null);
@@ -201,6 +207,7 @@ export function UserManagementPanel() {
       name: editor.name.trim(),
       position: editor.position.trim(),
       phone: editor.phone.trim(),
+      religion: editor.religion,
     });
     if (ok) {
       setEditor(null);
@@ -318,6 +325,7 @@ export function UserManagementPanel() {
                 <th>Position</th>
                 <th>Phone Number</th>
                 <th>Email</th>
+                <th>Religion</th>
                 <th>Role</th>
               </tr>
             </thead>
@@ -353,6 +361,7 @@ export function UserManagementPanel() {
                         <span className="lookup-meta"> (you)</span>
                       ) : null}
                     </td>
+                    <td>{user.religion || "—"}</td>
                     <td>{ROLE_LABELS[user.role]}</td>
                   </tr>
                 );
@@ -457,6 +466,28 @@ export function UserManagementPanel() {
                           setEditor({ ...editor, email: event.target.value })
                         }
                       />
+                    </label>
+
+                    <label className="field">
+                      <span className="field-label">Religion</span>
+                      <select
+                        className="field-input field-select"
+                        value={editor.religion}
+                        disabled={saving}
+                        onChange={(event) =>
+                          setEditor({
+                            ...editor,
+                            religion: event.target.value as PortalReligion | "",
+                          })
+                        }
+                      >
+                        <option value="">Select…</option>
+                        {PORTAL_RELIGIONS.map((religion) => (
+                          <option key={religion} value={religion}>
+                            {religion}
+                          </option>
+                        ))}
+                      </select>
                     </label>
 
                     <label className="field">

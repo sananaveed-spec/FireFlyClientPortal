@@ -35,6 +35,7 @@ export async function POST(request: Request) {
       name?: unknown;
       position?: unknown;
       phone?: unknown;
+      religion?: unknown;
     };
     const email =
       typeof body.email === "string" ? normalizeEmail(body.email) : "";
@@ -42,6 +43,7 @@ export async function POST(request: Request) {
     const name = typeof body.name === "string" ? body.name : "";
     const position = typeof body.position === "string" ? body.position : "";
     const phone = typeof body.phone === "string" ? body.phone : "";
+    const religion = typeof body.religion === "string" ? body.religion : "";
 
     if (!isValidEmail(email)) {
       return NextResponse.json(
@@ -62,6 +64,7 @@ export async function POST(request: Request) {
       name,
       position,
       phone,
+      religion,
     });
     if (result.error) {
       return NextResponse.json(
