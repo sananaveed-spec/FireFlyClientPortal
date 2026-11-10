@@ -525,14 +525,14 @@ export function HolidaysPanel() {
                 displayUpcomingHolidayEmails.length > 0 ? (
                   <div className="holiday-email-preview">
                     <h4 className="holiday-email-preview__title">
-                      Upcoming holiday emails
+                      Next holiday email
                     </h4>
                     <p className="lookup-hint holiday-email-preview__hint">
-                      Visible to all portal users. Team: last weekday before ·
-                      Clients: Resource Allocation only · 7 business days
-                      before · 9:00 AM in that client’s time zone
-                      (EST/CST/MST/PST/Vietnam). Team: 9:00 AM Pakistan. Holiday
-                      cron only (not hourly). From {PAKISTAN_HOLIDAY_EMAIL_SENDER}.
+                      Next holiday only (not the full year). Team: last weekday
+                      before · 9:00 AM Pakistan. Clients: Resource Allocation
+                      only · 7 business days before · 9:00 AM client time zone
+                      (EST/CST/MST/PST/Vietnam). Holiday cron only. From{" "}
+                      {PAKISTAN_HOLIDAY_EMAIL_SENDER}.
                     </p>
                     <div className="table-wrap">
                       <table className="projects-table holiday-email-preview__table">

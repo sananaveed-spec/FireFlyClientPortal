@@ -910,7 +910,8 @@ function formatPreviewSendLabel(
 }
 
 /**
- * Upcoming holiday email preview (team day-before + client 7 business days).
+ * Next holiday email preview only (team day-before + client 7 business days).
+ * One row — the soonest future holiday series — not the whole year.
  * Status comes from the store once Graph has accepted the schedule.
  */
 export function buildPakistanHolidayEmailPreview(
@@ -918,7 +919,6 @@ export function buildPakistanHolidayEmailPreview(
   store: PakistanHolidayEmailsStore,
   now: Date = new Date(),
 ): PakistanHolidayEmailPreviewRow[] {
-  const rows: PakistanHolidayEmailPreviewRow[] = [];
   const groups = groupPakistanHolidaysForEmail(holidays);
 
   for (const group of groups) {
@@ -945,24 +945,26 @@ export function buildPakistanHolidayEmailPreview(
     const teamSendDate = pakistanHolidayEmailSendDate(firstDate);
     const clientSendDate = pakistanHolidayClientEmailSendDate(firstDate);
 
-    rows.push({
-      groupKey: group.groupKey,
-      holidayName: group.seriesName,
-      holidayDateLabel: holidayDateLabel(group.holidays),
-      teamSendDate,
-      teamSendLabel: formatPreviewSendLabel(
+    return [
+      {
+        groupKey: group.groupKey,
+        holidayName: group.seriesName,
+        holidayDateLabel: holidayDateLabel(group.holidays),
         teamSendDate,
-        "9:00 AM Pakistan time",
-      ),
-      teamStatus: displayPakistanHolidayEmailStatus(teamEntry),
-      clientSendDate,
-      clientSendLabel: formatPreviewSendLabel(
+        teamSendLabel: formatPreviewSendLabel(
+          teamSendDate,
+          "9:00 AM Pakistan time",
+        ),
+        teamStatus: displayPakistanHolidayEmailStatus(teamEntry),
         clientSendDate,
-        "9:00 AM client time zone",
-      ),
-      clientStatus: displayPakistanHolidayEmailStatus(clientEntry),
-    });
+        clientSendLabel: formatPreviewSendLabel(
+          clientSendDate,
+          "9:00 AM client time zone",
+        ),
+        clientStatus: displayPakistanHolidayEmailStatus(clientEntry),
+      },
+    ];
   }
 
-  return rows;
+  return [];
 }
