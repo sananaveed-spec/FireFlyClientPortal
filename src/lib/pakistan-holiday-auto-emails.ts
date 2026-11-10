@@ -24,8 +24,12 @@ import {
 import { readPortalUsers } from "@/lib/portal-users-store";
 import { sendGraphAppMail } from "@/lib/send-graph-app-mail";
 
-/** Same grace window as BD auto-send after the planned send time. */
-const SEND_WINDOW_MS = 18 * 60 * 60 * 1000;
+/**
+ * How long after the planned 9:00 AM (Pakistan / client TZ) a cron may still
+ * send. Keep tight so mail goes out near 9:00 AM, not hours later.
+ * Pair with an hourly holiday-only cron.
+ */
+const SEND_WINDOW_MS = 90 * 60 * 1000;
 
 export type PakistanHolidayAutoEmailRunResult = {
   ok: boolean;

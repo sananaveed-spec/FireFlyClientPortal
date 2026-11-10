@@ -529,9 +529,9 @@ export function HolidaysPanel() {
                     </h4>
                     <p className="lookup-hint holiday-email-preview__hint">
                       Visible to all portal users. Team: last weekday before ·
-                      Clients: 7 business days before. Sends automatically via
-                      the same server cron as BD emails (no one needs to open
-                      the portal). From{" "}
+                      Clients: 7 business days before at 9:00 AM (Pakistan for
+                      team; each client’s time zone for clients). Sent by the
+                      holiday-only server cron — no portal open needed. From{" "}
                       {pakistanHolidayEmailSendersLabel()}.
                     </p>
                     <div className="table-wrap">

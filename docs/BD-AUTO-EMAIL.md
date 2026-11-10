@@ -12,7 +12,8 @@ Each run:
    (example: on BD7’s date → only BD7 is checked)  
 4. If 9:00 AM client time has passed (within the send window) and not already sent → **send that email** from the supervisor mailbox  
 5. Already-sent → quiet skip (no new UI “check” line)  
-6. Also **queues / sends Pakistan holiday emails** (team day-before + client 7 business days) via app-only Mail.Send as `ayesha@fireflyaccountancy.com` — no one needs to open Holidays in the portal
+
+**Pakistan holiday emails** use a **separate** cron (`/api/pakistan-holiday-emails/run`) — team at **9:00 AM Pakistan time**, clients at **9:00 AM in each client’s time zone**.
 
 **Auto-send BDs today:** BD1, BD7, BD8, BD10, BD13, BD15, BD18  
 
@@ -72,6 +73,22 @@ crontab -e
 
 Replace `YOUR_BD_AUTO_EMAIL_CRON_SECRET` with the real secret from `.env`.  
 Replace the URL if the app is not on `127.0.0.1:3000`.
+
+### 3b. Pakistan holiday emails (separate cron)
+
+Team = **9:00 AM Pakistan (PKT = UTC+5)** → **04:00 UTC**.  
+Clients = **9:00 AM in each client’s time zone**.
+
+Use an **hourly** cron so every timezone’s 9:00 AM is caught within ~1 hour (90‑minute send window):
+
+```bash
+# Pakistan holiday emails only (team 9 AM PKT + clients 9 AM local)
+5 * * * * curl -fsS -X POST \
+  -H "Authorization: Bearer YOUR_BD_AUTO_EMAIL_CRON_SECRET" \
+  http://127.0.0.1:3000/api/pakistan-holiday-emails/run
+```
+
+Do **not** rely on the BD 14:00/17:00 UTC crons for holidays — those are afternoon/evening in Pakistan.
 
 ### 4. Per client (portal)
 
