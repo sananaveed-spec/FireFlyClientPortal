@@ -11,7 +11,8 @@ Each run:
 3. Keeps only BDs whose **this-month date = today** in the **client time zone**  
    (example: on BD7’s date → only BD7 is checked)  
 4. If 9:00 AM client time has passed (within the send window) and not already sent → **send that email** from the supervisor mailbox  
-5. Already-sent → quiet skip (no new UI “check” line)
+5. Already-sent → quiet skip (no new UI “check” line)  
+6. Also **queues / sends Pakistan holiday emails** (team day-before + client 7 business days) via app-only Mail.Send as `ayesha@fireflyaccountancy.com` — no one needs to open Holidays in the portal
 
 **Auto-send BDs today:** BD1, BD7, BD8, BD10, BD13, BD15, BD18  
 

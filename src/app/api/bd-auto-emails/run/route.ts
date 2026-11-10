@@ -4,15 +4,17 @@ import {
   runBdAutoEmails,
 } from "@/lib/bd-auto-emails";
 import { isBdAutoSendScheduleId } from "@/lib/bd-auto-email-status";
+import { runPakistanHolidayAutoEmails } from "@/lib/pakistan-holiday-auto-emails";
 
 export const runtime = "nodejs";
 
 /**
- * Cron entry: send due BD1 / BD7 / BD8 emails as supervisor (app-only Graph).
+ * Cron entry: send due BD emails as supervisor (app-only Graph), and also
+ * queue/send Pakistan holiday team + client notices (same secret / schedule).
  *
  * Auth: Authorization: Bearer $BD_AUTO_EMAIL_CRON_SECRET
  * Optional: ?force=1 to re-send even if lastSentAt is set (still requires send window).
- * Optional: ?scheduleId=bd1 to limit to one BD.
+ * Optional: ?scheduleId=bd1 to limit to one BD (holiday auto-send still runs).
  */
 export async function POST(request: Request) {
   try {
@@ -33,8 +35,15 @@ export async function POST(request: Request) {
       ? [scheduleIdParam]
       : undefined;
 
-    const result = await runBdAutoEmails({ force, scheduleIds });
-    return NextResponse.json(result, { status: result.ok ? 200 : 207 });
+    const [result, pakistanHolidayEmails] = await Promise.all([
+      runBdAutoEmails({ force, scheduleIds }),
+      runPakistanHolidayAutoEmails({ force }),
+    ]);
+    const ok = result.ok && pakistanHolidayEmails.ok;
+    return NextResponse.json(
+      { ...result, pakistanHolidayEmails },
+      { status: ok ? 200 : 207 },
+    );
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "BD auto-email run failed.";

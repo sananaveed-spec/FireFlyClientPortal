@@ -1,32 +1,23 @@
 import { NextResponse } from "next/server";
 import {
-  readClientProfiles,
-  readEmailTemplates,
   readHolidays,
   readPakistanHolidayEmailsFile,
   writePakistanHolidayEmailsFile,
 } from "@/lib/data-store";
-import { normalizeEmailTemplates } from "@/lib/email-templates";
 import { normalizeHolidays } from "@/lib/holidays";
+import { runPakistanHolidayAutoEmails } from "@/lib/pakistan-holiday-auto-emails";
 import {
-  buildPakistanHolidayEmailPlans,
   buildPakistanHolidayEmailPreview,
   buildPakistanHolidayEmailStatusByHolidayId,
-  collectPakistanHolidayClientRecipientEmails,
-  collectPakistanHolidayClientRecipientGroups,
   isPakistanHolidayEmailSender,
   normalizePakistanHolidayEmailsStore,
-  PAKISTAN_HOLIDAY_CLIENT_EMAIL_TEMPLATE_ID,
-  PAKISTAN_HOLIDAY_EMAIL_TEMPLATE_ID,
   pakistanHolidayEmailSendersLabel,
-  promoteDueScheduledEntries,
   upsertPakistanHolidayEmailEntry,
   type PakistanHolidayEmailAudience,
   type PakistanHolidayEmailEntry,
   type PakistanHolidayEmailStatus,
 } from "@/lib/pakistan-holiday-emails";
 import { normalizeEmail } from "@/lib/portal-users";
-import { readPortalUsers } from "@/lib/portal-users-store";
 import { requireEditor, requirePortalUser } from "@/lib/requireEditor";
 
 function requirePakistanHolidaySender(
@@ -67,13 +58,7 @@ export async function GET(request: Request) {
       readPakistanHolidayEmailsFile(),
       readHolidays(),
     ]);
-    let store = normalizePakistanHolidayEmailsStore(emailsRaw);
-    const promoted = promoteDueScheduledEntries(store);
-    if (promoted.changed) {
-      store = promoted.store;
-      await writePakistanHolidayEmailsFile(store);
-    }
-
+    const store = normalizePakistanHolidayEmailsStore(emailsRaw);
     const pakistanHolidays = pakistanHolidaysFromStore(holidaysRaw);
     return NextResponse.json({
       entries: store.entries,
@@ -99,7 +84,7 @@ export async function GET(request: Request) {
 }
 
 type PostBody = {
-  action?: "ensure" | "mark";
+  action?: "ensure" | "mark" | "auto-run";
   audience?: PakistanHolidayEmailAudience;
   groupKey?: string;
   holidayDate?: string;
@@ -114,7 +99,7 @@ type PostBody = {
 export async function POST(request: Request) {
   try {
     const body = (await request.json().catch(() => ({}))) as PostBody;
-    const action = body.action === "mark" ? "mark" : "ensure";
+    const action = body.action === "mark" ? "mark" : "auto-run";
 
     if (action === "mark") {
       const denied = await requireEditor(request);
@@ -193,6 +178,7 @@ export async function POST(request: Request) {
       });
     }
 
+    // ensure / auto-run: queue upcoming + send due via app-only Mail.Send (BD cron).
     const denied = await requireEditor(request);
     if (denied) {
       return denied;
@@ -202,92 +188,31 @@ export async function POST(request: Request) {
       return senderGate;
     }
 
-    const [holidaysRaw, templatesRaw, emailsRaw, users, profiles] =
-      await Promise.all([
-        readHolidays(),
-        readEmailTemplates(),
-        readPakistanHolidayEmailsFile(),
-        readPortalUsers(),
-        readClientProfiles(),
-      ]);
+    const run = await runPakistanHolidayAutoEmails();
+    const [holidaysRaw, emailsRaw] = await Promise.all([
+      readHolidays(),
+      readPakistanHolidayEmailsFile(),
+    ]);
     const pakistanHolidays = pakistanHolidaysFromStore(holidaysRaw);
-    const templates = normalizeEmailTemplates(templatesRaw);
-    let store = normalizePakistanHolidayEmailsStore(emailsRaw);
-    const promoted = promoteDueScheduledEntries(store);
-    if (promoted.changed) {
-      store = promoted.store;
-      await writePakistanHolidayEmailsFile(store);
+    const store = normalizePakistanHolidayEmailsStore(emailsRaw);
+    const parts: string[] = [];
+    if (run.queued > 0) {
+      parts.push(`${run.queued} queued`);
     }
-
-    const teamTemplate =
-      templates.templates.find(
-        (item) => item.id === PAKISTAN_HOLIDAY_EMAIL_TEMPLATE_ID,
-      ) ?? null;
-    const clientTemplate =
-      templates.templates.find(
-        (item) => item.id === PAKISTAN_HOLIDAY_CLIENT_EMAIL_TEMPLATE_ID,
-      ) ?? null;
-    if (!teamTemplate) {
-      return NextResponse.json(
-        { error: "Pakistan Holiday Notice template (template-16) is missing." },
-        { status: 500 },
-      );
+    if (run.sent.length > 0) {
+      parts.push(`${run.sent.length} sent`);
     }
-    if (!clientTemplate) {
-      return NextResponse.json(
-        {
-          error:
-            "Pakistan Holiday Notice (Clients) template (template-17) is missing.",
-        },
-        { status: 500 },
-      );
+    if (run.errors.length > 0) {
+      parts.push(`${run.errors.length} failed`);
     }
-
-    const teamRecipients = users
-      .map((user) => user.email)
-      .filter((email) => Boolean(email));
-    const clientRecipientGroups =
-      collectPakistanHolidayClientRecipientGroups(profiles);
-    const clientRecipients =
-      collectPakistanHolidayClientRecipientEmails(profiles);
-
-    const teamPlans = buildPakistanHolidayEmailPlans(
-      pakistanHolidays,
-      store,
-      { subject: teamTemplate.subject, body: teamTemplate.body },
-      { audience: "team" },
-    );
-    const clientPlans = buildPakistanHolidayEmailPlans(
-      pakistanHolidays,
-      store,
-      { subject: clientTemplate.subject, body: clientTemplate.body },
-      {
-        audience: "client",
-        recipientGroups: clientRecipientGroups,
-      },
-    );
-
-    const planCount = teamPlans.length + clientPlans.length;
-    let message =
-      planCount === 0
-        ? "No Pakistan holiday emails to schedule."
-        : `${planCount} holiday email(s) ready to schedule.`;
-    if (
-      clientPlans.length === 0 &&
-      clientRecipients.length === 0 &&
-      teamPlans.length > 0
-    ) {
-      message +=
-        " (No Client Profile emails found — client notices were skipped.)";
-    } else if (
-      clientRecipientGroups.length === 0 &&
-      planCount === 0
-    ) {
-      message =
-        "No Pakistan holiday emails to schedule. Add client emails in Client Profiles to enable client notices.";
-    }
+    const message =
+      parts.length > 0
+        ? `Holiday emails (auto): ${parts.join(", ")}.`
+        : run.skipped[0]?.reason ||
+          "No Pakistan holiday emails due right now (server cron sends when due).";
 
     return NextResponse.json({
+      ok: run.ok,
       entries: store.entries,
       statusByHolidayId: buildPakistanHolidayEmailStatusByHolidayId(
         pakistanHolidays,
@@ -300,14 +225,9 @@ export async function POST(request: Request) {
         "client",
       ),
       upcoming: buildPakistanHolidayEmailPreview(pakistanHolidays, store),
-      teamRecipients,
-      clientRecipients,
-      clientRecipientGroupCount: clientRecipientGroups.length,
-      teamPlans,
-      clientPlans,
-      /** @deprecated use teamPlans / clientPlans */
-      plans: teamPlans,
-      recipients: teamRecipients,
+      autoRun: run,
+      teamPlans: [],
+      clientPlans: [],
       message,
     });
   } catch (error) {

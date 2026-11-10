@@ -335,7 +335,7 @@ Getting these in early means your final year-end numbers will be ready by [Year-
     id: "template-16",
     title: "Pakistan Holiday Notice",
     whenSent:
-      "Last weekday before each Pakistan holiday series (9:00 AM Pakistan time; skips Sat/Sun). Multi-day holidays like Eid Day 1–3 share one email. Sent to the whole team in User Management from ayesha@fireflyaccountancy.com or sana@epsfresno.com.",
+      "Last weekday before each Pakistan holiday series (9:00 AM Pakistan time; skips Sat/Sun). Multi-day holidays like Eid Day 1–3 share one email. Auto-sent by the same server cron as BD emails (app-only Mail.Send) to the whole team in User Management from ayesha@fireflyaccountancy.com.",
     subject: "Reminder: Upcoming Pakistan holiday — [Holiday Name]",
     body: `Hi team,
 
@@ -351,7 +351,7 @@ Thank you.`,
     id: "template-17",
     title: "Pakistan Holiday Notice (Clients)",
     whenSent:
-      "7 business days before each Pakistan holiday series (Sat/Sun skipped; 9:00 AM in each client's time zone). Multi-day holidays share one email. Sent to all Client Profile emails from ayesha@fireflyaccountancy.com or sana@epsfresno.com.",
+      "7 business days before each Pakistan holiday series (Sat/Sun skipped; 9:00 AM in each client's time zone). Multi-day holidays share one email. Auto-sent by the same server cron as BD emails (app-only Mail.Send) to Client Profile emails from ayesha@fireflyaccountancy.com.",
     subject: "Notice: Upcoming Pakistan holiday — [Holiday Name]",
     body: `Hi,
 
