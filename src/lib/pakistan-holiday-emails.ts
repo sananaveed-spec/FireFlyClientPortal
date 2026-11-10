@@ -454,6 +454,26 @@ function profileClientEmails(profile: {
   return emails;
 }
 
+/** Keep only Client Profiles that have a Resource Allocation row (matched by Legal Name). */
+export function filterProfilesInResourceAllocation<
+  T extends { legalName?: string },
+>(
+  profiles: ReadonlyArray<T>,
+  resourceClients: ReadonlyArray<{ clientName?: string }>,
+): T[] {
+  const names = new Set(
+    resourceClients
+      .map((client) => String(client.clientName ?? "").trim().toLowerCase())
+      .filter(Boolean),
+  );
+  if (names.size === 0) {
+    return [];
+  }
+  return profiles.filter((profile) =>
+    names.has(String(profile.legalName ?? "").trim().toLowerCase()),
+  );
+}
+
 /** Unique client emails from Client Profiles (POC, document request, financials, owner). */
 export function collectPakistanHolidayClientRecipientEmails(
   profiles: Array<{
@@ -476,6 +496,7 @@ export function collectPakistanHolidayClientRecipientEmails(
  * Client emails grouped by profile time zone (9:00 AM local).
  * Missing/invalid zones fall back to Pakistan staff zone.
  * Each email is assigned to at most one group.
+ * Pass Resource Allocation–filtered profiles only (see filterProfilesInResourceAllocation).
  */
 export function collectPakistanHolidayClientRecipientGroups(
   profiles: Array<{

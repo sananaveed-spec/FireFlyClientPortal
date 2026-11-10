@@ -491,7 +491,7 @@ export function HolidaysPanel() {
                     <h3 className="section-title">Holidays</h3>
                     <p className="lookup-hint">
                       {showEmailStatusColumn
-                        ? `Team (Template 16): last weekday before · 9:00 AM Pakistan. Clients (Template 17): 7 business days before · 9:00 AM client time zone. Upcoming schedule is visible to all portal users. Sent automatically From ${PAKISTAN_HOLIDAY_EMAIL_SENDER}.`
+                        ? `Team (Template 16): last weekday before · 9:00 AM Pakistan. Clients (Template 17): 7 business days before · 9:00 AM client time zone (EST/CST/MST/PST/Vietnam). Client notices go to Resource Allocation clients only. Sent automatically From ${PAKISTAN_HOLIDAY_EMAIL_SENDER}.`
                         : showRegionColumn
                           ? `Federal holidays use ${regionLabel} = All. Choose a specific ${regionLabel.toLowerCase()} for local holidays.`
                           : `Add company holidays with a name and date for ${activeCountry.name}.`}
@@ -529,10 +529,10 @@ export function HolidaysPanel() {
                     </h4>
                     <p className="lookup-hint holiday-email-preview__hint">
                       Visible to all portal users. Team: last weekday before ·
-                      Clients: 7 business days before at 9:00 AM (Pakistan for
-                      team; each client’s time zone for clients). Sent by the
-                      holiday-only server cron — no portal open needed. From{" "}
-                      {PAKISTAN_HOLIDAY_EMAIL_SENDER}.
+                      Clients: Resource Allocation only · 7 business days
+                      before · 9:00 AM in that client’s time zone
+                      (EST/CST/MST/PST/Vietnam). Team: 9:00 AM Pakistan. Holiday
+                      cron only (not hourly). From {PAKISTAN_HOLIDAY_EMAIL_SENDER}.
                     </p>
                     <div className="table-wrap">
                       <table className="projects-table holiday-email-preview__table">

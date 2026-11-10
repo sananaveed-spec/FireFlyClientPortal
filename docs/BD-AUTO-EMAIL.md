@@ -13,7 +13,7 @@ Each run:
 4. If 9:00 AM client time has passed (within the send window) and not already sent → **send that email** from the supervisor mailbox  
 5. Already-sent → quiet skip (no new UI “check” line)  
 
-**Pakistan holiday emails** use a **separate** cron (`/api/pakistan-holiday-emails/run`) — team at **9:00 AM Pakistan time**, clients at **9:00 AM in each client’s time zone**.
+**Pakistan holiday emails** use a **separate** cron (`/api/pakistan-holiday-emails/run`) — team at **9:00 AM Pakistan time**, Resource Allocation clients only at **9:00 AM** in EST / CST / MST / PST / Vietnam.
 
 **Auto-send BDs today:** BD1, BD7, BD8, BD10, BD13, BD15, BD18  
 
@@ -76,19 +76,28 @@ Replace the URL if the app is not on `127.0.0.1:3000`.
 
 ### 3b. Pakistan holiday emails (separate cron)
 
-Team = **9:00 AM Pakistan (PKT = UTC+5)** → **04:00 UTC**.  
-Clients = **9:00 AM in each client’s time zone**.
+- **Team:** 9:00 AM Pakistan only  
+- **Clients:** 9:00 AM in that client’s time zone (EST / CST / MST / PST / Vietnam)  
+- **Recipients:** Resource Allocation clients only (matched to Client Profile by Legal Name)
 
-Use an **hourly** cron so every timezone’s 9:00 AM is caught within ~1 hour (90‑minute send window):
+Do **not** use an hourly cron. Use these UTC times (covers standard + daylight for US):
 
 ```bash
-# Pakistan holiday emails only (team 9 AM PKT + clients 9 AM local)
-5 * * * * curl -fsS -X POST \
-  -H "Authorization: Bearer YOUR_BD_AUTO_EMAIL_CRON_SECRET" \
-  http://127.0.0.1:3000/api/pakistan-holiday-emails/run
+# Vietnam 9:00 AM (UTC+7)
+0 2 * * * curl -fsS -X POST -H "Authorization: Bearer YOUR_BD_AUTO_EMAIL_CRON_SECRET" http://127.0.0.1:3000/api/pakistan-holiday-emails/run
+
+# Team 9:00 AM Pakistan (UTC+5)
+0 4 * * * curl -fsS -X POST -H "Authorization: Bearer YOUR_BD_AUTO_EMAIL_CRON_SECRET" http://127.0.0.1:3000/api/pakistan-holiday-emails/run
+
+# US client 9:00 AM local (EST/CST/MST/PST · winter + summer UTC)
+0 13 * * * curl -fsS -X POST -H "Authorization: Bearer YOUR_BD_AUTO_EMAIL_CRON_SECRET" http://127.0.0.1:3000/api/pakistan-holiday-emails/run
+0 14 * * * curl -fsS -X POST -H "Authorization: Bearer YOUR_BD_AUTO_EMAIL_CRON_SECRET" http://127.0.0.1:3000/api/pakistan-holiday-emails/run
+0 15 * * * curl -fsS -X POST -H "Authorization: Bearer YOUR_BD_AUTO_EMAIL_CRON_SECRET" http://127.0.0.1:3000/api/pakistan-holiday-emails/run
+0 16 * * * curl -fsS -X POST -H "Authorization: Bearer YOUR_BD_AUTO_EMAIL_CRON_SECRET" http://127.0.0.1:3000/api/pakistan-holiday-emails/run
+0 17 * * * curl -fsS -X POST -H "Authorization: Bearer YOUR_BD_AUTO_EMAIL_CRON_SECRET" http://127.0.0.1:3000/api/pakistan-holiday-emails/run
 ```
 
-Do **not** rely on the BD 14:00/17:00 UTC crons for holidays — those are afternoon/evening in Pakistan.
+Each run only sends what is due at that moment (team at PKT 9am; each RA client group at its own 9am).
 
 ### 4. Per client (portal)
 

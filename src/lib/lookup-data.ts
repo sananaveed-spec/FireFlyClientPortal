@@ -163,7 +163,7 @@ export const LOOKUP_FIELD_META: {
   {
     id: "timeZone",
     name: "Time Zone",
-    defaults: ["EST", "PST", "Vietnam 2 hours ahead"],
+    defaults: ["CST", "EST", "MST", "PST", "Vietnam 2 hours ahead"],
   },
   {
     id: "status",

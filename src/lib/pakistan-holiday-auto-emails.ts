@@ -5,6 +5,7 @@ import {
   readEmailTemplates,
   readHolidays,
   readPakistanHolidayEmailsFile,
+  readResourceClients,
   writePakistanHolidayEmailsFile,
 } from "@/lib/data-store";
 import { normalizeEmailTemplates } from "@/lib/email-templates";
@@ -12,6 +13,7 @@ import { normalizeHolidays } from "@/lib/holidays";
 import {
   buildPakistanHolidayEmailPlans,
   collectPakistanHolidayClientRecipientGroups,
+  filterProfilesInResourceAllocation,
   normalizePakistanHolidayEmailsStore,
   PAKISTAN_HOLIDAY_CLIENT_EMAIL_TEMPLATE_ID,
   PAKISTAN_HOLIDAY_EMAIL_SENDER,
@@ -26,10 +28,9 @@ import { sendGraphAppMail } from "@/lib/send-graph-app-mail";
 
 /**
  * How long after the planned 9:00 AM (Pakistan / client TZ) a cron may still
- * send. Keep tight so mail goes out near 9:00 AM, not hours later.
- * Pair with an hourly holiday-only cron.
+ * send. Wide enough for DST shifts when using fixed UTC cron hours.
  */
-const SEND_WINDOW_MS = 90 * 60 * 1000;
+const SEND_WINDOW_MS = 2 * 60 * 60 * 1000;
 
 export type PakistanHolidayAutoEmailRunResult = {
   ok: boolean;
@@ -147,14 +148,21 @@ export async function runPakistanHolidayAutoEmails(options?: {
     return result;
   }
 
-  const [pakistanHolidays, templatesRaw, emailsRaw, users, profiles] =
-    await Promise.all([
-      pakistanHolidaysFromStore(),
-      readEmailTemplates(),
-      readPakistanHolidayEmailsFile(),
-      readPortalUsers(),
-      readClientProfiles(),
-    ]);
+  const [
+    pakistanHolidays,
+    templatesRaw,
+    emailsRaw,
+    users,
+    profiles,
+    resourceClients,
+  ] = await Promise.all([
+    pakistanHolidaysFromStore(),
+    readEmailTemplates(),
+    readPakistanHolidayEmailsFile(),
+    readPortalUsers(),
+    readClientProfiles(),
+    readResourceClients(),
+  ]);
 
   if (pakistanHolidays.length === 0) {
     result.skipped.push({ reason: "No Pakistan holidays configured." });
@@ -186,8 +194,13 @@ export async function runPakistanHolidayAutoEmails(options?: {
   const teamRecipients = users
     .map((user) => user.email.trim())
     .filter(Boolean);
+  // Client notices: Resource Allocation clients only (not every Client Profile).
+  const raProfiles = filterProfilesInResourceAllocation(
+    profiles,
+    resourceClients,
+  );
   const clientRecipientGroups =
-    collectPakistanHolidayClientRecipientGroups(profiles);
+    collectPakistanHolidayClientRecipientGroups(raProfiles);
 
   const teamPlans = buildPakistanHolidayEmailPlans(
     pakistanHolidays,
