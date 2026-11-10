@@ -29,7 +29,7 @@ import {
 import {
   buildPakistanHolidayEmailPreview,
   isPakistanHolidayEmailSender,
-  pakistanHolidayEmailSendersLabel,
+  PAKISTAN_HOLIDAY_EMAIL_SENDER,
   type PakistanHolidayEmailPreviewRow,
 } from "@/lib/pakistan-holiday-emails";
 import { portalFetch } from "@/lib/portal-api";
@@ -491,7 +491,7 @@ export function HolidaysPanel() {
                     <h3 className="section-title">Holidays</h3>
                     <p className="lookup-hint">
                       {showEmailStatusColumn
-                        ? `Team (Template 16): last weekday before · 9:00 AM Pakistan. Clients (Template 17): 7 business days before · 9:00 AM client time zone. Upcoming schedule is visible to all portal users. Send/schedule: ${pakistanHolidayEmailSendersLabel()}.`
+                        ? `Team (Template 16): last weekday before · 9:00 AM Pakistan. Clients (Template 17): 7 business days before · 9:00 AM client time zone. Upcoming schedule is visible to all portal users. Sent automatically From ${PAKISTAN_HOLIDAY_EMAIL_SENDER}.`
                         : showRegionColumn
                           ? `Federal holidays use ${regionLabel} = All. Choose a specific ${regionLabel.toLowerCase()} for local holidays.`
                           : `Add company holidays with a name and date for ${activeCountry.name}.`}
@@ -532,7 +532,7 @@ export function HolidaysPanel() {
                       Clients: 7 business days before at 9:00 AM (Pakistan for
                       team; each client’s time zone for clients). Sent by the
                       holiday-only server cron — no portal open needed. From{" "}
-                      {pakistanHolidayEmailSendersLabel()}.
+                      {PAKISTAN_HOLIDAY_EMAIL_SENDER}.
                     </p>
                     <div className="table-wrap">
                       <table className="projects-table holiday-email-preview__table">
