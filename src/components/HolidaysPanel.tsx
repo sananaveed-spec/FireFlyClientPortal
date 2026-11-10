@@ -491,7 +491,7 @@ export function HolidaysPanel() {
                     <h3 className="section-title">Holidays</h3>
                     <p className="lookup-hint">
                       {showEmailStatusColumn
-                        ? `Team (Template 16): last weekday before · 9:00 AM Pakistan. Clients (Template 17): 7 business days before · 9:00 AM client time zone (EST/CST/MST/PST/Vietnam). Client notices go to Resource Allocation clients only. Sent automatically From ${PAKISTAN_HOLIDAY_EMAIL_SENDER}.`
+                        ? `Team (Template 11): last weekday before · 9:00 AM Pakistan. Clients (Template 12): 7 business days before · 9:00 AM client time zone (EST/CST/MST/PST/Vietnam). Client notices go to Resource Allocation clients only. Sent automatically From ${PAKISTAN_HOLIDAY_EMAIL_SENDER}.`
                         : showRegionColumn
                           ? `Federal holidays use ${regionLabel} = All. Choose a specific ${regionLabel.toLowerCase()} for local holidays.`
                           : `Add company holidays with a name and date for ${activeCountry.name}.`}
