@@ -77,6 +77,31 @@ import {
   type LookupDataStore,
 } from "@/lib/lookup-data";
 import {
+  annualTasksStatusLabel,
+  createManualAnnualTask,
+  formatAnnualDueDateLabel,
+  isManualAnnualTask,
+  isProtectedAnnualTask,
+  mergeProtectedAnnualTasks,
+  normalizeAnnualTasks,
+  removeAnnualTask,
+  toggleAnnualTaskCompletion,
+  updateAnnualTaskFields,
+  type AnnualTaskItem,
+} from "@/lib/annual-tasks";
+import {
+  createManualMonthlyTask,
+  isManualMonthlyTask,
+  isProtectedMonthlyTask,
+  mergeProtectedMonthlyTasks,
+  monthlyTasksStatusLabel,
+  normalizeMonthlyTasks,
+  removeMonthlyTask,
+  toggleMonthlyTaskCompletion,
+  updateMonthlyTaskLabel,
+  type MonthlyTaskItem,
+} from "@/lib/monthly-tasks";
+import {
   createManualOneTimeTask,
   hasQboSetupOneTimeTask,
   isManualOneTimeTask,
@@ -180,6 +205,8 @@ const TABLE_COLUMNS: { key: keyof ClientProfileEntry; label: string }[] = [
   { key: "portalLink", label: "Portal Link" },
   { key: "activeProposalReference", label: "Active Proposal" },
   { key: "oneTimeTasks", label: "One-Time Tasks" },
+  { key: "annualTasks", label: "Annual Tasks" },
+  { key: "monthlyTasks", label: "Monthly Tasks" },
   { key: "canadianBusinessNumber", label: "Canadian Business Number" },
   { key: "gstHst", label: "GST/HST" },
   { key: "payrollProvider", label: "Payroll Provider" },
@@ -310,6 +337,22 @@ function formatProfileCell(
     const status = oneTimeTasksStatusLabel(tasks);
     return status ? `View list (${status})` : "View list";
   }
+  if (key === "annualTasks") {
+    const tasks = normalizeAnnualTasks(value);
+    if (tasks.length === 0) {
+      return "";
+    }
+    const status = annualTasksStatusLabel(tasks);
+    return status ? `View list (${status})` : "View list";
+  }
+  if (key === "monthlyTasks") {
+    const tasks = normalizeMonthlyTasks(value);
+    if (tasks.length === 0) {
+      return "";
+    }
+    const status = monthlyTasksStatusLabel(tasks);
+    return status ? `View list (${status})` : "View list";
+  }
   const text = String(value ?? "").trim();
   if (!text) {
     return "";
@@ -374,12 +417,22 @@ type OneTimeTasksCellActions = {
   onView: (profile: ClientProfileEntry) => void;
 };
 
+type AnnualTasksCellActions = {
+  onView: (profile: ClientProfileEntry) => void;
+};
+
+type MonthlyTasksCellActions = {
+  onView: (profile: ClientProfileEntry) => void;
+};
+
 function renderProfileCell(
   key: keyof ClientProfileEntry,
   value: unknown,
   profile?: ClientProfileEntry,
   proposalActions?: ProposalCellActions,
   oneTimeTasksActions?: OneTimeTasksCellActions,
+  annualTasksActions?: AnnualTasksCellActions,
+  monthlyTasksActions?: MonthlyTasksCellActions,
 ): ReactNode {
   if (key === "oneTimeTasks") {
     const tasks = normalizeOneTimeTasks(
@@ -396,6 +449,46 @@ function renderProfileCell(
           className="table-link-button"
           title={status || "View one-time tasks"}
           onClick={() => oneTimeTasksActions.onView(profile)}
+        >
+          View list{status ? ` · ${status}` : ""}
+        </button>
+      );
+    }
+    return status ? `View list · ${status}` : "View list";
+  }
+  if (key === "annualTasks") {
+    const tasks = normalizeAnnualTasks(profile?.annualTasks ?? value);
+    if (tasks.length === 0) {
+      return "—";
+    }
+    const status = annualTasksStatusLabel(tasks);
+    if (profile && annualTasksActions) {
+      return (
+        <button
+          type="button"
+          className="table-link-button"
+          title={status || "View annual tasks"}
+          onClick={() => annualTasksActions.onView(profile)}
+        >
+          View list{status ? ` · ${status}` : ""}
+        </button>
+      );
+    }
+    return status ? `View list · ${status}` : "View list";
+  }
+  if (key === "monthlyTasks") {
+    const tasks = normalizeMonthlyTasks(profile?.monthlyTasks ?? value);
+    if (tasks.length === 0) {
+      return "—";
+    }
+    const status = monthlyTasksStatusLabel(tasks);
+    if (profile && monthlyTasksActions) {
+      return (
+        <button
+          type="button"
+          className="table-link-button"
+          title={status || "View monthly tasks"}
+          onClick={() => monthlyTasksActions.onView(profile)}
         >
           View list{status ? ` · ${status}` : ""}
         </button>
@@ -619,6 +712,36 @@ export function ClientProfilePanel() {
   const [oneTimeTasksError, setOneTimeTasksError] = useState<string | null>(
     null,
   );
+  const [annualTasksProfileId, setAnnualTasksProfileId] = useState<
+    string | null
+  >(null);
+  const [annualTasksDraft, setAnnualTasksDraft] = useState<AnnualTaskItem[]>(
+    [],
+  );
+  const [annualTasksNewLabel, setAnnualTasksNewLabel] = useState("");
+  const [annualTasksNewDueDate, setAnnualTasksNewDueDate] = useState("");
+  const [annualTasksEditingId, setAnnualTasksEditingId] = useState<
+    string | null
+  >(null);
+  const [annualTasksEditLabel, setAnnualTasksEditLabel] = useState("");
+  const [annualTasksEditDueDate, setAnnualTasksEditDueDate] = useState("");
+  const [annualTasksSaving, setAnnualTasksSaving] = useState(false);
+  const [annualTasksError, setAnnualTasksError] = useState<string | null>(null);
+  const [monthlyTasksProfileId, setMonthlyTasksProfileId] = useState<
+    string | null
+  >(null);
+  const [monthlyTasksDraft, setMonthlyTasksDraft] = useState<MonthlyTaskItem[]>(
+    [],
+  );
+  const [monthlyTasksNewLabel, setMonthlyTasksNewLabel] = useState("");
+  const [monthlyTasksEditingId, setMonthlyTasksEditingId] = useState<
+    string | null
+  >(null);
+  const [monthlyTasksEditLabel, setMonthlyTasksEditLabel] = useState("");
+  const [monthlyTasksSaving, setMonthlyTasksSaving] = useState(false);
+  const [monthlyTasksError, setMonthlyTasksError] = useState<string | null>(
+    null,
+  );
   const [importMatchMode, setImportMatchMode] =
     useState<ImportMatchMode>("replace");
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -770,6 +893,8 @@ export function ClientProfilePanel() {
       activeProposalViewUrl: profile.activeProposalViewUrl || "",
       activeProposalPdfUrl: profile.activeProposalPdfUrl || "",
       oneTimeTasks: normalizeOneTimeTasks(profile.oneTimeTasks),
+      annualTasks: normalizeAnnualTasks(profile.annualTasks),
+      monthlyTasks: normalizeMonthlyTasks(profile.monthlyTasks),
     });
     syncYearEndParts(profile.fiscalYearEnd);
     setError(null);
@@ -846,6 +971,246 @@ export function ClientProfilePanel() {
     setOneTimeTasksEditingId(null);
     setOneTimeTasksEditLabel("");
     setOneTimeTasksError(null);
+  }
+
+  async function openAnnualTasksList(profile: ClientProfileEntry) {
+    setAnnualTasksProfileId(profile.id);
+    setAnnualTasksNewLabel("");
+    setAnnualTasksNewDueDate("");
+    setAnnualTasksEditingId(null);
+    setAnnualTasksEditLabel("");
+    setAnnualTasksEditDueDate("");
+    setAnnualTasksError(null);
+    let tasks = normalizeAnnualTasks(profile.annualTasks);
+    setAnnualTasksDraft(tasks);
+
+    if (!canEdit || !profile.activeProposalSlug.trim()) {
+      return;
+    }
+
+    setAnnualTasksSaving(true);
+    try {
+      const response = await portalFetch("/api/client-profiles/annual-tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "seed",
+          profileId: profile.id,
+          proposalSlug: profile.activeProposalSlug,
+        }),
+      });
+      const data = (await response.json()) as {
+        error?: string;
+        annualTasks?: AnnualTaskItem[];
+        profile?: ClientProfileEntry;
+      };
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to load annual tax tasks.");
+      }
+      tasks = normalizeAnnualTasks(data.annualTasks);
+      setAnnualTasksDraft(tasks);
+      if (data.profile) {
+        setProfiles((current) =>
+          current.map((item) =>
+            item.id === data.profile!.id ? data.profile! : item,
+          ),
+        );
+        if (editingId === data.profile.id) {
+          setForm((current) => ({
+            ...current,
+            annualTasks: tasks,
+          }));
+        }
+      }
+    } catch (err) {
+      setAnnualTasksError(
+        err instanceof Error
+          ? err.message
+          : "Failed to load annual tax tasks.",
+      );
+    } finally {
+      setAnnualTasksSaving(false);
+    }
+  }
+
+  function closeAnnualTasksList() {
+    if (annualTasksSaving) {
+      return;
+    }
+    setAnnualTasksProfileId(null);
+    setAnnualTasksDraft([]);
+    setAnnualTasksNewLabel("");
+    setAnnualTasksNewDueDate("");
+    setAnnualTasksEditingId(null);
+    setAnnualTasksEditLabel("");
+    setAnnualTasksEditDueDate("");
+    setAnnualTasksError(null);
+  }
+
+  async function persistAnnualTasksDraft(nextTasks: AnnualTaskItem[]) {
+    if (!annualTasksProfileId) {
+      return;
+    }
+    const profile = profiles.find((item) => item.id === annualTasksProfileId);
+    if (!profile) {
+      setAnnualTasksError("Client profile not found.");
+      return;
+    }
+    const safeTasks = mergeProtectedAnnualTasks(
+      normalizeAnnualTasks(profile.annualTasks),
+      nextTasks,
+    );
+    const updated = normalizeClientProfile({
+      ...profile,
+      annualTasks: safeTasks,
+    });
+    const nextProfiles = profiles.map((item) =>
+      item.id === updated.id ? updated : item,
+    );
+    setAnnualTasksSaving(true);
+    setAnnualTasksError(null);
+    try {
+      const response = await portalFetch("/api/client-profiles", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profiles: nextProfiles }),
+      });
+      const data = (await response.json()) as {
+        error?: string;
+        profiles?: ClientProfileEntry[];
+      };
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to save annual tasks.");
+      }
+      setProfiles(Array.isArray(data.profiles) ? data.profiles : nextProfiles);
+      setAnnualTasksDraft(safeTasks);
+      if (editingId === updated.id) {
+        setForm((current) => ({ ...current, annualTasks: safeTasks }));
+      }
+    } catch (err) {
+      setAnnualTasksError(
+        err instanceof Error ? err.message : "Failed to save annual tasks.",
+      );
+    } finally {
+      setAnnualTasksSaving(false);
+    }
+  }
+
+  async function openMonthlyTasksList(profile: ClientProfileEntry) {
+    setMonthlyTasksProfileId(profile.id);
+    setMonthlyTasksNewLabel("");
+    setMonthlyTasksEditingId(null);
+    setMonthlyTasksEditLabel("");
+    setMonthlyTasksError(null);
+    let tasks = normalizeMonthlyTasks(profile.monthlyTasks);
+    setMonthlyTasksDraft(tasks);
+
+    if (!canEdit || !profile.activeProposalSlug.trim()) {
+      return;
+    }
+
+    setMonthlyTasksSaving(true);
+    try {
+      const response = await portalFetch("/api/client-profiles/monthly-tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "seed",
+          profileId: profile.id,
+          proposalSlug: profile.activeProposalSlug,
+        }),
+      });
+      const data = (await response.json()) as {
+        error?: string;
+        monthlyTasks?: MonthlyTaskItem[];
+        profile?: ClientProfileEntry;
+      };
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to load monthly tasks.");
+      }
+      tasks = normalizeMonthlyTasks(data.monthlyTasks);
+      setMonthlyTasksDraft(tasks);
+      if (data.profile) {
+        setProfiles((current) =>
+          current.map((item) =>
+            item.id === data.profile!.id ? data.profile! : item,
+          ),
+        );
+        if (editingId === data.profile.id) {
+          setForm((current) => ({
+            ...current,
+            monthlyTasks: tasks,
+          }));
+        }
+      }
+    } catch (err) {
+      setMonthlyTasksError(
+        err instanceof Error ? err.message : "Failed to load monthly tasks.",
+      );
+    } finally {
+      setMonthlyTasksSaving(false);
+    }
+  }
+
+  function closeMonthlyTasksList() {
+    if (monthlyTasksSaving) {
+      return;
+    }
+    setMonthlyTasksProfileId(null);
+    setMonthlyTasksDraft([]);
+    setMonthlyTasksNewLabel("");
+    setMonthlyTasksEditingId(null);
+    setMonthlyTasksEditLabel("");
+    setMonthlyTasksError(null);
+  }
+
+  async function persistMonthlyTasksDraft(nextTasks: MonthlyTaskItem[]) {
+    if (!monthlyTasksProfileId) {
+      return;
+    }
+    const profile = profiles.find((item) => item.id === monthlyTasksProfileId);
+    if (!profile) {
+      setMonthlyTasksError("Client profile not found.");
+      return;
+    }
+    const safeTasks = mergeProtectedMonthlyTasks(
+      normalizeMonthlyTasks(profile.monthlyTasks),
+      nextTasks,
+    );
+    const updated = normalizeClientProfile({
+      ...profile,
+      monthlyTasks: safeTasks,
+    });
+    const nextProfiles = profiles.map((item) =>
+      item.id === updated.id ? updated : item,
+    );
+    setMonthlyTasksSaving(true);
+    setMonthlyTasksError(null);
+    try {
+      const response = await portalFetch("/api/client-profiles", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profiles: nextProfiles }),
+      });
+      const data = (await response.json()) as {
+        error?: string;
+        profiles?: ClientProfileEntry[];
+      };
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to save monthly tasks.");
+      }
+      setProfiles(Array.isArray(data.profiles) ? data.profiles : nextProfiles);
+      setMonthlyTasksDraft(safeTasks);
+      if (editingId === updated.id) {
+        setForm((current) => ({ ...current, monthlyTasks: safeTasks }));
+      }
+    } catch (err) {
+      setMonthlyTasksError(
+        err instanceof Error ? err.message : "Failed to save monthly tasks.",
+      );
+    } finally {
+      setMonthlyTasksSaving(false);
+    }
   }
 
   async function persistOneTimeTasksDraft(nextTasks: OneTimeTaskItem[]) {
@@ -1612,6 +1977,8 @@ export function ClientProfilePanel() {
           key &&
           key !== "ignitionClientSlug" &&
           key !== "oneTimeTasks" &&
+          key !== "annualTasks" &&
+          key !== "monthlyTasks" &&
           !String(key).startsWith("activeProposal")
         ) {
           columnIndexes.push({ key, index });
@@ -1901,6 +2268,12 @@ export function ClientProfilePanel() {
         form.oneTimeTasks?.length
           ? form.oneTimeTasks
           : existing?.oneTimeTasks,
+      ),
+      annualTasks: normalizeAnnualTasks(
+        form.annualTasks?.length ? form.annualTasks : existing?.annualTasks,
+      ),
+      monthlyTasks: normalizeMonthlyTasks(
+        form.monthlyTasks?.length ? form.monthlyTasks : existing?.monthlyTasks,
       ),
       createdAt: existing?.createdAt ?? new Date().toISOString(),
     };
@@ -3126,6 +3499,100 @@ export function ClientProfilePanel() {
           </FormSection>
 
           <FormSection
+            title="Annual Tasks"
+            description="Tax / Tax Compliance services from the proposal, with due dates."
+          >
+            <div className="field">
+              <span className="field-label">Annual Tasks</span>
+              {normalizeAnnualTasks(form.annualTasks).length === 0 ? (
+                <p className="lookup-hint">
+                  No tasks yet. After Resource Allocation is added for a client
+                  whose proposal includes Tax services, items appear here with
+                  due dates. Open View list to check them off or add more.
+                </p>
+              ) : (
+                <p className="lookup-hint">
+                  Status:{" "}
+                  <strong>
+                    {annualTasksStatusLabel(
+                      normalizeAnnualTasks(form.annualTasks),
+                    ) || "Pending"}
+                  </strong>
+                  {" · "}
+                  <button
+                    type="button"
+                    className="table-link-button"
+                    onClick={() => {
+                      if (!editingId) {
+                        return;
+                      }
+                      const profile = profiles.find(
+                        (item) => item.id === editingId,
+                      );
+                      if (profile) {
+                        void openAnnualTasksList({
+                          ...profile,
+                          annualTasks: normalizeAnnualTasks(form.annualTasks),
+                        });
+                      }
+                    }}
+                  >
+                    View list
+                  </button>
+                </p>
+              )}
+            </div>
+          </FormSection>
+
+          <FormSection
+            title="Monthly Tasks"
+            description="Monthly-billed services from the linked Ignition proposal."
+          >
+            <div className="field">
+              <span className="field-label">Monthly Tasks</span>
+              {normalizeMonthlyTasks(form.monthlyTasks).length === 0 ? (
+                <p className="lookup-hint">
+                  No tasks yet. After Resource Allocation is added for a client
+                  whose proposal includes monthly-billed services, items appear
+                  here. Open View list to check them off or add more.
+                </p>
+              ) : (
+                <p className="lookup-hint">
+                  Status:{" "}
+                  <strong>
+                    {monthlyTasksStatusLabel(
+                      normalizeMonthlyTasks(form.monthlyTasks),
+                    ) || "Pending"}
+                  </strong>
+                  {" · "}
+                  <button
+                    type="button"
+                    className="table-link-button"
+                    onClick={() => {
+                      if (!editingId) {
+                        return;
+                      }
+                      const profile = profiles.find(
+                        (item) => item.id === editingId,
+                      );
+                      if (profile) {
+                        void openMonthlyTasksList({
+                          ...profile,
+                          monthlyTasks: normalizeMonthlyTasks(
+                            form.monthlyTasks,
+                          ),
+                        });
+                      }
+                    }}
+                  >
+                    View list
+                  </button>
+                </p>
+              )}
+            </div>
+          </FormSection>
+
+          <FormSection
             title="Payroll"
             description="Payroll provider and whether reports are needed from it."
           >
@@ -3424,6 +3891,16 @@ export function ClientProfilePanel() {
                             void openOneTimeTasksList(row);
                           },
                         },
+                        {
+                          onView: (row) => {
+                            void openAnnualTasksList(row);
+                          },
+                        },
+                        {
+                          onView: (row) => {
+                            void openMonthlyTasksList(row);
+                          },
+                        },
                       )}
                     </td>
                   ))}
@@ -3715,6 +4192,506 @@ export function ClientProfilePanel() {
                 className="primary-button"
                 disabled={oneTimeTasksSaving}
                 onClick={closeOneTimeTasksList}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {annualTasksProfileId ? (
+        <div
+          className="dialog-backdrop"
+          role="presentation"
+          onClick={closeAnnualTasksList}
+        >
+          <div
+            className="dialog-panel dialog-panel--wide one-time-tasks-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="annual-tasks-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="dialog-header">
+              <h2 id="annual-tasks-title" className="dialog-title">
+                Annual Tasks
+                {annualTasksDraft.length > 0
+                  ? ` · ${annualTasksStatusLabel(annualTasksDraft) || "Pending"}`
+                  : ""}
+              </h2>
+              <button
+                type="button"
+                className="dialog-close"
+                aria-label="Close"
+                disabled={annualTasksSaving}
+                onClick={closeAnnualTasksList}
+              >
+                ×
+              </button>
+            </div>
+            <p className="lookup-hint">
+              Tax services auto-fill with due dates. Default items cannot be
+              edited or deleted. Status is <strong>Completed</strong> only when
+              every checkbox is checked.
+            </p>
+            {annualTasksDraft.length === 0 ? (
+              <p className="lookup-hint">No tasks yet. Add one below.</p>
+            ) : (
+              <ul className="one-time-tasks-list">
+                <li className="annual-tasks-header-row" aria-hidden="true">
+                  <span className="annual-tasks-col-task">Task</span>
+                  <span className="annual-tasks-col-due">Due date</span>
+                  <span className="annual-tasks-col-actions" />
+                </li>
+                {annualTasksDraft.map((task) => {
+                  const manual = isManualAnnualTask(task);
+                  const editing = annualTasksEditingId === task.id;
+                  return (
+                    <li
+                      key={task.id}
+                      className={
+                        task.completed
+                          ? "one-time-tasks-item one-time-tasks-item--done"
+                          : "one-time-tasks-item"
+                      }
+                    >
+                      <div className="one-time-tasks-item-row annual-tasks-item-row">
+                        <label className="one-time-tasks-check annual-tasks-col-task">
+                          <input
+                            type="checkbox"
+                            checked={task.completed}
+                            disabled={!canEdit || annualTasksSaving}
+                            onChange={(event) => {
+                              const next = toggleAnnualTaskCompletion(
+                                annualTasksDraft,
+                                task.id,
+                                event.target.checked,
+                                actor,
+                              );
+                              void persistAnnualTasksDraft(next);
+                            }}
+                          />
+                          {editing ? (
+                            <input
+                              className="field-input one-time-tasks-edit-input"
+                              value={annualTasksEditLabel}
+                              disabled={annualTasksSaving}
+                              autoFocus
+                              onChange={(event) =>
+                                setAnnualTasksEditLabel(event.target.value)
+                              }
+                            />
+                          ) : (
+                            <span className="one-time-tasks-label">
+                              {task.label}
+                              {isProtectedAnnualTask(task) ? (
+                                <span className="one-time-tasks-lock">
+                                  {" "}
+                                  · Default
+                                </span>
+                              ) : null}
+                            </span>
+                          )}
+                        </label>
+                        <div className="annual-tasks-col-due">
+                          {editing ? (
+                            <input
+                              type="date"
+                              className="field-input annual-tasks-due-input"
+                              value={annualTasksEditDueDate}
+                              disabled={annualTasksSaving}
+                              onChange={(event) =>
+                                setAnnualTasksEditDueDate(event.target.value)
+                              }
+                            />
+                          ) : (
+                            <span className="annual-tasks-due-label">
+                              {formatAnnualDueDateLabel(task.dueDate)}
+                            </span>
+                          )}
+                        </div>
+                        {canEdit && manual ? (
+                          <div className="one-time-tasks-item-actions annual-tasks-col-actions">
+                            {editing ? (
+                              <>
+                                <button
+                                  type="button"
+                                  className="table-link-button"
+                                  disabled={
+                                    annualTasksSaving ||
+                                    !annualTasksEditLabel.trim()
+                                  }
+                                  onClick={() => {
+                                    const next = updateAnnualTaskFields(
+                                      annualTasksDraft,
+                                      task.id,
+                                      {
+                                        label: annualTasksEditLabel,
+                                        dueDate: annualTasksEditDueDate,
+                                      },
+                                    );
+                                    setAnnualTasksEditingId(null);
+                                    setAnnualTasksEditLabel("");
+                                    setAnnualTasksEditDueDate("");
+                                    void persistAnnualTasksDraft(next);
+                                  }}
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  type="button"
+                                  className="table-link-button"
+                                  disabled={annualTasksSaving}
+                                  onClick={() => {
+                                    setAnnualTasksEditingId(null);
+                                    setAnnualTasksEditLabel("");
+                                    setAnnualTasksEditDueDate("");
+                                  }}
+                                >
+                                  Cancel
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  type="button"
+                                  className="table-link-button"
+                                  disabled={annualTasksSaving}
+                                  onClick={() => {
+                                    setAnnualTasksEditingId(task.id);
+                                    setAnnualTasksEditLabel(task.label);
+                                    setAnnualTasksEditDueDate(task.dueDate);
+                                  }}
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  className="table-link-button one-time-tasks-delete"
+                                  disabled={annualTasksSaving}
+                                  onClick={() => {
+                                    const next = removeAnnualTask(
+                                      annualTasksDraft,
+                                      task.id,
+                                    );
+                                    void persistAnnualTasksDraft(next);
+                                  }}
+                                >
+                                  Delete
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="annual-tasks-col-actions" />
+                        )}
+                      </div>
+                      {task.completed ? (
+                        <p className="one-time-tasks-meta">
+                          Completed{" "}
+                          {task.completedAt
+                            ? new Date(task.completedAt).toLocaleString()
+                            : ""}
+                          {task.completedByName
+                            ? ` · ${task.completedByName}`
+                            : ""}
+                        </p>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {canEdit ? (
+              <div className="one-time-tasks-add annual-tasks-add">
+                <label className="field one-time-tasks-add-field">
+                  <span className="field-label">Add another task</span>
+                  <input
+                    className="field-input"
+                    value={annualTasksNewLabel}
+                    disabled={annualTasksSaving}
+                    placeholder="Type a new annual task…"
+                    onChange={(event) =>
+                      setAnnualTasksNewLabel(event.target.value)
+                    }
+                  />
+                </label>
+                <label className="field annual-tasks-add-due-field">
+                  <span className="field-label">Due date</span>
+                  <input
+                    type="date"
+                    className="field-input"
+                    value={annualTasksNewDueDate}
+                    disabled={annualTasksSaving}
+                    onChange={(event) =>
+                      setAnnualTasksNewDueDate(event.target.value)
+                    }
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="button secondary-solid"
+                  disabled={
+                    annualTasksSaving || !annualTasksNewLabel.trim()
+                  }
+                  onClick={() => {
+                    const label = annualTasksNewLabel.trim();
+                    if (!label) {
+                      return;
+                    }
+                    setAnnualTasksNewLabel("");
+                    const due = annualTasksNewDueDate;
+                    setAnnualTasksNewDueDate("");
+                    void persistAnnualTasksDraft([
+                      ...annualTasksDraft,
+                      createManualAnnualTask(label, due),
+                    ]);
+                  }}
+                >
+                  Add
+                </button>
+              </div>
+            ) : null}
+            {annualTasksError ? (
+              <p className="form-message error" role="alert">
+                {annualTasksError}
+              </p>
+            ) : null}
+            <div className="dialog-actions">
+              <button
+                type="button"
+                className="primary-button"
+                disabled={annualTasksSaving}
+                onClick={closeAnnualTasksList}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {monthlyTasksProfileId ? (
+        <div
+          className="dialog-backdrop"
+          role="presentation"
+          onClick={closeMonthlyTasksList}
+        >
+          <div
+            className="dialog-panel dialog-panel--wide one-time-tasks-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="monthly-tasks-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="dialog-header">
+              <h2 id="monthly-tasks-title" className="dialog-title">
+                Monthly Tasks
+                {monthlyTasksDraft.length > 0
+                  ? ` · ${monthlyTasksStatusLabel(monthlyTasksDraft) || "Pending"}`
+                  : ""}
+              </h2>
+              <button
+                type="button"
+                className="dialog-close"
+                aria-label="Close"
+                disabled={monthlyTasksSaving}
+                onClick={closeMonthlyTasksList}
+              >
+                ×
+              </button>
+            </div>
+            <p className="lookup-hint">
+              Monthly-billed services auto-fill from the proposal. Default items
+              cannot be edited or deleted. Status is <strong>Completed</strong>{" "}
+              only when every checkbox is checked.
+            </p>
+            {monthlyTasksDraft.length === 0 ? (
+              <p className="lookup-hint">No tasks yet. Add one below.</p>
+            ) : (
+              <ul className="one-time-tasks-list">
+                {monthlyTasksDraft.map((task) => {
+                  const manual = isManualMonthlyTask(task);
+                  const editing = monthlyTasksEditingId === task.id;
+                  return (
+                    <li
+                      key={task.id}
+                      className={
+                        task.completed
+                          ? "one-time-tasks-item one-time-tasks-item--done"
+                          : "one-time-tasks-item"
+                      }
+                    >
+                      <div className="one-time-tasks-item-row">
+                        <label className="one-time-tasks-check">
+                          <input
+                            type="checkbox"
+                            checked={task.completed}
+                            disabled={!canEdit || monthlyTasksSaving}
+                            onChange={(event) => {
+                              const next = toggleMonthlyTaskCompletion(
+                                monthlyTasksDraft,
+                                task.id,
+                                event.target.checked,
+                                actor,
+                              );
+                              void persistMonthlyTasksDraft(next);
+                            }}
+                          />
+                          {editing ? (
+                            <input
+                              className="field-input one-time-tasks-edit-input"
+                              value={monthlyTasksEditLabel}
+                              disabled={monthlyTasksSaving}
+                              autoFocus
+                              onChange={(event) =>
+                                setMonthlyTasksEditLabel(event.target.value)
+                              }
+                            />
+                          ) : (
+                            <span className="one-time-tasks-label">
+                              {task.label}
+                              {isProtectedMonthlyTask(task) ? (
+                                <span className="one-time-tasks-lock">
+                                  {" "}
+                                  · Default
+                                </span>
+                              ) : null}
+                            </span>
+                          )}
+                        </label>
+                        {canEdit && manual ? (
+                          <div className="one-time-tasks-item-actions">
+                            {editing ? (
+                              <>
+                                <button
+                                  type="button"
+                                  className="table-link-button"
+                                  disabled={
+                                    monthlyTasksSaving ||
+                                    !monthlyTasksEditLabel.trim()
+                                  }
+                                  onClick={() => {
+                                    const next = updateMonthlyTaskLabel(
+                                      monthlyTasksDraft,
+                                      task.id,
+                                      monthlyTasksEditLabel,
+                                    );
+                                    setMonthlyTasksEditingId(null);
+                                    setMonthlyTasksEditLabel("");
+                                    void persistMonthlyTasksDraft(next);
+                                  }}
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  type="button"
+                                  className="table-link-button"
+                                  disabled={monthlyTasksSaving}
+                                  onClick={() => {
+                                    setMonthlyTasksEditingId(null);
+                                    setMonthlyTasksEditLabel("");
+                                  }}
+                                >
+                                  Cancel
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  type="button"
+                                  className="table-link-button"
+                                  disabled={monthlyTasksSaving}
+                                  onClick={() => {
+                                    setMonthlyTasksEditingId(task.id);
+                                    setMonthlyTasksEditLabel(task.label);
+                                  }}
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  className="table-link-button one-time-tasks-delete"
+                                  disabled={monthlyTasksSaving}
+                                  onClick={() => {
+                                    const next = removeMonthlyTask(
+                                      monthlyTasksDraft,
+                                      task.id,
+                                    );
+                                    void persistMonthlyTasksDraft(next);
+                                  }}
+                                >
+                                  Delete
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
+                      {task.completed ? (
+                        <p className="one-time-tasks-meta">
+                          Completed{" "}
+                          {task.completedAt
+                            ? new Date(task.completedAt).toLocaleString()
+                            : ""}
+                          {task.completedByName
+                            ? ` · ${task.completedByName}`
+                            : ""}
+                        </p>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {canEdit ? (
+              <div className="one-time-tasks-add">
+                <label className="field one-time-tasks-add-field">
+                  <span className="field-label">Add another task</span>
+                  <input
+                    className="field-input"
+                    value={monthlyTasksNewLabel}
+                    disabled={monthlyTasksSaving}
+                    placeholder="Type a new monthly task…"
+                    onChange={(event) =>
+                      setMonthlyTasksNewLabel(event.target.value)
+                    }
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="button secondary-solid"
+                  disabled={
+                    monthlyTasksSaving || !monthlyTasksNewLabel.trim()
+                  }
+                  onClick={() => {
+                    const label = monthlyTasksNewLabel.trim();
+                    if (!label) {
+                      return;
+                    }
+                    setMonthlyTasksNewLabel("");
+                    void persistMonthlyTasksDraft([
+                      ...monthlyTasksDraft,
+                      createManualMonthlyTask(label),
+                    ]);
+                  }}
+                >
+                  Add
+                </button>
+              </div>
+            ) : null}
+            {monthlyTasksError ? (
+              <p className="form-message error" role="alert">
+                {monthlyTasksError}
+              </p>
+            ) : null}
+            <div className="dialog-actions">
+              <button
+                type="button"
+                className="primary-button"
+                disabled={monthlyTasksSaving}
+                onClick={closeMonthlyTasksList}
               >
                 Close
               </button>

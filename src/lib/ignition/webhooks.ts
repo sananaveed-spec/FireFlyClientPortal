@@ -22,7 +22,7 @@ import {
   pickActiveProposalByClient,
   type IgnitionProposalRecord,
 } from "@/lib/ignition/proposals";
-import { seedOneTimeTasksFromAcceptedProposal } from "@/lib/ignition/seed-one-time-tasks";
+import { seedClientEngagementTasksFromProposal } from "@/lib/ignition/seed-client-engagement-tasks";
 import { getValidAccessToken } from "@/lib/ignition/tokens";
 import { normalizeEmail, isValidEmail } from "@/lib/portal-users";
 
@@ -514,7 +514,7 @@ export async function processIgnitionWebhookEvent(event: {
       [clientMatch],
       activeByClient,
     );
-    updatedProfile = await seedOneTimeTasksFromAcceptedProposal(
+    updatedProfile = await seedClientEngagementTasksFromProposal(
       updatedProfile,
       proposal.slug,
     );

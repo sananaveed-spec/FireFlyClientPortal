@@ -782,6 +782,8 @@ export type IgnitionProposalServiceView = {
   descriptionHtml: string;
   amountLabel: string;
   billingMode: string;
+  /** Ignition service_group name (e.g. "Tax services", "Bookkeeping"). */
+  groupName: string;
 };
 
 export type IgnitionProposalView = {
@@ -857,6 +859,8 @@ function extractServices(
           "configured_as",
           "billing_mode",
         ]);
+        const groupName =
+          pickString(groupRecord, ["name", "title", "billing_name"]) || "";
         const proposed = Array.isArray(groupRecord.proposed_services)
           ? groupRecord.proposed_services
           : [];
@@ -880,6 +884,7 @@ function extractServices(
             ),
             amountLabel,
             billingMode,
+            groupName,
           });
         }
       }

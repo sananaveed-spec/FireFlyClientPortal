@@ -16,7 +16,7 @@ import {
   syncIgnitionProposals,
   type IgnitionAutoCreatedClientProfile,
 } from "@/lib/ignition/proposals";
-import { seedOneTimeTasksFromAcceptedProposal } from "@/lib/ignition/seed-one-time-tasks";
+import { seedClientEngagementTasksFromProposal } from "@/lib/ignition/seed-client-engagement-tasks";
 import { getValidAccessToken } from "@/lib/ignition/tokens";
 
 export type IgnitionClientsSyncResult = IgnitionClientsStore & {
@@ -378,10 +378,11 @@ export async function syncIgnitionClients(): Promise<IgnitionClientsSyncResult> 
           matchIgnitionClientToProfile(profile, [client])?.id === client.id,
       );
       if (matchedIndex >= 0) {
-        nextProfiles[matchedIndex] = await seedOneTimeTasksFromAcceptedProposal(
-          nextProfiles[matchedIndex]!,
-          proposal.slug,
-        );
+        nextProfiles[matchedIndex] =
+          await seedClientEngagementTasksFromProposal(
+            nextProfiles[matchedIndex]!,
+            proposal.slug,
+          );
       }
       const matched =
         matchedIndex >= 0 ? nextProfiles[matchedIndex] : undefined;

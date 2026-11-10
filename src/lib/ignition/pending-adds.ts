@@ -21,7 +21,7 @@ import {
   matchIgnitionClientToProfile,
   type IgnitionProposalRecord,
 } from "@/lib/ignition/proposals";
-import { seedOneTimeTasksFromAcceptedProposal } from "@/lib/ignition/seed-one-time-tasks";
+import { seedClientEngagementTasksFromProposal } from "@/lib/ignition/seed-client-engagement-tasks";
 import {
   buildSharePointMemberEmails,
   createClientSharePointSiteAppOnly,
@@ -411,7 +411,7 @@ export async function completeIgnitionPendingAdd(input: {
     input.portalLink ?? "",
   );
   profile = applied.profile;
-  profile = await seedOneTimeTasksFromAcceptedProposal(
+  profile = await seedClientEngagementTasksFromProposal(
     profile,
     pending.proposalSlug || profile.activeProposalSlug,
   );

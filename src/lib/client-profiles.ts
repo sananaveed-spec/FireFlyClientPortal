@@ -1,10 +1,18 @@
 import {
+  normalizeAnnualTasks,
+  type AnnualTaskItem,
+} from "@/lib/annual-tasks";
+import {
+  normalizeMonthlyTasks,
+  type MonthlyTaskItem,
+} from "@/lib/monthly-tasks";
+import {
   normalizeOneTimeTasks,
   type OneTimeTaskItem,
 } from "@/lib/one-time-tasks";
 import { normalizeYearEnd } from "@/lib/year-end";
 
-export type { OneTimeTaskItem };
+export type { OneTimeTaskItem, AnnualTaskItem, MonthlyTaskItem };
 
 export type ClientCountry = "US" | "CA" | "Not Sure";
 
@@ -523,6 +531,10 @@ export type ClientProfileEntry = {
   activeProposalPdfUrl: string;
   /** One-time onboarding checklist (e.g. QBO Setup from bookkeeping proposals). */
   oneTimeTasks: OneTimeTaskItem[];
+  /** Annual tax checklist from Ignition Tax / Tax Compliance services. */
+  annualTasks: AnnualTaskItem[];
+  /** Monthly recurring services checklist from Ignition monthly-billed services. */
+  monthlyTasks: MonthlyTaskItem[];
   createdAt: string;
 };
 
@@ -708,6 +720,8 @@ export function createEmptyClientProfileForm(
     activeProposalViewUrl: "",
     activeProposalPdfUrl: "",
     oneTimeTasks: [],
+    annualTasks: [],
+    monthlyTasks: [],
   };
 }
 
@@ -798,6 +812,8 @@ export function normalizeClientProfile(
     activeProposalViewUrl: String(value.activeProposalViewUrl ?? "").trim(),
     activeProposalPdfUrl: String(value.activeProposalPdfUrl ?? "").trim(),
     oneTimeTasks: normalizeOneTimeTasks(value.oneTimeTasks),
+    annualTasks: normalizeAnnualTasks(value.annualTasks),
+    monthlyTasks: normalizeMonthlyTasks(value.monthlyTasks),
     createdAt:
       typeof value.createdAt === "string" && value.createdAt
         ? value.createdAt

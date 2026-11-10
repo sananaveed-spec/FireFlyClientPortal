@@ -275,16 +275,19 @@ export function DashboardShell({ userName }: DashboardShellProps) {
               onClick={closeAddToSystem}
             >
               <div
-                className="dialog-panel"
+                className="dialog-panel dialog-panel--add-to-system"
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="ignition-add-title"
                 onClick={(event) => event.stopPropagation()}
               >
                 <div className="dialog-header">
-                  <h2 id="ignition-add-title" className="dialog-title">
-                    Add to system
-                  </h2>
+                  <div className="add-to-system-heading">
+                    <p className="add-to-system-eyebrow">Proposal accepted</p>
+                    <h2 id="ignition-add-title" className="dialog-title">
+                      Add to system
+                    </h2>
+                  </div>
                   <button
                     type="button"
                     className="dialog-close"
@@ -295,83 +298,130 @@ export function DashboardShell({ userName }: DashboardShellProps) {
                     ×
                   </button>
                 </div>
-                <p className="lookup-hint">
-                  {addTarget.clientName || "Client"} — proposal accepted.
-                  Choose the client document portal.
+
+                <div className="add-to-system-client">
+                  <span className="add-to-system-client-label">Client</span>
+                  <strong className="add-to-system-client-name">
+                    {addTarget.clientName || "Client"}
+                  </strong>
+                </div>
+
+                <p className="add-to-system-lead">
+                  Finish setup by choosing how this client’s document portal
+                  should be linked. You can change the portal later in Client
+                  Info.
                 </p>
-                <fieldset className="field field--radios">
-                  <legend className="field-label">Client document portal</legend>
-                  <div className="radio-row">
-                    <label className="radio-option">
-                      <input
-                        type="radio"
-                        name="ignition-portal-choice"
-                        checked={portalChoice === "firefly-sharepoint"}
-                        disabled={addBusy}
-                        onChange={() => setPortalChoice("firefly-sharepoint")}
-                      />{" "}
-                      FireFly SharePoint
-                    </label>
-                    <label className="radio-option">
-                      <input
-                        type="radio"
-                        name="ignition-portal-choice"
-                        checked={portalChoice === "other"}
-                        disabled={addBusy}
-                        onChange={() => setPortalChoice("other")}
-                      />{" "}
-                      Other
-                    </label>
-                    <label className="radio-option">
-                      <input
-                        type="radio"
-                        name="ignition-portal-choice"
-                        checked={portalChoice === "skip"}
-                        disabled={addBusy}
-                        onChange={() => setPortalChoice("skip")}
-                      />{" "}
-                      Skip for now
-                    </label>
-                  </div>
-                </fieldset>
-                {portalChoice === "firefly-sharepoint" ? (
-                  <p className="lookup-hint">
-                    A Fire Fly SharePoint site will be created and saved as the
-                    Portal Link.
-                  </p>
-                ) : null}
-                {portalChoice === "other" ? (
-                  <label className="field">
-                    <span className="field-label">
-                      Portal link (optional — can skip)
-                    </span>
+
+                <fieldset className="add-to-system-choices">
+                  <legend className="add-to-system-choices-legend">
+                    Client document portal
+                  </legend>
+
+                  <label
+                    className={
+                      portalChoice === "firefly-sharepoint"
+                        ? "add-to-system-choice add-to-system-choice--selected"
+                        : "add-to-system-choice"
+                    }
+                  >
                     <input
-                      className="field-input"
-                      type="url"
-                      placeholder="https://…"
-                      value={otherPortalLink}
+                      type="radio"
+                      name="ignition-portal-choice"
+                      checked={portalChoice === "firefly-sharepoint"}
                       disabled={addBusy}
-                      onChange={(event) =>
-                        setOtherPortalLink(event.target.value)
-                      }
+                      onChange={() => setPortalChoice("firefly-sharepoint")}
                     />
+                    <span className="add-to-system-choice-body">
+                      <span className="add-to-system-choice-title">
+                        FireFly SharePoint
+                      </span>
+                      <span className="add-to-system-choice-desc">
+                        Create a Fire Fly SharePoint site and save it as the
+                        Portal Link. Recommended for most clients.
+                      </span>
+                    </span>
                   </label>
-                ) : null}
-                {portalChoice === "skip" ? (
-                  <p className="lookup-hint">
-                    Client Info will be added without a portal link. You can set
-                    it later in Client Info.
-                  </p>
-                ) : null}
+
+                  <label
+                    className={
+                      portalChoice === "other"
+                        ? "add-to-system-choice add-to-system-choice--selected"
+                        : "add-to-system-choice"
+                    }
+                  >
+                    <input
+                      type="radio"
+                      name="ignition-portal-choice"
+                      checked={portalChoice === "other"}
+                      disabled={addBusy}
+                      onChange={() => setPortalChoice("other")}
+                    />
+                    <span className="add-to-system-choice-body">
+                      <span className="add-to-system-choice-title">Other</span>
+                      <span className="add-to-system-choice-desc">
+                        Use an existing portal URL (SharePoint, Dropbox, etc.).
+                      </span>
+                    </span>
+                  </label>
+
+                  {portalChoice === "other" ? (
+                    <label className="field add-to-system-other-link">
+                      <span className="field-label">
+                        Portal link{" "}
+                        <span className="add-to-system-optional">
+                          (optional)
+                        </span>
+                      </span>
+                      <input
+                        className="field-input"
+                        type="url"
+                        placeholder="https://…"
+                        value={otherPortalLink}
+                        disabled={addBusy}
+                        autoFocus
+                        onChange={(event) =>
+                          setOtherPortalLink(event.target.value)
+                        }
+                      />
+                    </label>
+                  ) : null}
+
+                  <label
+                    className={
+                      portalChoice === "skip"
+                        ? "add-to-system-choice add-to-system-choice--selected"
+                        : "add-to-system-choice"
+                    }
+                  >
+                    <input
+                      type="radio"
+                      name="ignition-portal-choice"
+                      checked={portalChoice === "skip"}
+                      disabled={addBusy}
+                      onChange={() => setPortalChoice("skip")}
+                    />
+                    <span className="add-to-system-choice-body">
+                      <span className="add-to-system-choice-title">
+                        Skip for now
+                      </span>
+                      <span className="add-to-system-choice-desc">
+                        Add Client Info without a portal link. Set it later
+                        when ready.
+                      </span>
+                    </span>
+                  </label>
+                </fieldset>
+
                 {addError ? (
                   <p className="form-message error" role="alert">
                     {addError}
                   </p>
                 ) : null}
-                <div className="dialog-actions">
+
+                <div className="dialog-actions add-to-system-actions">
                   <button
                     type="button"
-                    className="secondary-button"
+                    className="button secondary"
                     disabled={addBusy}
                     onClick={closeAddToSystem}
                   >
@@ -379,11 +429,15 @@ export function DashboardShell({ userName }: DashboardShellProps) {
                   </button>
                   <button
                     type="button"
-                    className="primary-button"
+                    className="button primary"
                     disabled={addBusy}
                     onClick={() => void submitAddToSystem()}
                   >
-                    {addBusy ? "Adding…" : "Add"}
+                    {addBusy
+                      ? "Adding…"
+                      : portalChoice === "skip"
+                        ? "Add without portal"
+                        : "Add client"}
                   </button>
                 </div>
               </div>
