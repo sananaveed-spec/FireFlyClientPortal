@@ -17,13 +17,18 @@ import {
   getHolidayRegionOptions,
   getHolidayWeekday,
   HOLIDAY_COUNTRIES,
+  HOLIDAY_RELIGION_ALL,
+  HOLIDAY_RELIGIONS,
   HOLIDAY_STATE_ALL,
   holidayUsesRegion,
+  holidayUsesReligion,
   isHolidayManuallySet,
   normalizeHolidayDate,
+  normalizeHolidayReligion,
   normalizeHolidayState,
   type HolidayCountryId,
   type HolidayEntry,
+  type HolidayReligion,
   type HolidaysStore,
 } from "@/lib/holidays";
 import {
@@ -40,6 +45,7 @@ type EditorState = {
   name: string;
   date: string;
   state: string;
+  religion: HolidayReligion;
 };
 
 async function persistHolidays(data: HolidaysStore) {
@@ -84,12 +90,14 @@ export function HolidaysPanel() {
   const [schedulingHolidayEmails, setSchedulingHolidayEmails] = useState(false);
 
   const showRegionColumn = holidayUsesRegion(activeCountryId);
+  const showReligionColumn = holidayUsesReligion(activeCountryId);
   const showEmailStatusColumn = activeCountryId === "pakistan";
   const regionLabel = getHolidayRegionLabel(activeCountryId);
   const regionOptions = useMemo(
     () => getHolidayRegionOptions(activeCountryId),
     [activeCountryId],
   );
+  const religionOptions = useMemo(() => [...HOLIDAY_RELIGIONS], []);
   const currentYear = new Date().getFullYear();
   const pakistanHolidays = useMemo(
     () =>
@@ -293,6 +301,7 @@ export function HolidaysPanel() {
       name: "",
       date: "",
       state: HOLIDAY_STATE_ALL,
+      religion: HOLIDAY_RELIGION_ALL,
     });
   }
 
@@ -304,6 +313,7 @@ export function HolidaysPanel() {
       name: holiday.name,
       date: holiday.date,
       state: normalizeHolidayState(holiday.state, activeCountryId),
+      religion: normalizeHolidayReligion(holiday.religion),
     });
   }
 
@@ -370,6 +380,30 @@ export function HolidaysPanel() {
     });
   }
 
+  function updateHolidayReligion(holidayId: string, religion: string) {
+    if (!activeCountry || !holidayUsesReligion(activeCountry.id)) {
+      return;
+    }
+    const nextReligion = normalizeHolidayReligion(religion);
+    updateCountryHolidays(activeCountry.id, (holidays) =>
+      holidays.map((holiday) =>
+        holiday.id === holidayId
+          ? { ...holiday, religion: nextReligion }
+          : holiday,
+      ),
+    );
+    void logPortalAction({
+      actor,
+      project: "Holidays",
+      entityType: "lookupData",
+      entityLabel: `${activeCountry.name} / religion`,
+      action: "updated",
+      summary: `Holiday religion set to ${nextReligion}`,
+      details: `Country: ${activeCountry.name}\nReligion: ${nextReligion}`,
+      comment: "Pakistan holiday team-email religion updated.",
+    });
+  }
+
   function closeEditor() {
     if (saving) {
       return;
@@ -388,6 +422,9 @@ export function HolidaysPanel() {
     const state = holidayUsesRegion(activeCountry.id)
       ? normalizeHolidayState(editor.state, activeCountry.id)
       : undefined;
+    const religion = holidayUsesReligion(activeCountry.id)
+      ? normalizeHolidayReligion(editor.religion)
+      : undefined;
     if (!name) {
       setError("Name is required.");
       return;
@@ -403,6 +440,8 @@ export function HolidaysPanel() {
         date,
         state,
         activeCountry.id,
+        "manual",
+        religion,
       );
       updateCountryHolidays(activeCountry.id, (holidays) => [
         ...holidays,
@@ -417,7 +456,7 @@ export function HolidaysPanel() {
         summary: `Holiday created: ${name}`,
         details: `Country: ${activeCountry.name}\nHoliday: ${name}\nDate: ${formatHolidayDate(date)}${
           state ? `\n${regionLabel}: ${state}` : ""
-        }`,
+        }${religion ? `\nReligion: ${religion}` : ""}`,
         comment: "New holiday added.",
       });
       return;
@@ -436,6 +475,7 @@ export function HolidaysPanel() {
               date,
               origin: "manual" as const,
               ...(state !== undefined ? { state } : {}),
+              ...(religion !== undefined ? { religion } : {}),
             }
           : holiday,
       ),
@@ -449,7 +489,7 @@ export function HolidaysPanel() {
       summary: `Holiday updated: ${name}`,
       details: `Country: ${activeCountry.name}\nName: "${previous || "—"}" → "${name}"\nDate: ${formatHolidayDate(date)}${
         state ? `\n${regionLabel}: ${state}` : ""
-      }`,
+      }${religion ? `\nReligion: ${religion}` : ""}`,
       comment: "Holiday updated.",
     });
   }
@@ -491,7 +531,7 @@ export function HolidaysPanel() {
                     <h3 className="section-title">Holidays</h3>
                     <p className="lookup-hint">
                       {showEmailStatusColumn
-                        ? `Team (Template 11): last weekday before · 9:00 AM Pakistan. Clients (Template 12): 7 business days before · 9:00 AM client time zone (EST/CST/MST/PST/Vietnam). Client notices go to Resource Allocation clients only. Sent automatically From ${PAKISTAN_HOLIDAY_EMAIL_SENDER}.`
+                        ? `Team (Template 11): last weekday before · 9:00 AM Pakistan · Religion on each holiday (All / Muslim / Christian / Hindu) controls which User Management users get the team email. Clients (Template 12): Resource Allocation only · 7 business days before · 9:00 AM client time zone. From ${PAKISTAN_HOLIDAY_EMAIL_SENDER}.`
                         : showRegionColumn
                           ? `Federal holidays use ${regionLabel} = All. Choose a specific ${regionLabel.toLowerCase()} for local holidays.`
                           : `Add company holidays with a name and date for ${activeCountry.name}.`}
@@ -528,11 +568,10 @@ export function HolidaysPanel() {
                       Next holiday email
                     </h4>
                     <p className="lookup-hint holiday-email-preview__hint">
-                      Next holiday only (not the full year). Team: last weekday
-                      before · 9:00 AM Pakistan. Clients: Resource Allocation
-                      only · 7 business days before · 9:00 AM client time zone
-                      (EST/CST/MST/PST/Vietnam). Holiday cron only. From{" "}
-                      {PAKISTAN_HOLIDAY_EMAIL_SENDER}.
+                      Next holiday only. Team: 9:00 AM Pakistan · filtered by
+                      holiday Religion (All = everyone in User Management).
+                      Clients: Resource Allocation · 9:00 AM client time zone.
+                      From {PAKISTAN_HOLIDAY_EMAIL_SENDER}.
                     </p>
                     <div className="table-wrap">
                       <table className="projects-table holiday-email-preview__table">
@@ -623,6 +662,7 @@ export function HolidaysPanel() {
                           <th>Date (DD-MM-YYYY)</th>
                           <th>Day</th>
                           {showRegionColumn ? <th>{regionLabel}</th> : null}
+                          {showReligionColumn ? <th>Religion</th> : null}
                           {showEmailStatusColumn ? (
                             <>
                               <th>Team Email</th>
@@ -691,6 +731,34 @@ export function HolidaysPanel() {
                                     holiday.state,
                                     activeCountry.id,
                                   )
+                                )}
+                              </td>
+                            ) : null}
+                            {showReligionColumn ? (
+                              <td>
+                                {canEdit ? (
+                                  <select
+                                    className="field-input field-select holiday-state-select"
+                                    aria-label={`Religion for ${holiday.name}`}
+                                    value={normalizeHolidayReligion(
+                                      holiday.religion,
+                                    )}
+                                    disabled={saving}
+                                    onChange={(event) =>
+                                      updateHolidayReligion(
+                                        holiday.id,
+                                        event.target.value,
+                                      )
+                                    }
+                                  >
+                                    {religionOptions.map((option) => (
+                                      <option key={option} value={option}>
+                                        {option}
+                                      </option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  normalizeHolidayReligion(holiday.religion)
                                 )}
                               </td>
                             ) : null}
@@ -857,6 +925,37 @@ export function HolidaysPanel() {
                       required
                     />
                   </label>
+
+                  {showReligionColumn ? (
+                    <>
+                      <label className="field">
+                        <span className="field-label">Religion</span>
+                        <select
+                          className="field-input field-select"
+                          value={editor.religion}
+                          disabled={saving}
+                          onChange={(event) =>
+                            setEditor({
+                              ...editor,
+                              religion: normalizeHolidayReligion(
+                                event.target.value,
+                              ),
+                            })
+                          }
+                        >
+                          {religionOptions.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <p className="lookup-hint">
+                        Team holiday email: All = every User Management user;
+                        Muslim / Christian / Hindu = that religion only.
+                      </p>
+                    </>
+                  ) : null}
 
                   {showRegionColumn ? (
                     <>

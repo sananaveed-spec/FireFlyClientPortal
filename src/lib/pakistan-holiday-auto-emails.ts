@@ -14,6 +14,7 @@ import {
   buildPakistanHolidayEmailPlans,
   collectPakistanHolidayClientRecipientGroups,
   filterProfilesInResourceAllocation,
+  filterTeamEmailsByHolidayReligion,
   normalizePakistanHolidayEmailsStore,
   PAKISTAN_HOLIDAY_CLIENT_EMAIL_TEMPLATE_ID,
   PAKISTAN_HOLIDAY_EMAIL_SENDER,
@@ -191,9 +192,6 @@ export async function runPakistanHolidayAutoEmails(options?: {
     entries: store.entries.filter((entry) => entry.status === "sent"),
   };
 
-  const teamRecipients = users
-    .map((user) => user.email.trim())
-    .filter(Boolean);
   // Client notices: Resource Allocation clients only (not every Client Profile).
   const raProfiles = filterProfilesInResourceAllocation(
     profiles,
@@ -258,7 +256,7 @@ export async function runPakistanHolidayAutoEmails(options?: {
 
     const recipients =
       plan.audience === "team"
-        ? teamRecipients
+        ? filterTeamEmailsByHolidayReligion(users, plan.religion)
         : (plan.recipients ?? []).filter(Boolean);
     if (recipients.length === 0) {
       result.skipped.push({

@@ -1,6 +1,16 @@
 import { applyPeriodPlaceholder } from "@/lib/email-templates";
-import { formatHolidayDate, type HolidayEntry } from "@/lib/holidays";
-import { isValidEmail, normalizeEmail } from "@/lib/portal-users";
+import {
+  formatHolidayDate,
+  HOLIDAY_RELIGION_ALL,
+  normalizeHolidayReligion,
+  type HolidayEntry,
+  type HolidayReligion,
+} from "@/lib/holidays";
+import {
+  isValidEmail,
+  normalizeEmail,
+  type PortalUser,
+} from "@/lib/portal-users";
 import {
   CLIENT_SEND_HOUR,
   resolveClientTimeZone,
@@ -39,6 +49,8 @@ export type PakistanHolidayEmailGroup = {
   /** Display name for the series (e.g. "Eid-ul-Fitr"). */
   seriesName: string;
   holidays: HolidayEntry[];
+  /** Team email audience from holiday Religion (All / Muslim / …). */
+  religion: HolidayReligion;
 };
 
 export type PakistanHolidayEmailPlan = {
@@ -58,6 +70,8 @@ export type PakistanHolidayEmailPlan = {
   recipients?: string[];
   /** IANA zone used for sendAt (client plans). */
   timeZone?: string;
+  /** Team plans: User Management religion filter (All = everyone). */
+  religion?: HolidayReligion;
 };
 
 export type PakistanHolidayClientRecipientGroup = {
@@ -201,6 +215,10 @@ function seriesDisplayName(holidays: HolidayEntry[]): string {
   return baseLabel;
 }
 
+function holidayGroupReligion(holidays: HolidayEntry[]): HolidayReligion {
+  return normalizeHolidayReligion(holidays[0]?.religion);
+}
+
 function groupKeyForHolidays(holidays: HolidayEntry[]): string {
   const firstDate = holidays[0]!.date;
   const year = firstDate.slice(0, 4) || "0000";
@@ -209,7 +227,30 @@ function groupKeyForHolidays(holidays: HolidayEntry[]): string {
       holidays.map((item) => slugSeriesKey(pakistanHolidaySeriesKey(item.name))),
     ),
   ].filter(Boolean);
-  return `${year}:${bases.join("+") || "holiday"}`;
+  const religion = slugSeriesKey(holidayGroupReligion(holidays));
+  return `${year}:${bases.join("+") || "holiday"}:${religion || "all"}`;
+}
+
+/** Team BCC list from User Management, filtered by holiday Religion. */
+export function filterTeamEmailsByHolidayReligion(
+  users: ReadonlyArray<Pick<PortalUser, "email" | "religion">>,
+  holidayReligion: string | undefined,
+): string[] {
+  const religion = normalizeHolidayReligion(holidayReligion);
+  const emails = new Set<string>();
+  for (const user of users) {
+    const email = String(user.email ?? "").trim();
+    if (!email) {
+      continue;
+    }
+    if (religion !== HOLIDAY_RELIGION_ALL) {
+      if (String(user.religion ?? "").trim() !== religion) {
+        continue;
+      }
+    }
+    emails.add(email);
+  }
+  return [...emails].sort((a, b) => a.localeCompare(b));
 }
 
 /**
@@ -221,6 +262,9 @@ function shouldMergeHolidayIntoRun(
   holiday: HolidayEntry,
 ): boolean {
   const last = run[run.length - 1]!;
+  if (holidayGroupReligion([last]) !== holidayGroupReligion([holiday])) {
+    return false;
+  }
   const sameSeries =
     pakistanHolidaySeriesKey(last.name) ===
     pakistanHolidaySeriesKey(holiday.name);
@@ -285,7 +329,8 @@ export function groupPakistanHolidaysForEmail(
     }
     const seriesKey = pakistanHolidaySeriesKey(run[0]!.name);
     const year = run[0]!.date.slice(0, 4) || "0000";
-    const mapKey = `${year}:${seriesKey}`;
+    const religion = holidayGroupReligion(run);
+    const mapKey = `${year}:${seriesKey}:${religion}`;
     const list = bySeries.get(mapKey) ?? [];
     list.push(...run);
     bySeries.set(mapKey, list);
@@ -300,6 +345,7 @@ export function groupPakistanHolidaysForEmail(
         groupKey: groupKeyForHolidays(holidaysInGroup),
         seriesName: seriesDisplayName(holidaysInGroup),
         holidays: holidaysInGroup,
+        religion: holidayGroupReligion(holidaysInGroup),
       };
     }),
     ...[...bySeries.values()].map((list) => {
@@ -308,6 +354,7 @@ export function groupPakistanHolidaysForEmail(
         groupKey: groupKeyForHolidays(ordered),
         seriesName: seriesDisplayName(ordered),
         holidays: ordered,
+        religion: holidayGroupReligion(ordered),
       };
     }),
   ];
@@ -805,6 +852,7 @@ export function buildPakistanHolidayEmailPlans(
         markAs,
         recipients: extras?.recipients,
         timeZone: extras?.timeZone,
+        religion: audience === "team" ? group.religion : undefined,
       });
     };
 

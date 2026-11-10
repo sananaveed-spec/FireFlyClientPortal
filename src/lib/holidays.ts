@@ -5,6 +5,18 @@ export type HolidayCountryId = "pakistan" | "unitedStates" | "canada";
 /** Federal / nationwide scope for US states or Canadian provinces. */
 export const HOLIDAY_STATE_ALL = "All";
 
+/** Pakistan team-email audience: All users, or one religion from User Management. */
+export const HOLIDAY_RELIGION_ALL = "All";
+
+export const HOLIDAY_RELIGIONS = [
+  "All",
+  "Muslim",
+  "Christian",
+  "Hindu",
+] as const;
+
+export type HolidayReligion = (typeof HOLIDAY_RELIGIONS)[number];
+
 export type HolidayOrigin = "auto" | "manual";
 
 export type HolidayEntry = {
@@ -17,6 +29,11 @@ export type HolidayEntry = {
    * Omitted / unused for other countries.
    */
   state?: string;
+  /**
+   * Pakistan: which User Management religion gets the team holiday email.
+   * All = every portal user; Muslim / Christian / Hindu = that religion only.
+   */
+  religion?: HolidayReligion;
   /**
    * auto = system year-shift / rollover placeholder.
    * manual = person created or edited the date (lunar verified).
@@ -49,6 +66,21 @@ function makeId(prefix: string) {
 
 export function holidayUsesRegion(countryId: HolidayCountryId): boolean {
   return countryId === "unitedStates" || countryId === "canada";
+}
+
+export function holidayUsesReligion(countryId: HolidayCountryId): boolean {
+  return countryId === "pakistan";
+}
+
+export function normalizeHolidayReligion(value: unknown): HolidayReligion {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed || trimmed.toLowerCase() === "all") {
+    return HOLIDAY_RELIGION_ALL;
+  }
+  const match = HOLIDAY_RELIGIONS.find(
+    (item) => item.toLowerCase() === trimmed.toLowerCase(),
+  );
+  return match ?? HOLIDAY_RELIGION_ALL;
 }
 
 export function getHolidayRegionLabel(countryId: HolidayCountryId): string {
@@ -95,6 +127,7 @@ export function createHolidayEntry(
   state?: string,
   countryId: HolidayCountryId = "unitedStates",
   origin: HolidayOrigin = "manual",
+  religion?: string,
 ): HolidayEntry {
   const entry: HolidayEntry = {
     id: makeId("holiday"),
@@ -104,6 +137,9 @@ export function createHolidayEntry(
   };
   if (state !== undefined) {
     entry.state = normalizeHolidayState(state, countryId);
+  }
+  if (holidayUsesReligion(countryId)) {
+    entry.religion = normalizeHolidayReligion(religion);
   }
   return entry;
 }
@@ -221,6 +257,9 @@ function seedHolidays(
     if (holidayUsesRegion(countryId)) {
       holiday.state = HOLIDAY_STATE_ALL;
     }
+    if (holidayUsesReligion(countryId)) {
+      holiday.religion = HOLIDAY_RELIGION_ALL;
+    }
     return holiday;
   });
 }
@@ -288,6 +327,9 @@ export function normalizeHolidays(value: unknown): HolidaysStore {
             }
             if (holidayUsesRegion(countryId)) {
               entry.state = normalizeHolidayState(holiday.state, countryId);
+            }
+            if (holidayUsesReligion(countryId)) {
+              entry.religion = normalizeHolidayReligion(holiday.religion);
             }
             return entry;
           })
