@@ -502,6 +502,186 @@ export function upsertClientRequestList(
   return { lists: [...without, synced] };
 }
 
+/** BD5 schedule id paired with a BD1 request-type list. */
+export function bd5ScheduleIdForBd1List(bd1ScheduleId: string): string {
+  return bd1ScheduleId === "bd1-other-statements"
+    ? "bd5-other-statements"
+    : "bd5";
+}
+
+export function bd1ScheduleIdForRequestType(
+  otherStatements: boolean,
+): "bd1" | "bd1-other-statements" {
+  return otherStatements ? "bd1-other-statements" : "bd1";
+}
+
+/**
+ * After BD1 email send: freeze that month’s request labels onto BD5
+ * (non-editable snapshot). First snapshot for the month wins — BD1 is
+ * once-per-month. Late/Complete on BD5 never writes back to BD1.
+ *
+ * `preserveStatusesFromBd1`: for backfill when Late was already marked on
+ * the shared BD1 rows before snapshots existed.
+ */
+export function snapshotBd1ToBd5ForMonth(
+  store: ClientRequestListsStore,
+  clientId: string,
+  monthKey: string,
+  options: {
+    otherStatements: boolean;
+    preserveStatusesFromBd1?: boolean;
+  },
+): { store: ClientRequestListsStore; created: boolean } {
+  const id = clientId.trim();
+  const month = monthKey.trim();
+  if (!id || !/^\d{4}-\d{2}$/.test(month)) {
+    return { store, created: false };
+  }
+
+  const sourceId = bd1ScheduleIdForRequestType(options.otherStatements);
+  const targetId = bd5ScheduleIdForBd1List(sourceId);
+  const source = getClientRequestList(store, id, sourceId);
+  const target = getClientRequestList(store, id, targetId);
+
+  const existingBd5ForMonth = target.actionItems.filter(
+    (item) => item.monthKey === month,
+  );
+  if (existingBd5ForMonth.length > 0) {
+    return { store, created: false };
+  }
+
+  const periodRequests = requestItemsForMonth(source.requestItems, month);
+  const labelSources =
+    periodRequests.length > 0
+      ? periodRequests
+      : source.requestItems.filter((item) => item.label.trim());
+  // Prefer unique labels in list order.
+  const labels: string[] = [];
+  const seen = new Set<string>();
+  for (const item of labelSources) {
+    const label = item.label.trim();
+    const key = label.toLowerCase();
+    if (!label || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    labels.push(label);
+  }
+  // Fall back to BD1 action labels for the month if request bullets missing.
+  if (labels.length === 0) {
+    for (const item of source.actionItems) {
+      if (item.monthKey !== month) {
+        continue;
+      }
+      const label = item.label.trim();
+      const key = label.toLowerCase();
+      if (!label || seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      labels.push(label);
+    }
+  }
+  if (labels.length === 0) {
+    return { store, created: false };
+  }
+
+  const bd1ByLabel = new Map<string, ActionWorkflowItem>();
+  if (options.preserveStatusesFromBd1) {
+    for (const item of source.actionItems) {
+      if (item.monthKey !== month) {
+        continue;
+      }
+      const key = item.label.trim().toLowerCase();
+      if (!key) {
+        continue;
+      }
+      const existing = bd1ByLabel.get(key);
+      if (
+        !existing ||
+        (existing.status === "action" && item.status !== "action")
+      ) {
+        bd1ByLabel.set(key, item);
+      }
+    }
+  }
+
+  const newRequests: RequestBulletItem[] = labels.map((label) => ({
+    id: makeItemId("req"),
+    label,
+    createdMonth: month,
+  }));
+  const newActions: ActionWorkflowItem[] = newRequests.map((req) => {
+    const fromBd1 = bd1ByLabel.get(req.label.toLowerCase());
+    const status =
+      options.preserveStatusesFromBd1 && fromBd1
+        ? fromBd1.status
+        : ("action" as const);
+    return {
+      id: makeItemId("act"),
+      label: req.label,
+      sourceRequestId: `bd5-snap:${req.id}`,
+      monthKey: month,
+      status,
+      completedAt:
+        status === "action"
+          ? ""
+          : fromBd1?.completedAt || new Date().toISOString(),
+    };
+  });
+
+  const nextTarget: ClientRequestList = {
+    clientId: id,
+    scheduleId: targetId,
+    requestItems: [
+      ...target.requestItems.filter((item) => item.createdMonth !== month),
+      ...newRequests,
+    ],
+    actionItems: [
+      ...target.actionItems.filter((item) => item.monthKey !== month),
+      ...newActions,
+    ],
+    lastPromotedMonth: target.lastPromotedMonth || month,
+  };
+
+  return {
+    store: upsertClientRequestList(store, nextTarget),
+    created: true,
+  };
+}
+
+/** BD5 Late only (what BD7 / cron use) — never BD1. */
+export function getBd5LateActionItemsForMonth(
+  store: ClientRequestListsStore,
+  clientId: string,
+  monthKey: string,
+): ActionWorkflowItem[] {
+  const id = clientId.trim();
+  const month = monthKey.trim();
+  if (!id || !month) {
+    return [];
+  }
+  const lateByKey = new Map<string, ActionWorkflowItem>();
+  for (const scheduleId of ["bd5", "bd5-other-statements"]) {
+    const list = getClientRequestList(store, id, scheduleId);
+    for (const item of list.actionItems) {
+      if (item.monthKey !== month || item.status !== "late") {
+        continue;
+      }
+      const labelKey = item.label.trim().toLowerCase() || item.id;
+      const key = `${labelKey}::${item.monthKey}`;
+      if (!lateByKey.has(key)) {
+        lateByKey.set(key, item);
+      }
+    }
+  }
+  return Array.from(lateByKey.values()).sort((a, b) => {
+    const aTime = Date.parse(a.completedAt) || 0;
+    const bTime = Date.parse(b.completedAt) || 0;
+    return bTime - aTime;
+  });
+}
+
 export function createRequestBulletItem(
   label: string,
   now: Date = new Date(),

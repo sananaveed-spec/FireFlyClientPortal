@@ -51,9 +51,11 @@ import {
   BD13_LATE_SOURCE_PREFIX,
   BD9_EXCEL_SOURCE_PREFIX,
   currentMonthKey,
+  getBd5LateActionItemsForMonth,
   getClientRequestList,
   normalizeClientRequestListsStore,
   requestItemsForMonth,
+  snapshotBd1ToBd5ForMonth,
   type ActionWorkflowItem,
   type ClientRequestListsStore,
 } from "@/lib/client-request-lists";
@@ -78,6 +80,7 @@ import {
   readResourceClients,
   writeBd15EmailStatusFile,
   writeBdAutoEmailStatusFile,
+  writeClientRequestListsFile,
 } from "@/lib/data-store";
 import {
   applyPeriodPlaceholder,
@@ -250,21 +253,20 @@ function requestListScheduleIdForBd1(profile: ClientProfileEntry): string {
     : "bd1";
 }
 
+/** Late items for BD7 / BD10 BD7-status half — BD5 snapshot only. */
 function getBd5LateItems(
   store: ClientRequestListsStore,
   clientId: string,
   monthKey: string,
 ): ActionWorkflowItem[] {
-  const lateById = new Map<string, ActionWorkflowItem>();
-  for (const scheduleId of ["bd5", "bd5-other-statements"]) {
-    const list = getClientRequestList(store, clientId, scheduleId);
-    for (const item of list.actionItems) {
-      if (item.monthKey === monthKey && item.status === "late") {
-        lateById.set(item.id, item);
-      }
-    }
-  }
-  return Array.from(lateById.values());
+  return getBd5LateActionItemsForMonth(store, clientId, monthKey);
+}
+
+function isOtherStatementsProfile(profile: ClientProfileEntry): boolean {
+  return (
+    bd1TemplateToRequestTypeId(normalizeBd1Template(profile.bd1Template)) ===
+    "other-statements"
+  );
 }
 
 /** BD10: Late from BD5 (BD7 Status Check) + BD9 Excel Status Check. */
@@ -648,7 +650,8 @@ export async function runBdAutoEmails(options?: {
   ]);
 
   const users = parsePortalUsers(usersRaw);
-  const requestLists = normalizeClientRequestListsStore(requestListsRaw);
+  let requestLists = normalizeClientRequestListsStore(requestListsRaw);
+  let requestListsDirty = false;
   const scheduleSettings =
     normalizeClientScheduleSettingsStore(scheduleSettingsRaw);
   const monthKey = currentMonthKey(now);
@@ -803,6 +806,20 @@ export async function runBdAutoEmails(options?: {
       }
 
       if (scheduleId === "bd7") {
+        // Backfill BD5 snapshot if BD1 already sent before snapshots existed.
+        const ensured = snapshotBd1ToBd5ForMonth(
+          requestLists,
+          resource.id,
+          monthKey,
+          {
+            otherStatements: isOtherStatementsProfile(profile),
+            preserveStatusesFromBd1: true,
+          },
+        );
+        if (ensured.created) {
+          requestLists = ensured.store;
+          requestListsDirty = true;
+        }
         const late = getBd5LateItems(requestLists, resource.id, monthKey);
         if (late.length === 0) {
           result.skipped.push({
@@ -1018,6 +1035,21 @@ export async function runBdAutoEmails(options?: {
           fromEmail: supervisorEmail,
           source: "auto-cron",
         });
+        if (scheduleId === "bd1") {
+          const snap = snapshotBd1ToBd5ForMonth(
+            requestLists,
+            resource.id,
+            monthKey,
+            {
+              otherStatements: isOtherStatementsProfile(profile),
+              preserveStatusesFromBd1: false,
+            },
+          );
+          if (snap.created) {
+            requestLists = snap.store;
+            requestListsDirty = true;
+          }
+        }
         if (scheduleId === "bd15" || scheduleId === "bd18") {
           bd15StatusStore = markBd15EmailSent(
             bd15StatusStore,
@@ -1060,6 +1092,9 @@ export async function runBdAutoEmails(options?: {
   }
 
   await writeBdAutoEmailStatusFile(statusStore);
+  if (requestListsDirty) {
+    await writeClientRequestListsFile(requestLists);
+  }
   if (bd15StatusDirty) {
     await writeBd15EmailStatusFile(bd15StatusStore);
   }

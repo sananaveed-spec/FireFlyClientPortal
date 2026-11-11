@@ -97,6 +97,7 @@ import {
   createEmptyRequestListsStore,
   currentMonthKey,
   findListContainingActionItem,
+  getBd5LateActionItemsForMonth,
   getClientActionItems,
   getClientRequestList,
   normalizeClientRequestListsStore,
@@ -104,6 +105,7 @@ import {
   reopenActionItem,
   requestItemsForMonth,
   setActionItemStatus,
+  snapshotBd1ToBd5ForMonth,
   syncBd9ExcelRowsToActionItems,
   syncBd13LateItemsFromSources,
   updateRequestBulletLabel,
@@ -691,6 +693,13 @@ function requestTypeScheduleIds(subMenuId: Bd1SubMenuId): string[] {
     : ["bd1", "bd5"];
 }
 
+/** BD5 snapshot lists only (what was sent on BD1 — used by BD5 / BD7). */
+function bd5OnlyScheduleIds(subMenuId: Bd1SubMenuId): string[] {
+  return subMenuId === "other-statements"
+    ? ["bd5-other-statements"]
+    : ["bd5"];
+}
+
 /** BD9 Excel rows from BD8 attachment; BD10 uses Late from this list. */
 const BD9_EXCEL_SCHEDULE_IDS = ["bd9"] as const;
 /** BD13 local mirrors of BD10 late items (Completed/Late stay on BD13 only). */
@@ -734,36 +743,6 @@ function getActionItemsForRequestType(
     clientId,
     requestTypeScheduleIds(subMenuId),
   );
-}
-
-/** BD5 Late items across both request types (what BD7 / BD9 BD7 Status Check list). */
-function getBd5LateActionItemsForMonth(
-  store: ClientRequestListsStore,
-  clientId: string,
-  monthKey: string,
-): ActionWorkflowItem[] {
-  const month = monthKey.trim();
-  if (!clientId.trim() || !month) {
-    return [];
-  }
-  const lateById = new Map<string, ActionWorkflowItem>();
-  for (const subMenu of BD1_SUB_MENUS) {
-    for (const item of getActionItemsForRequestType(
-      store,
-      clientId,
-      subMenu.id,
-    )) {
-      if (item.monthKey !== month || item.status !== "late") {
-        continue;
-      }
-      lateById.set(item.id, item);
-    }
-  }
-  return Array.from(lateById.values()).sort((a, b) => {
-    const aTime = Date.parse(a.completedAt) || 0;
-    const bTime = Date.parse(b.completedAt) || 0;
-    return bTime - aTime;
-  });
 }
 
 /** Merge Late lists for BD10 (BD7 Status Check + BD8 Excel Status Check). */
@@ -2222,11 +2201,12 @@ export function ClientManagementPanel() {
     const dueDate = emailDeadlineLabel;
     const emailMonthKey = currentMonthKey(periodDate);
     const workingMonthKey = currentMonthKey(scheduleNow);
+    // BD7 email Late list = BD5 snapshot only (not BD1 working rows).
     const typeActionItemsForMonth = (monthKey: string) =>
-      getActionItemsForRequestType(
+      getActionItemsForSchedules(
         requestLists,
         selectedClientId,
-        requestTypeId,
+        bd5OnlyScheduleIds(requestTypeId),
       ).filter((item) => item.monthKey === monthKey);
     // Prefer period month; fall back to calendar/demo month (where BD5 Late lives).
     const typeActionItemsPeriod = typeActionItemsForMonth(emailMonthKey);
@@ -2923,13 +2903,20 @@ export function ClientManagementPanel() {
           ? bd9ExcelActionItems.filter((item) =>
               item.sourceRequestId.startsWith(BD9_EXCEL_SOURCE_PREFIX),
             )
-          : showRequestTypeChooser && selected
-            ? getActionItemsForRequestType(
+          : (showBd5Content || showBd7Content) && selected
+            ? // BD5 snapshot only (frozen on BD1 send) — not editable BD1 rows.
+              getActionItemsForSchedules(
                 requestLists,
                 selected.resource.id,
-                requestTypeId,
+                bd5OnlyScheduleIds(requestTypeId),
               )
-            : sharedActionItems,
+            : showRequestTypeChooser && selected
+              ? getActionItemsForRequestType(
+                  requestLists,
+                  selected.resource.id,
+                  requestTypeId,
+                )
+              : sharedActionItems,
   );
 
   // Sync BD8 Excel rows onto the BD9 action list for Completed/Late review.
@@ -3698,6 +3685,40 @@ export function ClientManagementPanel() {
     }
   }
 
+  // BD5/BD7: ensure BD5 snapshot exists (from BD1 send). Backfills older months
+  // where Late lived on BD1 before snapshots existed.
+  useEffect(() => {
+    if (!selected || (!showBd5Content && !showBd7Content)) {
+      return;
+    }
+    const otherStatements = requestTypeId === "other-statements";
+    const { store, created } = snapshotBd1ToBd5ForMonth(
+      requestLists,
+      selected.resource.id,
+      scheduleMonthKey,
+      { otherStatements, preserveStatusesFromBd1: true },
+    );
+    if (!created) {
+      return;
+    }
+    const targetId = otherStatements
+      ? "bd5-other-statements"
+      : "bd5";
+    const nextList = getClientRequestList(
+      store,
+      selected.resource.id,
+      targetId,
+    );
+    void persistList(nextList);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- persist once when snapshot missing
+  }, [
+    selected?.resource.id,
+    showBd5Content,
+    showBd7Content,
+    scheduleMonthKey,
+    requestTypeId,
+  ]);
+
   function requireActiveSchedule(actionLabel = "perform this action"): boolean {
     if (isSelectedScheduleActive) {
       return true;
@@ -4202,12 +4223,18 @@ export function ClientManagementPanel() {
       setError("This business day is Inactive. Fill the star to activate it.");
       return;
     }
-    const owner =
-      findListContainingActionItem(
-        requestLists,
-        selected.resource.id,
-        itemId,
-      ) ?? activeList;
+    // BD5 Complete/Late must update the BD5 snapshot list only — never BD1.
+    const owner = showBd5Content
+      ? getClientRequestList(
+          requestLists,
+          selected.resource.id,
+          requestTypeScheduleId("bd5", requestTypeId),
+        )
+      : (findListContainingActionItem(
+          requestLists,
+          selected.resource.id,
+          itemId,
+        ) ?? activeList);
     // Allow Completed/Late on already-resolved rows (e.g. BD13 late review).
     await persistList(setActionItemStatus(owner, itemId, status));
   }
@@ -4367,12 +4394,17 @@ export function ClientManagementPanel() {
     if (!requireActiveSchedule("update action items")) {
       return;
     }
-    const owner =
-      findListContainingActionItem(
-        requestLists,
-        selected.resource.id,
-        itemId,
-      ) ?? activeList;
+    const owner = showBd5Content
+      ? getClientRequestList(
+          requestLists,
+          selected.resource.id,
+          requestTypeScheduleId("bd5", requestTypeId),
+        )
+      : (findListContainingActionItem(
+          requestLists,
+          selected.resource.id,
+          itemId,
+        ) ?? activeList);
     await persistList(reopenActionItem(owner, itemId));
   }
 
@@ -5321,8 +5353,8 @@ export function ClientManagementPanel() {
                           ) : null}
                           {showBd7Content ? (
                             <p className="bd1-workflow-kicker">
-                              Late Action Items shows only items marked Late on
-                              BD5 for the selected request type.
+                              Late Action Items shows items marked Late on the
+                              BD5 snapshot (frozen when BD1 email was sent).
                             </p>
                           ) : null}
                           {showBd10OrBd13Content && bd10LateStatusHint ? (
@@ -6039,6 +6071,12 @@ export function ClientManagementPanel() {
                               <>
                                 <div className="bd5-action-toolbar">
                                   <p className="lookup-hint">
+                                    BD5 is a locked copy of the BD1 list from
+                                    when BD1 email was sent. Labels cannot be
+                                    edited — mark Complete or Late only. Late
+                                    here is what BD7 emails.
+                                  </p>
+                                  <p className="lookup-hint">
                                     SharePoint auto-check is paused until search
                                     logic is defined for this client’s folder
                                     files.
@@ -6065,7 +6103,9 @@ export function ClientManagementPanel() {
                                   ? "No late BD9 items found."
                                   : showBd13Content
                                     ? "No late or completed BD13 items found."
-                                    : "No action items for this type yet."}
+                                    : showBd5Content
+                                      ? "No BD5 list yet. It appears after BD1 email is sent for this month (locked copy of what was sent)."
+                                      : "No action items for this type yet."}
                               </p>
                             ) : (
                               <div className="table-wrap bd5-action-table-wrap">
@@ -6243,7 +6283,8 @@ export function ClientManagementPanel() {
                           <>
                             {bd7LateItems.length === 0 ? (
                               <p className="lookup-hint">
-                                No late action items for BD5 found.
+                                No BD5 Late items for this month. Mark Late on
+                                BD5 after BD1 has been sent.
                               </p>
                             ) : (
                               <div className="table-wrap bd5-action-table-wrap">
@@ -6455,7 +6496,7 @@ export function ClientManagementPanel() {
                           ) : showBd7Content ? (
                             <>
                               Subject and body are filled from Email Template 3
-                              (BD7). Late Action Items come from BD5 for the
+                              (BD7). Late Action Items come from the BD5 snapshot for the
                               selected request type. To is the client POC email.
                               Schedule only from the supervisor account (Admins
                               view only; no Send Now).
@@ -6756,7 +6797,9 @@ export function ClientManagementPanel() {
                             <span className="lookup-hint">
                               {showEpsFridayWeek
                                 ? `${selectedSchedule.label} auto-sends at 10:50 am client time on that Friday from the supervisor mailbox (server cron). One EPS Fridays star enables all weeks. Schedule is disabled.`
-                                : `${selectedScheduleId.toUpperCase()} auto-sends at 9:00 am client time on its BD date from the supervisor mailbox (server cron). Schedule is disabled for everyone.`}
+                                : showBd1TypeContent
+                                  ? `BD1 auto-sends once per month at 9:00 am client time from the supervisor mailbox (server cron). After send, a locked BD5 copy is created for Complete/Late. Schedule is disabled.`
+                                  : `${selectedScheduleId.toUpperCase()} auto-sends at 9:00 am client time on its BD date from the supervisor mailbox (server cron). Schedule is disabled for everyone.`}
                             </span>
                           ) : null}
                         </div>
