@@ -1,15 +1,29 @@
 /**
- * Client Info — Annual Tasks checklist (Ignition Tax / Tax Compliance services).
+ * Client Info — Annual Tasks checklist.
+ * Income Tax Compliance Service(s) proposal heading seeds fixed bullets;
+ * due dates are set by assigned users (not auto-parsed from proposal text).
  */
 
 export const ANNUAL_TAX_TASK_SOURCE = "ignition_tax" as const;
+
+/** Fixed Annual Tasks for Income Tax Compliance Service(s) heading. */
+export const INCOME_TAX_COMPLIANCE_ANNUAL_TASK_DEFINITIONS = [
+  {
+    kind: "income_tax_compliance:corporate-return",
+    label: "Annual corporate income tax return preparation and filing.",
+  },
+  {
+    kind: "income_tax_compliance:personal-return",
+    label: "Annual personal income tax return preparation and filing.",
+  },
+] as const;
 
 export type AnnualTaskItem = {
   id: string;
   /** Stable key for default tax services; empty for user-added. */
   kind: string;
   label: string;
-  /** ISO date YYYY-MM-DD when known. */
+  /** ISO date YYYY-MM-DD when set by an assigned user. */
   dueDate: string;
   completed: boolean;
   completedAt: string;
@@ -20,113 +34,8 @@ export type AnnualTaskItem = {
   proposalSlug: string;
 };
 
-const MONTH_INDEX: Record<string, number> = {
-  january: 1,
-  february: 2,
-  march: 3,
-  april: 4,
-  may: 5,
-  june: 6,
-  july: 7,
-  august: 8,
-  september: 9,
-  october: 10,
-  november: 11,
-  december: 12,
-};
-
 export function createAnnualTaskId() {
   return `ant-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-export function annualTaxTaskKind(serviceName: string): string {
-  const slug = serviceName
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
-  return `tax_service:${slug || "item"}`;
-}
-
-export function isTaxServiceGroupName(groupName: string): boolean {
-  const name = groupName.trim().toLowerCase();
-  if (!name) {
-    return false;
-  }
-  return (
-    /tax\s*compliance/.test(name) ||
-    /tax\s*services?/.test(name) ||
-    name === "tax" ||
-    /^tax\b/.test(name)
-  );
-}
-
-/** Strip tags for due-date parsing. */
-export function stripHtmlToText(html: string): string {
-  return String(html ?? "")
-    .replace(/<br\s*\/?>/gi, " ")
-    .replace(/<\/p>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-/**
- * Parse due dates like "15th of March 2027", "March 15, 2027", "15 March 2027".
- */
-export function parseDueDateFromText(text: string): string {
-  const raw = stripHtmlToText(text);
-  if (!raw) {
-    return "";
-  }
-
-  const monthNames = Object.keys(MONTH_INDEX).join("|");
-
-  const patterns = [
-    new RegExp(
-      `due date is\\s+(\\d{1,2})(?:st|nd|rd|th)?\\s+of\\s+(${monthNames})\\s+(\\d{4})`,
-      "i",
-    ),
-    new RegExp(
-      `due\\s*(?:date)?\\s*(?:is|:)?\\s*(\\d{1,2})(?:st|nd|rd|th)?\\s+(${monthNames})\\s+(\\d{4})`,
-      "i",
-    ),
-    new RegExp(
-      `(${monthNames})\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,)?\\s+(\\d{4})`,
-      "i",
-    ),
-    /(\d{4})-(\d{2})-(\d{2})/,
-  ];
-
-  for (const pattern of patterns) {
-    const match = raw.match(pattern);
-    if (!match) {
-      continue;
-    }
-    if (pattern.source.startsWith("(\\d{4})")) {
-      return `${match[1]}-${match[2]}-${match[3]}`;
-    }
-    if (MONTH_INDEX[String(match[1] ?? "").toLowerCase()]) {
-      const month = MONTH_INDEX[String(match[1]).toLowerCase()]!;
-      const day = Number(match[2]);
-      const year = Number(match[3]);
-      if (day >= 1 && day <= 31 && year >= 2000) {
-        return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-      }
-      continue;
-    }
-    const day = Number(match[1]);
-    const month = MONTH_INDEX[String(match[2] ?? "").toLowerCase()];
-    const year = Number(match[3]);
-    if (month && day >= 1 && day <= 31 && year >= 2000) {
-      return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    }
-  }
-
-  return "";
 }
 
 export function formatAnnualDueDateLabel(dueDate: string): string {
@@ -202,9 +111,11 @@ export function annualTasksStatusLabel(tasks: AnnualTaskItem[]): string {
 export function isProtectedAnnualTask(
   task: Pick<AnnualTaskItem, "kind" | "source">,
 ): boolean {
+  const kind = String(task.kind ?? "");
   return (
     task.source === ANNUAL_TAX_TASK_SOURCE ||
-    String(task.kind ?? "").startsWith("tax_service:")
+    kind.startsWith("tax_service:") ||
+    kind.startsWith("income_tax_compliance:")
   );
 }
 
@@ -230,27 +141,6 @@ export function createManualAnnualTask(
     createdAt: new Date().toISOString(),
     source: "manual",
     proposalSlug: "",
-  };
-}
-
-export function createTaxServiceAnnualTask(input: {
-  serviceName: string;
-  descriptionHtml?: string;
-  proposalSlug?: string;
-}): AnnualTaskItem {
-  const label = input.serviceName.trim();
-  return {
-    id: createAnnualTaskId(),
-    kind: annualTaxTaskKind(label),
-    label,
-    dueDate: parseDueDateFromText(input.descriptionHtml || ""),
-    completed: false,
-    completedAt: "",
-    completedByName: "",
-    completedByEmail: "",
-    createdAt: new Date().toISOString(),
-    source: ANNUAL_TAX_TASK_SOURCE,
-    proposalSlug: (input.proposalSlug || "").trim(),
   };
 }
 
@@ -290,12 +180,23 @@ export function updateAnnualTaskFields(
   patch: { label?: string; dueDate?: string },
 ): AnnualTaskItem[] {
   return tasks.map((task) => {
-    if (task.id !== taskId || isProtectedAnnualTask(task)) {
+    if (task.id !== taskId) {
       return task;
+    }
+    // Default (protected) tasks: due date editable by assigned users; label locked.
+    if (isProtectedAnnualTask(task)) {
+      if (patch.dueDate === undefined) {
+        return task;
+      }
+      return {
+        ...task,
+        dueDate: patch.dueDate.trim(),
+      };
     }
     return {
       ...task,
-      label: patch.label !== undefined ? patch.label.trim() || task.label : task.label,
+      label:
+        patch.label !== undefined ? patch.label.trim() || task.label : task.label,
       dueDate:
         patch.dueDate !== undefined ? patch.dueDate.trim() : task.dueDate,
     };
@@ -352,38 +253,36 @@ export function mergeProtectedAnnualTasks(
 }
 
 /**
- * Append missing default tax-service annual tasks from Ignition services.
- * Does not remove or rewrite existing protected tasks (preserves completion).
+ * When proposal has Income Tax Compliance Service(s) heading, ensure the fixed
+ * annual checklist. Due dates start empty for assigned users to set.
  */
-export function ensureAnnualTasksFromTaxServices(
+export function ensureIncomeTaxComplianceAnnualTasks(
   tasks: AnnualTaskItem[],
-  taxServices: ReadonlyArray<{ name: string; descriptionHtml?: string }>,
   proposalSlug = "",
 ): AnnualTaskItem[] {
-  if (taxServices.length === 0) {
-    return tasks;
-  }
   const existingKinds = new Set(
     tasks.filter(isProtectedAnnualTask).map((task) => task.kind),
   );
   const additions: AnnualTaskItem[] = [];
-  for (const service of taxServices) {
-    const name = service.name.trim();
-    if (!name) {
+  const slug = proposalSlug.trim();
+  for (const def of INCOME_TAX_COMPLIANCE_ANNUAL_TASK_DEFINITIONS) {
+    if (existingKinds.has(def.kind)) {
       continue;
     }
-    const kind = annualTaxTaskKind(name);
-    if (existingKinds.has(kind)) {
-      continue;
-    }
-    existingKinds.add(kind);
-    additions.push(
-      createTaxServiceAnnualTask({
-        serviceName: name,
-        descriptionHtml: service.descriptionHtml,
-        proposalSlug,
-      }),
-    );
+    existingKinds.add(def.kind);
+    additions.push({
+      id: createAnnualTaskId(),
+      kind: def.kind,
+      label: def.label,
+      dueDate: "",
+      completed: false,
+      completedAt: "",
+      completedByName: "",
+      completedByEmail: "",
+      createdAt: new Date().toISOString(),
+      source: ANNUAL_TAX_TASK_SOURCE,
+      proposalSlug: slug,
+    });
   }
   return additions.length > 0 ? [...tasks, ...additions] : tasks;
 }

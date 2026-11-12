@@ -299,6 +299,23 @@ export function proposalHasFinancialReportingServicesHeading(
   return proposalHasExactHeading(services, isFinancialReportingHeadingText);
 }
 
+/** Exact: Income Tax Compliance Service / Income Tax Compliance Services. */
+export function isIncomeTaxComplianceHeadingText(value: string): boolean {
+  return /^income\s+tax\s+compliance\s+services?$/i.test(
+    normalizeHeadingText(value),
+  );
+}
+
+/**
+ * True when proposal has "Income Tax Compliance Service" or
+ * "Income Tax Compliance Services" (group/name or description HTML heading).
+ */
+export function proposalHasIncomeTaxComplianceServicesHeading(
+  services: ReadonlyArray<IgnitionServiceHeadingFields>,
+): boolean {
+  return proposalHasExactHeading(services, isIncomeTaxComplianceHeadingText);
+}
+
 /** @deprecated Use proposalHasBookkeepingServicesHeading */
 export function proposalServicesIncludeBookkeeping(
   services: ReadonlyArray<{ groupName?: string; name?: string }>,

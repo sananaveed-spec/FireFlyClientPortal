@@ -2388,6 +2388,27 @@ export function ResourceAllocationPanel() {
                               setTasksEditDueDate(event.target.value)
                             }
                           />
+                        ) : canEdit && isProtectedAnnualTask(task) ? (
+                          <input
+                            type="date"
+                            className="field-input annual-tasks-due-input"
+                            value={task.dueDate}
+                            disabled={tasksSaving}
+                            aria-label={`Due date for ${task.label}`}
+                            onChange={(event) => {
+                              if (!tasksDialog) {
+                                return;
+                              }
+                              const next = updateAnnualTaskFields(
+                                annualDraft,
+                                task.id,
+                                { dueDate: event.target.value },
+                              );
+                              void persistProfileTasks(tasksDialog.profileId, {
+                                annualTasks: next,
+                              });
+                            }}
+                          />
                         ) : (
                           <span className="annual-tasks-due-label">
                             {formatAnnualDueDateLabel(task.dueDate)}

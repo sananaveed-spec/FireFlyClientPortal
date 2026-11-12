@@ -7237,6 +7237,22 @@ export function ClientManagementPanel() {
                                 setAnnualTasksEditDueDate(event.target.value)
                               }
                             />
+                          ) : canEdit && isProtectedAnnualTask(task) ? (
+                            <input
+                              type="date"
+                              className="field-input annual-tasks-due-input"
+                              value={task.dueDate}
+                              disabled={annualTasksSaving}
+                              aria-label={`Due date for ${task.label}`}
+                              onChange={(event) => {
+                                const next = updateAnnualTaskFields(
+                                  annualTasksDraft,
+                                  task.id,
+                                  { dueDate: event.target.value },
+                                );
+                                void persistAnnualTasksDraft(next);
+                              }}
+                            />
                           ) : (
                             <span className="annual-tasks-due-label">
                               {formatAnnualDueDateLabel(task.dueDate)}
