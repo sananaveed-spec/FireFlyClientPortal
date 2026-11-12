@@ -1864,31 +1864,63 @@ export function ClientManagementPanel() {
     );
   }, [assignedClients, selectedId, portalUsers]);
 
-  /** Schedule email From = supervisor mailbox; only that account may send. */
-  const emailFrom = selectedSupervisorEmail;
+  /** Owner email from User Management (Position = Owner); fallback Ayesha. */
+  const scheduleOwnerCcEmail = useMemo(
+    () => resolveOwnerEmailFromPortalUsers(portalUsers),
+    [portalUsers],
+  );
+  const scheduleOwnerLabel = useMemo(() => {
+    const owner = portalUsers.find(
+      (user) => user.position?.trim().toLowerCase() === "owner",
+    );
+    if (owner) {
+      return (
+        formatStaffAssignmentLabel(owner.email, portalUsers) ||
+        owner.email.trim() ||
+        scheduleOwnerCcEmail
+      );
+    }
+    return scheduleOwnerCcEmail;
+  }, [portalUsers, scheduleOwnerCcEmail]);
+
+  /**
+   * Schedule email From:
+   * - Last 3/2/1 BD → Owner mailbox (ayesha@…)
+   * - All other schedule emails → supervisor mailbox
+   */
+  const emailFrom = showLastBdSchedule
+    ? scheduleOwnerCcEmail
+    : selectedSupervisorEmail;
+  const emailFromLabel = showLastBdSchedule
+    ? scheduleOwnerLabel || emailFrom
+    : selectedSupervisorLabel || emailFrom;
   const canSendAsSupervisor =
-    role !== "admin" &&
-    Boolean(selectedSupervisorEmail) &&
-    signedInEmail === selectedSupervisorEmail;
-  const emailSendBlockedReason = !selectedSupervisorEmail
-    ? "Assign a Supervisor (Primary) in Resource Management before sending."
+    role !== "admin" && Boolean(emailFrom) && signedInEmail === emailFrom;
+  const emailSendBlockedReason = !emailFrom
+    ? showLastBdSchedule
+      ? "Owner email missing in User Management (Position = Owner)."
+      : "Assign a Supervisor (Primary) in Resource Management before sending."
     : role === "admin"
-      ? `Admins can view schedules. Emails send only from the supervisor account (${selectedSupervisorLabel || selectedSupervisorEmail}).`
-      : signedInEmail !== selectedSupervisorEmail
-        ? `Only the supervisor can send. Sign in as ${selectedSupervisorLabel || selectedSupervisorEmail}.`
+      ? showLastBdSchedule
+        ? `Admins can view schedules. Last BD emails send only from the Owner account (${emailFromLabel}).`
+        : `Admins can view schedules. Emails send only from the supervisor account (${emailFromLabel}).`
+      : signedInEmail !== emailFrom
+        ? showLastBdSchedule
+          ? `Only the Owner can send Last BD email. Sign in as ${emailFromLabel}.`
+          : `Only the supervisor can send. Sign in as ${emailFromLabel}.`
         : null;
 
-  // Email body signature always follows the supervisor (From), not the viewer.
+  // Email body signature always follows the From mailbox, not the viewer.
   useEffect(() => {
     let cancelled = false;
-    async function loadSupervisorSignature() {
-      if (!selectedSupervisorEmail) {
+    async function loadFromMailboxSignature() {
+      if (!emailFrom) {
         setEmailSignature(createEmptyEmailSignature());
         return;
       }
       try {
         const response = await portalFetch(
-          `/api/email-signature?email=${encodeURIComponent(selectedSupervisorEmail)}`,
+          `/api/email-signature?email=${encodeURIComponent(emailFrom)}`,
           { cache: "no-store" },
         );
         const data = (await response.json()) as {
@@ -1909,11 +1941,11 @@ export function ClientManagementPanel() {
         }
       }
     }
-    void loadSupervisorSignature();
+    void loadFromMailboxSignature();
     return () => {
       cancelled = true;
     };
-  }, [selectedSupervisorEmail]);
+  }, [emailFrom]);
 
   useEffect(() => {
     if (assignedClients.length === 0) {
@@ -1941,11 +1973,6 @@ export function ClientManagementPanel() {
   const selectedPointOfContact =
     selected?.profile?.pointOfContact?.trim() || "";
   const selectedPocEmail = selected?.profile?.pocEmail?.trim() || "";
-  /** Owner email from User Management (Position = Owner). */
-  const scheduleOwnerCcEmail = useMemo(
-    () => resolveOwnerEmailFromPortalUsers(portalUsers),
-    [portalUsers],
-  );
   /** Client Profile Group ID used as CC (must look like an email). */
   const selectedGroupIdCc = useMemo(() => {
     const groupId = selected?.profile?.groupId?.trim() || "";
@@ -2582,17 +2609,19 @@ export function ClientManagementPanel() {
     ) {
       return;
     }
-    // From is the supervisor mailbox. BD1 To = client POC email (schedule only).
-    // Last N BD team reminder: To = supervisor, BCC = all portal users.
+    // From is the supervisor mailbox (Owner for Last BD). BD1 To = client POC.
+    // Last N BD team reminder: To = all User Management employees.
     if (showLastBdSchedule) {
-      const teamEmails = portalUsers
-        .map((user) => user.email.trim().toLowerCase())
-        .filter(Boolean);
-      const sender = emailFrom.trim().toLowerCase();
-      const bccList = teamEmails.filter((item) => item !== sender);
-      setEmailTo(sender || teamEmails[0] || "");
+      const teamEmails = [
+        ...new Set(
+          portalUsers
+            .map((user) => user.email.trim().toLowerCase())
+            .filter(Boolean),
+        ),
+      ];
+      setEmailTo(teamEmails.join(", "));
       setEmailCc("");
-      setEmailBcc(bccList.join(", "));
+      setEmailBcc("");
     } else if (
       showBd1TypeContent ||
       showBd7Content ||
@@ -6928,8 +6957,11 @@ export function ClientManagementPanel() {
                           ) : showLastBdSchedule ? (
                             <>
                               Subject and body are filled from Email Template 18
-                              (team end-of-month reminder). To is you; BCC is
-                              everyone in User Management.
+                              (team end-of-month reminder). From is the Owner
+                              ({scheduleOwnerCcEmail ||
+                                "ayesha@fireflyaccountancy.com"}
+                              ). To is every employee email from User
+                              Management.
                             </>
                           ) : showBd7Content ? (
                             <>
@@ -6966,24 +6998,38 @@ export function ClientManagementPanel() {
                             <span className="field-label">To</span>
                             <input
                               className={`field-input${
-                                bd1LikeEmailRecipients
+                                bd1LikeEmailRecipients || showLastBdSchedule
                                   ? " field-input--readonly"
                                   : ""
                               }`}
                               type="text"
                               inputMode="email"
                               value={emailTo}
-                              readOnly={bd1LikeEmailRecipients}
+                              readOnly={
+                                bd1LikeEmailRecipients || showLastBdSchedule
+                              }
                               disabled={bd15EmailAlreadySent}
                               onChange={(event) => {
-                                if (bd1LikeEmailRecipients) {
+                                if (
+                                  bd1LikeEmailRecipients ||
+                                  showLastBdSchedule
+                                ) {
                                   return;
                                 }
                                 setEmailTo(event.target.value);
                               }}
                               placeholder="email@example.com, email2@example.com"
                             />
-                            {bd1LikeEmailRecipients ? (
+                            {showLastBdSchedule ? (
+                              <span className="lookup-hint">
+                                Filled with every employee email from User
+                                Management
+                                {emailTo
+                                  ? ` (${emailTo.split(/[;,]+/).filter((e) => e.trim()).length})`
+                                  : " (none yet — add users under User Management)"}
+                                .
+                              </span>
+                            ) : bd1LikeEmailRecipients ? (
                               <span className="lookup-hint">
                                 {selectedPocEmail
                                   ? `Filled from Client Profile POC${
@@ -7002,13 +7048,19 @@ export function ClientManagementPanel() {
                               type="text"
                               value={
                                 emailFrom
-                                  ? selectedSupervisorLabel || emailFrom
-                                  : "No supervisor assigned"
+                                  ? emailFromLabel
+                                  : showLastBdSchedule
+                                    ? "No Owner email in User Management"
+                                    : "No supervisor assigned"
                               }
                               readOnly
                               tabIndex={-1}
                               aria-readonly="true"
-                              title="From is the Supervisor (Primary) mailbox from Resource Management"
+                              title={
+                                showLastBdSchedule
+                                  ? "From is the Owner mailbox (User Management Position = Owner)"
+                                  : "From is the Supervisor (Primary) mailbox from Resource Management"
+                              }
                             />
                             {emailSendBlockedReason ? (
                               <span className="lookup-hint">
@@ -7016,8 +7068,9 @@ export function ClientManagementPanel() {
                               </span>
                             ) : (
                               <span className="lookup-hint">
-                                Sends from the supervisor Microsoft account
-                                only.
+                                {showLastBdSchedule
+                                  ? "Sends from the Owner Microsoft account only."
+                                  : "Sends from the supervisor Microsoft account only."}
                               </span>
                             )}
                           </label>
@@ -7180,9 +7233,13 @@ export function ClientManagementPanel() {
                                     />
                                   ) : (
                                     <p className="lookup-hint email-signature-hint">
-                                      {selectedSupervisorEmail
-                                        ? `No signature for supervisor (${selectedSupervisorLabel || selectedSupervisorEmail}). They should set it under My Profile while signed in as that account.`
-                                        : "Assign a Supervisor in Resource Management to show their signature."}
+                                      {emailFrom
+                                        ? showLastBdSchedule
+                                          ? `No signature for Owner (${emailFromLabel}). They should set it under My Profile while signed in as that account.`
+                                          : `No signature for supervisor (${emailFromLabel}). They should set it under My Profile while signed in as that account.`
+                                        : showLastBdSchedule
+                                          ? "Owner email missing in User Management — cannot load signature."
+                                          : "Assign a Supervisor in Resource Management to show their signature."}
                                     </p>
                                   )}
                                 </>
