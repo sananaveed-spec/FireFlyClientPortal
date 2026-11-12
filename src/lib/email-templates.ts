@@ -450,7 +450,7 @@ Lets discuss these during our meeting.`,
   },
   {
     id: "template-23",
-    label: "Corporate Income Tax",
+    label: "Template 23",
     title: "Corporate Income Tax",
     whenSent:
       "On the Annual Task due date for corporate income tax return (automatic at 9:00 AM client time).",
@@ -467,7 +467,7 @@ Thank you.`,
   },
   {
     id: "template-24",
-    label: "Personal Income Tax",
+    label: "Template 24",
     title: "Personal Income Tax",
     whenSent:
       "On the Annual Task due date for personal income tax return (automatic at 9:00 AM client time).",
@@ -484,7 +484,7 @@ Thank you.`,
   },
   {
     id: "template-25",
-    label: "GST/HST Return",
+    label: "Template 25",
     title: "GST/HST Return",
     whenSent:
       "On the Quarterly Task due date for GST/HST return (automatic at 9:00 AM client time).",

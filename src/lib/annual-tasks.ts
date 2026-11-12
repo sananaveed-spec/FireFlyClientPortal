@@ -134,16 +134,16 @@ export function isProtectedAnnualTask(
   return String(task.kind ?? "").startsWith("income_tax_compliance:");
 }
 
-/** Lookup template label for due-date auto-send notice. */
+/** Lookup template label for due-date auto-send notice (Template 23 / 24). */
 export function annualTaskAutoEmailTemplateName(
   task: Pick<AnnualTaskItem, "kind">,
 ): string {
   const kind = String(task.kind ?? "");
   if (kind === "income_tax_compliance:corporate-return") {
-    return "Corporate Income Tax";
+    return "Template 23";
   }
   if (kind === "income_tax_compliance:personal-return") {
-    return "Personal Income Tax";
+    return "Template 24";
   }
   return "";
 }
