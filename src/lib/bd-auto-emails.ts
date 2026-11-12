@@ -101,6 +101,7 @@ import { parsePortalUsers, type PortalUser } from "@/lib/portal-users";
 import { sendGraphAppMail } from "@/lib/send-graph-app-mail";
 import type { GraphMailAttachment } from "@/lib/send-graph-mail";
 import { resolveStaffEmail } from "@/lib/staff-assign";
+import { runTaxTaskAutoEmails } from "@/lib/tax-task-auto-emails";
 import {
   calendarYmdFromLocalDate,
   getCalendarYmdInTimeZone,
@@ -1098,6 +1099,50 @@ export async function runBdAutoEmails(options?: {
   if (bd15StatusDirty) {
     await writeBd15EmailStatusFile(bd15StatusStore);
   }
+
+  // Annual / Quarterly due-date tax emails (same cron, BD-like To/CC).
+  try {
+    const taxResult = await runTaxTaskAutoEmails({ force, now });
+    for (const item of taxResult.sent) {
+      result.sent.push({
+        clientId: item.clientId,
+        clientName: item.clientName,
+        scheduleId: item.scheduleId as BdAutoSendScheduleId,
+        from: item.from,
+        to: item.to,
+        lastSentAt: item.lastSentAt,
+      });
+    }
+    for (const item of taxResult.skipped) {
+      result.skipped.push({
+        clientId: item.clientId,
+        clientName: item.clientName,
+        scheduleId: item.scheduleId as BdAutoSendScheduleId,
+        reason: item.reason,
+      });
+    }
+    for (const item of taxResult.errors) {
+      result.errors.push({
+        clientId: item.clientId,
+        clientName: item.clientName,
+        scheduleId: item.scheduleId as BdAutoSendScheduleId,
+        error: item.error,
+      });
+      result.ok = false;
+    }
+  } catch (taxError) {
+    result.ok = false;
+    result.errors.push({
+      clientId: "",
+      clientName: "",
+      scheduleId: "tax-corporate-income-tax" as BdAutoSendScheduleId,
+      error:
+        taxError instanceof Error
+          ? taxError.message
+          : "Tax task auto-email run failed.",
+    });
+  }
+
   return result;
 }
 

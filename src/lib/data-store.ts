@@ -112,6 +112,10 @@ function bdAutoEmailStatusPath() {
   return path.join(getDataDir(), "bd-auto-email-status.json");
 }
 
+function taxTaskAutoEmailStatusPath() {
+  return path.join(getDataDir(), "tax-task-auto-email-status.json");
+}
+
 function bdEmailBccPath() {
   return path.join(getDataDir(), "bd-email-bcc.json");
 }
@@ -638,6 +642,27 @@ export async function writeBdAutoEmailStatusFile(
 ): Promise<void> {
   await ensureDataDir();
   await writeJsonFile(bdAutoEmailStatusPath(), value);
+}
+
+export async function readTaxTaskAutoEmailStatusFile(): Promise<unknown> {
+  await ensureDataDir();
+  const filePath = taxTaskAutoEmailStatusPath();
+  try {
+    const raw = await readFile(filePath, "utf8");
+    return parseJsonFile(raw);
+  } catch (error) {
+    if (isMissingFile(error)) {
+      return { statuses: [] };
+    }
+    throw error;
+  }
+}
+
+export async function writeTaxTaskAutoEmailStatusFile(
+  value: unknown,
+): Promise<void> {
+  await ensureDataDir();
+  await writeJsonFile(taxTaskAutoEmailStatusPath(), value);
 }
 
 export async function readBdEmailBccFile(): Promise<unknown> {

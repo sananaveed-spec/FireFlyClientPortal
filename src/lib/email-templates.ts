@@ -21,7 +21,10 @@ export type EmailTemplateId =
   | "template-18"
   | "template-19"
   | "template-20"
-  | "template-22";
+  | "template-22"
+  | "template-23"
+  | "template-24"
+  | "template-25";
 
 export type EmailTemplate = {
   id: string;
@@ -44,8 +47,15 @@ export type EmailTemplatesStore = {
   templates: EmailTemplate[];
 };
 
+/** Stable ids for Annual / Quarterly due-date auto emails. */
+export const CORPORATE_INCOME_TAX_TEMPLATE_ID = "template-23" as const;
+export const PERSONAL_INCOME_TAX_TEMPLATE_ID = "template-24" as const;
+export const GST_HST_RETURN_TEMPLATE_ID = "template-25" as const;
+
 const TEMPLATE_META: {
   id: EmailTemplateId;
+  /** Optional sidebar name; defaults to Template N. */
+  label?: string;
   title: string;
   whenSent: string;
   subject: string;
@@ -438,6 +448,57 @@ Attached are this week's reports, ahead of our call at 11:00 AM Central today:
 
 Lets discuss these during our meeting.`,
   },
+  {
+    id: "template-23",
+    label: "Corporate Income Tax",
+    title: "Corporate Income Tax",
+    whenSent:
+      "On the Annual Task due date for corporate income tax return (automatic at 9:00 AM client time).",
+    subject: "[Client Name]: Corporate income tax return — due [Due Date]",
+    body: `Hi [Contact First Name],
+
+This is a reminder that your corporate income tax return preparation and filing is due on [Due Date].
+
+Please upload any remaining documents to the [portal] so we can complete the return on schedule.
+
+If you have already provided everything, you can ignore this note.
+
+Thank you.`,
+  },
+  {
+    id: "template-24",
+    label: "Personal Income Tax",
+    title: "Personal Income Tax",
+    whenSent:
+      "On the Annual Task due date for personal income tax return (automatic at 9:00 AM client time).",
+    subject: "[Client Name]: Personal income tax return — due [Due Date]",
+    body: `Hi [Contact First Name],
+
+This is a reminder that your personal income tax return preparation and filing is due on [Due Date].
+
+Please upload any remaining documents to the [portal] so we can complete the return on schedule.
+
+If you have already provided everything, you can ignore this note.
+
+Thank you.`,
+  },
+  {
+    id: "template-25",
+    label: "GST/HST Return",
+    title: "GST/HST Return",
+    whenSent:
+      "On the Quarterly Task due date for GST/HST return (automatic at 9:00 AM client time).",
+    subject: "[Client Name]: GST/HST return — due [Due Date]",
+    body: `Hi [Contact First Name],
+
+This is a reminder that your monthly / quarterly GST/HST return preparation and filing is due on [Due Date].
+
+Please upload any remaining documents to the [portal] so we can complete the filing on schedule.
+
+If you have already provided everything, you can ignore this note.
+
+Thank you.`,
+  },
 ];
 
 const SEED_TEMPLATE_IDS = TEMPLATE_META.map((item) => item.id);
@@ -616,7 +677,7 @@ export function createDefaultEmailTemplates(): EmailTemplatesStore {
       const number = templateNumber(item.id);
       return {
         id: item.id,
-        label: `Template ${number}`,
+        label: (item.label || `Template ${number}`).trim(),
         title: item.title,
         whenSent: item.whenSent,
         subject: item.subject,

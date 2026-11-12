@@ -7292,8 +7292,10 @@ export function ClientManagementPanel() {
             </div>
             <p className="one-time-tasks-intro">
               Income Tax Compliance Service(s) from the proposal fill in
-              automatically. Set each due date as needed. Default item labels
-              cannot be edited or deleted.
+              automatically. Set each due date — on that day the matching
+              Corporate / Personal Income Tax email auto-sends at 9:00 AM
+              client time (same To/CC as BD). Default labels cannot be edited
+              or deleted.
             </p>
             {annualTasksSaving && annualTasksDraft.length === 0 ? (
               <p className="one-time-tasks-empty">Loading annual tasks…</p>
@@ -7868,8 +7870,9 @@ export function ClientManagementPanel() {
             </div>
             <p className="one-time-tasks-intro">
               GST/HST Tax Compliance Service(s) from the proposal fill in
-              automatically. Set each due date as needed. Default labels cannot
-              be edited or deleted.
+              automatically. Set each due date — on that day the GST/HST Return
+              email auto-sends at 9:00 AM client time (same To/CC as BD).
+              Default labels cannot be edited or deleted.
             </p>
             {quarterlyTasksSaving && quarterlyTasksDraft.length === 0 ? (
               <p className="one-time-tasks-empty">Loading quarterly tasks…</p>
