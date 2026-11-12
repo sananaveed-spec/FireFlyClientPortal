@@ -1,5 +1,6 @@
 /**
- * Client Info — One-Time Tasks checklist (Ignition bookkeeping seeds QBO Setup).
+ * Client Info — One-Time Tasks checklist.
+ * Ignition "Bookkeeping Services" heading seeds QBO Setup.
  */
 
 export const QBO_SETUP_TASK_KIND = "qbo_setup";
@@ -185,13 +186,26 @@ export function mergeProtectedOneTimeTasks(
   return [...missing, ...next];
 }
 
-/** True when Ignition proposal service names look like bookkeeping. */
-export function proposalServicesIncludeBookkeeping(
-  services: ReadonlyArray<{ name?: string }>,
+/**
+ * True when an Ignition proposal has a service-group heading
+ * "Bookkeeping Services" or "Bookkeeping Service".
+ */
+export function proposalHasBookkeepingServicesHeading(
+  services: ReadonlyArray<{ groupName?: string; name?: string }>,
 ): boolean {
-  return services.some((service) =>
-    /bookkeep/i.test(String(service.name ?? "").trim()),
-  );
+  return services.some((service) => {
+    const heading = String(service.groupName ?? "")
+      .trim()
+      .replace(/\s+/g, " ");
+    return /^bookkeeping\s+services?$/i.test(heading);
+  });
+}
+
+/** @deprecated Use proposalHasBookkeepingServicesHeading */
+export function proposalServicesIncludeBookkeeping(
+  services: ReadonlyArray<{ groupName?: string; name?: string }>,
+): boolean {
+  return proposalHasBookkeepingServicesHeading(services);
 }
 
 /**
@@ -208,15 +222,15 @@ export function resourceServicesIncludeBookkeeping(
 }
 
 /**
- * If bookkeeping is on the proposal and QBO Setup is not already listed,
- * append the single auto checkbox (does not add duplicates).
+ * If the proposal has a Bookkeeping Services heading and QBO Setup is not
+ * already listed, append the single auto checkbox (no duplicates).
  */
 export function ensureQboSetupTaskFromBookkeeping(
   tasks: OneTimeTaskItem[],
-  hasBookkeeping: boolean,
+  hasBookkeepingHeading: boolean,
   proposalSlug = "",
 ): OneTimeTaskItem[] {
-  if (!hasBookkeeping || hasQboSetupOneTimeTask(tasks)) {
+  if (!hasBookkeepingHeading || hasQboSetupOneTimeTask(tasks)) {
     return tasks;
   }
   return [...tasks, createQboSetupOneTimeTask(proposalSlug)];

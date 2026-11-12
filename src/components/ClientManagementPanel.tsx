@@ -85,7 +85,6 @@ import {
   normalizeOneTimeTasks,
   oneTimeTasksStatusLabel,
   removeOneTimeTask,
-  resourceServicesIncludeBookkeeping,
   toggleOneTimeTaskCompletion,
   updateOneTimeTaskLabel,
   type OneTimeTaskItem,
@@ -3241,17 +3240,10 @@ export function ClientManagementPanel() {
     let tasks = normalizeOneTimeTasks(selected.profile.oneTimeTasks);
     setOneTimeTasksDraft(tasks);
 
-    const resourceHasBookkeeping = resourceServicesIncludeBookkeeping(
-      selected.resource.bookkeeping,
-    );
-    const hasAcceptedProposal = Boolean(
-      selected.profile.activeProposalSlug.trim(),
-    );
-    // Seed default QBO Setup when Resource Allocation has Bookkeeping, or
-    // when an accepted Ignition proposal is linked (common bookkeeping path).
+    // Seed QBO Setup only when accepted proposal has "Bookkeeping Services" heading.
     const needsSeed =
       !hasQboSetupOneTimeTask(tasks) &&
-      (resourceHasBookkeeping || hasAcceptedProposal);
+      Boolean(selected.profile.activeProposalSlug.trim());
 
     if (!needsSeed || !canEdit) {
       return;
@@ -3265,8 +3257,6 @@ export function ClientManagementPanel() {
         body: JSON.stringify({
           action: "seed",
           profileId: selected.profile.id,
-          forceBookkeeping: resourceHasBookkeeping || hasAcceptedProposal,
-          bookkeepingServices: selected.resource.bookkeeping,
         }),
       });
       const data = (await response.json()) as {

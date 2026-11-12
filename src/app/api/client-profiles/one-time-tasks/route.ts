@@ -6,20 +6,12 @@ import {
 import { readClientProfiles, writeClientProfiles } from "@/lib/data-store";
 import { seedOneTimeTasksFromAcceptedProposal } from "@/lib/ignition/seed-one-time-tasks";
 import {
-  ensureQboSetupTaskFromBookkeeping,
   hasQboSetupOneTimeTask,
   mergeProtectedOneTimeTasks,
   normalizeOneTimeTasks,
   type OneTimeTaskItem,
 } from "@/lib/one-time-tasks";
 import { requireEditor, requirePortalUser } from "@/lib/requireEditor";
-
-function resourceHasBookkeeping(bookkeeping: unknown): boolean {
-  if (!Array.isArray(bookkeeping)) {
-    return false;
-  }
-  return bookkeeping.some((item) => String(item ?? "").trim().length > 0);
-}
 
 export async function POST(request: Request) {
   const denied = await requireEditor(request);
@@ -31,8 +23,6 @@ export async function POST(request: Request) {
     const body = (await request.json().catch(() => ({}))) as {
       action?: string;
       profileId?: string;
-      forceBookkeeping?: boolean;
-      bookkeepingServices?: string[];
       tasks?: OneTimeTaskItem[];
     };
     const action = String(body.action ?? "").trim().toLowerCase();
@@ -56,21 +46,7 @@ export async function POST(request: Request) {
     let profile = profiles[index]!;
 
     if (action === "seed") {
-      const forceBookkeeping =
-        Boolean(body.forceBookkeeping) ||
-        resourceHasBookkeeping(body.bookkeepingServices);
-
-      if (forceBookkeeping && !hasQboSetupOneTimeTask(profile.oneTimeTasks)) {
-        profile = {
-          ...profile,
-          oneTimeTasks: ensureQboSetupTaskFromBookkeeping(
-            normalizeOneTimeTasks(profile.oneTimeTasks),
-            true,
-            profile.activeProposalSlug,
-          ),
-        };
-      }
-
+      // Only seed from accepted proposal "Bookkeeping Services" heading.
       if (
         !hasQboSetupOneTimeTask(profile.oneTimeTasks) &&
         profile.activeProposalSlug.trim()
@@ -79,22 +55,6 @@ export async function POST(request: Request) {
           profile,
           profile.activeProposalSlug,
         );
-      }
-
-      // Last resort for bookkeeping-category clients with an accepted proposal:
-      // still seed QBO when Resource Allocation marked bookkeeping services.
-      if (
-        forceBookkeeping &&
-        !hasQboSetupOneTimeTask(profile.oneTimeTasks)
-      ) {
-        profile = {
-          ...profile,
-          oneTimeTasks: ensureQboSetupTaskFromBookkeeping(
-            normalizeOneTimeTasks(profile.oneTimeTasks),
-            true,
-            profile.activeProposalSlug,
-          ),
-        };
       }
 
       const next = [...profiles];

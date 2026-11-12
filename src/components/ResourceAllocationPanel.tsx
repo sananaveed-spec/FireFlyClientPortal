@@ -351,10 +351,6 @@ export function ResourceAllocationPanel() {
           ? {
               action: "seed",
               profileId: profile.id,
-              forceBookkeeping: client.bookkeeping.some(
-                (item) => String(item ?? "").trim().length > 0,
-              ),
-              bookkeepingServices: client.bookkeeping,
             }
           : {
               action: "seed",
@@ -1095,10 +1091,6 @@ export function ResourceAllocationPanel() {
             body: JSON.stringify({
               action: "seed",
               profileId: profile.id,
-              forceBookkeeping: entry.bookkeeping.some(
-                (item) => String(item ?? "").trim().length > 0,
-              ),
-              bookkeepingServices: entry.bookkeeping,
             }),
           }),
           portalFetch("/api/client-profiles/annual-tasks", {

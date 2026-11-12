@@ -4,6 +4,37 @@
 
 export const MONTHLY_SERVICE_TASK_SOURCE = "ignition_monthly" as const;
 
+/** Fixed Monthly Tasks when proposal has "Bookkeeping Services" heading. */
+export const BOOKKEEPING_MONTHLY_TASK_DEFINITIONS = [
+  {
+    kind: "bookkeeping_monthly:bank-feed",
+    label:
+      "Regular bank and credit card feed monitoring, review, and clearance.",
+  },
+  {
+    kind: "bookkeeping_monthly:reconciliations",
+    label: "Monthly bank and credit card account reconciliations.",
+  },
+  {
+    kind: "bookkeeping_monthly:sharepoint-drive",
+    label:
+      "Monthly SharePoint / Google Drive maintenance and document organization.",
+  },
+  {
+    kind: "bookkeeping_monthly:payroll-journals",
+    label:
+      "Biweekly / monthly payroll journal entries recording and posting.",
+  },
+  {
+    kind: "bookkeeping_monthly:customer-invoices",
+    label: "Preparation and issuance of regular customer invoices.",
+  },
+  {
+    kind: "bookkeeping_monthly:vendor-bills",
+    label: "Regular vendor bills uploading, recording, and categorization.",
+  },
+] as const;
+
 export type MonthlyTaskItem = {
   id: string;
   /** Stable key for default monthly services; empty for user-added. */
@@ -100,9 +131,11 @@ export function monthlyTasksStatusLabel(tasks: MonthlyTaskItem[]): string {
 export function isProtectedMonthlyTask(
   task: Pick<MonthlyTaskItem, "kind" | "source">,
 ): boolean {
+  const kind = String(task.kind ?? "");
   return (
     task.source === MONTHLY_SERVICE_TASK_SOURCE ||
-    String(task.kind ?? "").startsWith("monthly_service:")
+    kind.startsWith("monthly_service:") ||
+    kind.startsWith("bookkeeping_monthly:")
   );
 }
 
@@ -266,6 +299,40 @@ export function ensureMonthlyTasksFromServices(
         proposalSlug,
       }),
     );
+  }
+  return additions.length > 0 ? [...tasks, ...additions] : tasks;
+}
+
+/**
+ * When proposal has Bookkeeping Services heading, ensure the fixed monthly
+ * checklist (no duplicates by kind).
+ */
+export function ensureBookkeepingMonthlyTasks(
+  tasks: MonthlyTaskItem[],
+  proposalSlug = "",
+): MonthlyTaskItem[] {
+  const existingKinds = new Set(
+    tasks.filter(isProtectedMonthlyTask).map((task) => task.kind),
+  );
+  const additions: MonthlyTaskItem[] = [];
+  const slug = proposalSlug.trim();
+  for (const def of BOOKKEEPING_MONTHLY_TASK_DEFINITIONS) {
+    if (existingKinds.has(def.kind)) {
+      continue;
+    }
+    existingKinds.add(def.kind);
+    additions.push({
+      id: createMonthlyTaskId(),
+      kind: def.kind,
+      label: def.label,
+      completed: false,
+      completedAt: "",
+      completedByName: "",
+      completedByEmail: "",
+      createdAt: new Date().toISOString(),
+      source: MONTHLY_SERVICE_TASK_SOURCE,
+      proposalSlug: slug,
+    });
   }
   return additions.length > 0 ? [...tasks, ...additions] : tasks;
 }

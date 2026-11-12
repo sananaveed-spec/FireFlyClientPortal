@@ -1,24 +1,13 @@
 import {
-  ensureMonthlyTasksFromServices,
-  isMonthlyBillingMode,
+  ensureBookkeepingMonthlyTasks,
 } from "@/lib/monthly-tasks";
 import type { ClientProfileEntry } from "@/lib/client-profiles";
-import {
-  fetchIgnitionProposalView,
-  type IgnitionProposalServiceView,
-} from "@/lib/ignition/proposals";
-
-export function monthlyServicesFromProposal(
-  services: ReadonlyArray<IgnitionProposalServiceView>,
-): Array<{ name: string }> {
-  return services
-    .filter((service) => isMonthlyBillingMode(service.billingMode || ""))
-    .map((service) => ({ name: service.name }));
-}
+import { fetchIgnitionProposalView } from "@/lib/ignition/proposals";
+import { proposalHasBookkeepingServicesHeading } from "@/lib/one-time-tasks";
 
 /**
- * When an accepted Ignition proposal includes monthly-billed services,
- * auto-add Monthly Tasks for each (empty list when no proposal / no matches).
+ * When an accepted Ignition proposal has a "Bookkeeping Services" (or
+ * "Bookkeeping Service") heading, auto-add the fixed Monthly Tasks checklist.
  */
 export async function seedMonthlyTasksFromAcceptedProposal(
   profile: ClientProfileEntry,
@@ -31,17 +20,12 @@ export async function seedMonthlyTasksFromAcceptedProposal(
 
   try {
     const view = await fetchIgnitionProposalView(slug);
-    const monthlyServices = monthlyServicesFromProposal(view.services);
-    if (monthlyServices.length === 0) {
+    if (!proposalHasBookkeepingServicesHeading(view.services)) {
       return profile;
     }
     return {
       ...profile,
-      monthlyTasks: ensureMonthlyTasksFromServices(
-        profile.monthlyTasks,
-        monthlyServices,
-        slug,
-      ),
+      monthlyTasks: ensureBookkeepingMonthlyTasks(profile.monthlyTasks, slug),
     };
   } catch (error) {
     console.error("Ignition monthly task seed failed:", error);

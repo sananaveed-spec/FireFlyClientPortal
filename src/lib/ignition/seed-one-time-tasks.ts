@@ -2,13 +2,13 @@ import type { ClientProfileEntry } from "@/lib/client-profiles";
 import {
   ensureQboSetupTaskFromBookkeeping,
   hasQboSetupOneTimeTask,
-  proposalServicesIncludeBookkeeping,
+  proposalHasBookkeepingServicesHeading,
 } from "@/lib/one-time-tasks";
 import { fetchIgnitionProposalView } from "@/lib/ignition/proposals";
 
 /**
- * When an accepted Ignition proposal includes bookkeeping services,
- * auto-add the single QBO Setup one-time task (if not already present).
+ * When an accepted Ignition proposal has a "Bookkeeping Services" (or
+ * "Bookkeeping Service") heading, auto-add the QBO Setup one-time task.
  */
 export async function seedOneTimeTasksFromAcceptedProposal(
   profile: ClientProfileEntry,
@@ -24,18 +24,18 @@ export async function seedOneTimeTasksFromAcceptedProposal(
 
   try {
     const view = await fetchIgnitionProposalView(slug);
-    const hasBookkeeping = proposalServicesIncludeBookkeeping(view.services);
+    const hasHeading = proposalHasBookkeepingServicesHeading(view.services);
     return {
       ...profile,
       oneTimeTasks: ensureQboSetupTaskFromBookkeeping(
         profile.oneTimeTasks,
-        hasBookkeeping,
+        hasHeading,
         slug,
       ),
     };
   } catch (error) {
     console.error(
-      "Ignition one-time task seed failed (bookkeeping / QBO Setup):",
+      "Ignition one-time task seed failed (Bookkeeping Services / QBO Setup):",
       error,
     );
     return profile;
