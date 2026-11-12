@@ -89,6 +89,18 @@ import {
   type OneTimeTaskItem,
 } from "@/lib/one-time-tasks";
 import {
+  createManualQuarterlyTask,
+  isManualQuarterlyTask,
+  isProtectedQuarterlyTask,
+  mergeProtectedQuarterlyTasks,
+  normalizeQuarterlyTasks,
+  quarterlyTasksStatusLabel,
+  removeQuarterlyTask,
+  toggleQuarterlyTaskCompletion,
+  updateQuarterlyTaskLabel,
+  type QuarterlyTaskItem,
+} from "@/lib/quarterly-tasks";
+import {
   addRequestBulletToList,
   BD9_EXCEL_SOURCE_PREFIX,
   BD13_LATE_SOURCE_PREFIX,
@@ -467,6 +479,7 @@ const CLIENT_INFO_FIELDS: { key: string; label: string }[] = [
   { key: "oneTimeTasks", label: "One-Time Tasks" },
   { key: "annualTasks", label: "Annual Tasks" },
   { key: "monthlyTasks", label: "Monthly Tasks" },
+  { key: "quarterlyTasks", label: "Quarterly Tasks" },
 ];
 
 /** Fallback if no User Management user has Position = Owner. */
@@ -890,6 +903,14 @@ function clientInfoValue(
       const status = monthlyTasksStatusLabel(tasks);
       return status ? `View list · ${status}` : "View list";
     }
+    case "quarterlyTasks": {
+      const tasks = normalizeQuarterlyTasks(profile?.quarterlyTasks);
+      if (tasks.length === 0) {
+        return "—";
+      }
+      const status = quarterlyTasksStatusLabel(tasks);
+      return status ? `View list · ${status}` : "View list";
+    }
     case "industry":
       return profile?.industry?.trim() || resource.industry?.trim() || "—";
     case "entityType":
@@ -1086,6 +1107,19 @@ export function ClientManagementPanel() {
   const [monthlyTasksEditLabel, setMonthlyTasksEditLabel] = useState("");
   const [monthlyTasksSaving, setMonthlyTasksSaving] = useState(false);
   const [monthlyTasksError, setMonthlyTasksError] = useState<string | null>(
+    null,
+  );
+  const [quarterlyTasksOpen, setQuarterlyTasksOpen] = useState(false);
+  const [quarterlyTasksDraft, setQuarterlyTasksDraft] = useState<
+    QuarterlyTaskItem[]
+  >([]);
+  const [quarterlyTasksNewLabel, setQuarterlyTasksNewLabel] = useState("");
+  const [quarterlyTasksEditingId, setQuarterlyTasksEditingId] = useState<
+    string | null
+  >(null);
+  const [quarterlyTasksEditLabel, setQuarterlyTasksEditLabel] = useState("");
+  const [quarterlyTasksSaving, setQuarterlyTasksSaving] = useState(false);
+  const [quarterlyTasksError, setQuarterlyTasksError] = useState<string | null>(
     null,
   );
   const [checkingSharePoint, setCheckingSharePoint] = useState(false);
@@ -3550,6 +3584,100 @@ export function ClientManagementPanel() {
     );
   }
 
+  async function openQuarterlyTasksList() {
+    if (!selected?.profile) {
+      setError("Link a Client Profile to manage Quarterly Tasks.");
+      return;
+    }
+    setQuarterlyTasksNewLabel("");
+    setQuarterlyTasksEditingId(null);
+    setQuarterlyTasksEditLabel("");
+    setQuarterlyTasksError(null);
+    setQuarterlyTasksOpen(true);
+    setQuarterlyTasksDraft(
+      normalizeQuarterlyTasks(selected.profile.quarterlyTasks),
+    );
+  }
+
+  function closeQuarterlyTasksList() {
+    if (quarterlyTasksSaving) {
+      return;
+    }
+    setQuarterlyTasksOpen(false);
+    setQuarterlyTasksDraft([]);
+    setQuarterlyTasksNewLabel("");
+    setQuarterlyTasksEditingId(null);
+    setQuarterlyTasksEditLabel("");
+    setQuarterlyTasksError(null);
+  }
+
+  async function persistQuarterlyTasksDraft(nextTasks: QuarterlyTaskItem[]) {
+    if (!selected?.profile) {
+      setQuarterlyTasksError(
+        "Link a Client Profile to manage Quarterly Tasks.",
+      );
+      return;
+    }
+    const safeTasks = mergeProtectedQuarterlyTasks(
+      normalizeQuarterlyTasks(selected.profile.quarterlyTasks),
+      nextTasks,
+    );
+    const updated = normalizeClientProfile({
+      ...selected.profile,
+      quarterlyTasks: safeTasks,
+    });
+    const nextProfiles = profiles.map((profile) =>
+      profile.id === updated.id ? updated : profile,
+    );
+    setQuarterlyTasksSaving(true);
+    setQuarterlyTasksError(null);
+    try {
+      const response = await portalFetch("/api/client-profiles", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profiles: nextProfiles }),
+      });
+      const data = (await response.json()) as ProfilesResponse;
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to save quarterly tasks.");
+      }
+      setProfiles(
+        Array.isArray(data.profiles) ? data.profiles : nextProfiles,
+      );
+      setQuarterlyTasksDraft(safeTasks);
+    } catch (saveError) {
+      setQuarterlyTasksError(
+        saveError instanceof Error
+          ? saveError.message
+          : "Failed to save quarterly tasks.",
+      );
+    } finally {
+      setQuarterlyTasksSaving(false);
+    }
+  }
+
+  function renderQuarterlyTasksCell(): ReactNode {
+    if (!selected?.profile) {
+      return "—";
+    }
+    const tasks = normalizeQuarterlyTasks(selected.profile.quarterlyTasks);
+    const status = quarterlyTasksStatusLabel(tasks);
+    return (
+      <button
+        type="button"
+        className="table-link-button"
+        title={status || "View quarterly tasks"}
+        onClick={() => void openQuarterlyTasksList()}
+      >
+        {tasks.length === 0
+          ? "View list"
+          : status
+            ? `View list · ${status}`
+            : "View list"}
+      </button>
+    );
+  }
+
   async function persistList(nextList: ClientRequestList) {
     if (!selected || !activeRequestScheduleId) {
       return;
@@ -4839,6 +4967,8 @@ export function ClientManagementPanel() {
                                     renderAnnualTasksCell()
                                   ) : left.key === "monthlyTasks" ? (
                                     renderMonthlyTasksCell()
+                                  ) : left.key === "quarterlyTasks" ? (
+                                    renderQuarterlyTasksCell()
                                   ) : (
                                     left.value
                                   )}
@@ -4879,6 +5009,8 @@ export function ClientManagementPanel() {
                                     renderAnnualTasksCell()
                                   ) : right?.key === "monthlyTasks" ? (
                                     renderMonthlyTasksCell()
+                                  ) : right?.key === "quarterlyTasks" ? (
+                                    renderQuarterlyTasksCell()
                                   ) : (
                                     right?.value ?? ""
                                   )}
@@ -7675,6 +7807,267 @@ export function ClientManagementPanel() {
                 className="button primary"
                 disabled={monthlyTasksSaving}
                 onClick={closeMonthlyTasksList}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {quarterlyTasksOpen ? (
+        <div
+          className="dialog-backdrop"
+          role="presentation"
+          onClick={closeQuarterlyTasksList}
+        >
+          <div
+            className="dialog-panel dialog-panel--wide one-time-tasks-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cm-quarterly-tasks-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="dialog-header">
+              <div className="one-time-tasks-title-row">
+                <h2 id="cm-quarterly-tasks-title" className="dialog-title">
+                  Quarterly Tasks
+                </h2>
+                {quarterlyTasksDraft.length > 0 ? (
+                  <span
+                    className={`one-time-tasks-status one-time-tasks-status--${(
+                      quarterlyTasksStatusLabel(quarterlyTasksDraft) ||
+                      "pending"
+                    )
+                      .toLowerCase()
+                      .replace(/\s+/g, "-")}`}
+                  >
+                    {quarterlyTasksStatusLabel(quarterlyTasksDraft) ||
+                      "Pending"}
+                  </span>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                className="dialog-close"
+                aria-label="Close"
+                disabled={quarterlyTasksSaving}
+                onClick={closeQuarterlyTasksList}
+              >
+                ×
+              </button>
+            </div>
+            <p className="one-time-tasks-intro">
+              Track quarterly work for this client. Mark each item when
+              finished.
+            </p>
+            {quarterlyTasksSaving && quarterlyTasksDraft.length === 0 ? (
+              <p className="one-time-tasks-empty">Loading quarterly tasks…</p>
+            ) : quarterlyTasksDraft.length === 0 ? (
+              <div className="one-time-tasks-empty">
+                <p>No quarterly tasks yet.</p>
+                <p>Add the first item below.</p>
+              </div>
+            ) : (
+              <ul className="one-time-tasks-list">
+                {quarterlyTasksDraft.map((task) => {
+                  const manual = isManualQuarterlyTask(task);
+                  const editing = quarterlyTasksEditingId === task.id;
+                  return (
+                    <li
+                      key={task.id}
+                      className={
+                        task.completed
+                          ? "one-time-tasks-item one-time-tasks-item--done"
+                          : "one-time-tasks-item"
+                      }
+                    >
+                      <div className="one-time-tasks-item-row">
+                        <label className="one-time-tasks-check">
+                          <input
+                            type="checkbox"
+                            checked={task.completed}
+                            disabled={!canEdit || quarterlyTasksSaving}
+                            onChange={(event) => {
+                              const next = toggleQuarterlyTaskCompletion(
+                                quarterlyTasksDraft,
+                                task.id,
+                                event.target.checked,
+                                {
+                                  name: portalName || msalName || signedInEmail,
+                                  email: signedInEmail,
+                                },
+                              );
+                              void persistQuarterlyTasksDraft(next);
+                            }}
+                          />
+                          {editing ? (
+                            <input
+                              className="field-input one-time-tasks-edit-input"
+                              value={quarterlyTasksEditLabel}
+                              disabled={quarterlyTasksSaving}
+                              autoFocus
+                              onChange={(event) =>
+                                setQuarterlyTasksEditLabel(event.target.value)
+                              }
+                            />
+                          ) : (
+                            <span className="one-time-tasks-label">
+                              {task.label}
+                              {isProtectedQuarterlyTask(task) ? (
+                                <span className="one-time-tasks-lock">
+                                  {" "}
+                                  · Default
+                                </span>
+                              ) : null}
+                            </span>
+                          )}
+                        </label>
+                        {canEdit && manual ? (
+                          <div className="one-time-tasks-item-actions">
+                            {editing ? (
+                              <>
+                                <button
+                                  type="button"
+                                  className="table-link-button"
+                                  disabled={
+                                    quarterlyTasksSaving ||
+                                    !quarterlyTasksEditLabel.trim()
+                                  }
+                                  onClick={() => {
+                                    const next = updateQuarterlyTaskLabel(
+                                      quarterlyTasksDraft,
+                                      task.id,
+                                      quarterlyTasksEditLabel,
+                                    );
+                                    setQuarterlyTasksEditingId(null);
+                                    setQuarterlyTasksEditLabel("");
+                                    void persistQuarterlyTasksDraft(next);
+                                  }}
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  type="button"
+                                  className="table-link-button"
+                                  disabled={quarterlyTasksSaving}
+                                  onClick={() => {
+                                    setQuarterlyTasksEditingId(null);
+                                    setQuarterlyTasksEditLabel("");
+                                  }}
+                                >
+                                  Cancel
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  type="button"
+                                  className="table-link-button"
+                                  disabled={quarterlyTasksSaving}
+                                  onClick={() => {
+                                    setQuarterlyTasksEditingId(task.id);
+                                    setQuarterlyTasksEditLabel(task.label);
+                                  }}
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  className="table-link-button one-time-tasks-delete"
+                                  disabled={quarterlyTasksSaving}
+                                  onClick={() => {
+                                    const next = removeQuarterlyTask(
+                                      quarterlyTasksDraft,
+                                      task.id,
+                                    );
+                                    void persistQuarterlyTasksDraft(next);
+                                  }}
+                                >
+                                  Delete
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
+                      {task.completed ? (
+                        <p className="one-time-tasks-meta">
+                          Completed{" "}
+                          {task.completedAt
+                            ? new Date(task.completedAt).toLocaleString()
+                            : ""}
+                          {task.completedByName
+                            ? ` · ${task.completedByName}`
+                            : ""}
+                        </p>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {canEdit ? (
+              <div className="one-time-tasks-add">
+                <label className="field one-time-tasks-add-field">
+                  <span className="field-label">Add another task</span>
+                  <input
+                    className="field-input"
+                    value={quarterlyTasksNewLabel}
+                    disabled={quarterlyTasksSaving}
+                    placeholder="Type a new quarterly task…"
+                    onChange={(event) =>
+                      setQuarterlyTasksNewLabel(event.target.value)
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        const label = quarterlyTasksNewLabel.trim();
+                        if (!label || quarterlyTasksSaving) {
+                          return;
+                        }
+                        setQuarterlyTasksNewLabel("");
+                        void persistQuarterlyTasksDraft([
+                          ...quarterlyTasksDraft,
+                          createManualQuarterlyTask(label),
+                        ]);
+                      }
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="button secondary-solid"
+                  disabled={
+                    quarterlyTasksSaving || !quarterlyTasksNewLabel.trim()
+                  }
+                  onClick={() => {
+                    const label = quarterlyTasksNewLabel.trim();
+                    if (!label) {
+                      return;
+                    }
+                    setQuarterlyTasksNewLabel("");
+                    void persistQuarterlyTasksDraft([
+                      ...quarterlyTasksDraft,
+                      createManualQuarterlyTask(label),
+                    ]);
+                  }}
+                >
+                  Add
+                </button>
+              </div>
+            ) : null}
+            {quarterlyTasksError ? (
+              <p className="form-message error" role="alert">
+                {quarterlyTasksError}
+              </p>
+            ) : null}
+            <div className="dialog-actions">
+              <button
+                type="button"
+                className="button primary"
+                disabled={quarterlyTasksSaving}
+                onClick={closeQuarterlyTasksList}
               >
                 Done
               </button>

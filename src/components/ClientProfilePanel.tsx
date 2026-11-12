@@ -101,6 +101,7 @@ import {
   updateMonthlyTaskLabel,
   type MonthlyTaskItem,
 } from "@/lib/monthly-tasks";
+import { normalizeQuarterlyTasks } from "@/lib/quarterly-tasks";
 import {
   createManualOneTimeTask,
   hasQboSetupOneTimeTask,
@@ -895,6 +896,7 @@ export function ClientProfilePanel() {
       oneTimeTasks: normalizeOneTimeTasks(profile.oneTimeTasks),
       annualTasks: normalizeAnnualTasks(profile.annualTasks),
       monthlyTasks: normalizeMonthlyTasks(profile.monthlyTasks),
+      quarterlyTasks: normalizeQuarterlyTasks(profile.quarterlyTasks),
     });
     syncYearEndParts(profile.fiscalYearEnd);
     setError(null);
@@ -2274,6 +2276,11 @@ export function ClientProfilePanel() {
       ),
       monthlyTasks: normalizeMonthlyTasks(
         form.monthlyTasks?.length ? form.monthlyTasks : existing?.monthlyTasks,
+      ),
+      quarterlyTasks: normalizeQuarterlyTasks(
+        form.quarterlyTasks?.length
+          ? form.quarterlyTasks
+          : existing?.quarterlyTasks,
       ),
       createdAt: existing?.createdAt ?? new Date().toISOString(),
     };

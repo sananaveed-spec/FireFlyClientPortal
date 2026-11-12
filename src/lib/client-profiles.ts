@@ -10,9 +10,18 @@ import {
   normalizeOneTimeTasks,
   type OneTimeTaskItem,
 } from "@/lib/one-time-tasks";
+import {
+  normalizeQuarterlyTasks,
+  type QuarterlyTaskItem,
+} from "@/lib/quarterly-tasks";
 import { normalizeYearEnd } from "@/lib/year-end";
 
-export type { OneTimeTaskItem, AnnualTaskItem, MonthlyTaskItem };
+export type {
+  OneTimeTaskItem,
+  AnnualTaskItem,
+  MonthlyTaskItem,
+  QuarterlyTaskItem,
+};
 
 export type ClientCountry = "US" | "CA" | "Not Sure";
 
@@ -535,6 +544,8 @@ export type ClientProfileEntry = {
   annualTasks: AnnualTaskItem[];
   /** Monthly recurring services checklist from Ignition monthly-billed services. */
   monthlyTasks: MonthlyTaskItem[];
+  /** Quarterly checklist managed in Client Management. */
+  quarterlyTasks: QuarterlyTaskItem[];
   createdAt: string;
 };
 
@@ -722,6 +733,7 @@ export function createEmptyClientProfileForm(
     oneTimeTasks: [],
     annualTasks: [],
     monthlyTasks: [],
+    quarterlyTasks: [],
   };
 }
 
@@ -814,6 +826,7 @@ export function normalizeClientProfile(
     oneTimeTasks: normalizeOneTimeTasks(value.oneTimeTasks),
     annualTasks: normalizeAnnualTasks(value.annualTasks),
     monthlyTasks: normalizeMonthlyTasks(value.monthlyTasks),
+    quarterlyTasks: normalizeQuarterlyTasks(value.quarterlyTasks),
     createdAt:
       typeof value.createdAt === "string" && value.createdAt
         ? value.createdAt
