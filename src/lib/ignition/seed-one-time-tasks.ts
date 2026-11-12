@@ -7,7 +7,8 @@ import {
 import { fetchIgnitionProposalView } from "@/lib/ignition/proposals";
 
 /**
- * When an accepted Ignition proposal has a "Bookkeeping Services" (or
+ * Called when Resource Allocation is saved (not on proposal accept).
+ * If the client's accepted proposal has a "Bookkeeping Services" (or
  * "Bookkeeping Service") heading, auto-add the QBO Setup one-time task.
  */
 export async function seedOneTimeTasksFromAcceptedProposal(

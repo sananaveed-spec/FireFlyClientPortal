@@ -6,7 +6,8 @@ import { fetchIgnitionProposalView } from "@/lib/ignition/proposals";
 import { proposalHasBookkeepingServicesHeading } from "@/lib/one-time-tasks";
 
 /**
- * When an accepted Ignition proposal has a "Bookkeeping Services" (or
+ * Called when Resource Allocation is saved (not on proposal accept).
+ * If the client's accepted proposal has a "Bookkeeping Services" (or
  * "Bookkeeping Service") heading, auto-add the fixed Monthly Tasks checklist.
  */
 export async function seedMonthlyTasksFromAcceptedProposal(

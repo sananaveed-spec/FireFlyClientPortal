@@ -78,7 +78,6 @@ import {
 } from "@/lib/monthly-tasks";
 import {
   createManualOneTimeTask,
-  hasQboSetupOneTimeTask,
   isManualOneTimeTask,
   isProtectedOneTimeTask,
   mergeProtectedOneTimeTasks,
@@ -3237,54 +3236,8 @@ export function ClientManagementPanel() {
     setOneTimeTasksError(null);
     setOneTimeTasksOpen(true);
 
-    let tasks = normalizeOneTimeTasks(selected.profile.oneTimeTasks);
-    setOneTimeTasksDraft(tasks);
-
-    // Seed QBO Setup only when accepted proposal has "Bookkeeping Services" heading.
-    const needsSeed =
-      !hasQboSetupOneTimeTask(tasks) &&
-      Boolean(selected.profile.activeProposalSlug.trim());
-
-    if (!needsSeed || !canEdit) {
-      return;
-    }
-
-    setOneTimeTasksSaving(true);
-    try {
-      const response = await portalFetch("/api/client-profiles/one-time-tasks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "seed",
-          profileId: selected.profile.id,
-        }),
-      });
-      const data = (await response.json()) as {
-        error?: string;
-        oneTimeTasks?: OneTimeTaskItem[];
-        profile?: ClientProfileEntry;
-      };
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to load default one-time tasks.");
-      }
-      tasks = normalizeOneTimeTasks(data.oneTimeTasks);
-      setOneTimeTasksDraft(tasks);
-      if (data.profile) {
-        setProfiles((current) =>
-          current.map((profile) =>
-            profile.id === data.profile!.id ? data.profile! : profile,
-          ),
-        );
-      }
-    } catch (seedError) {
-      setOneTimeTasksError(
-        seedError instanceof Error
-          ? seedError.message
-          : "Failed to load default one-time tasks.",
-      );
-    } finally {
-      setOneTimeTasksSaving(false);
-    }
+    // One-Time Bookkeeping tasks are seeded when Resource Allocation is saved.
+    setOneTimeTasksDraft(normalizeOneTimeTasks(selected.profile.oneTimeTasks));
   }
 
   function closeOneTimeTasksList() {
@@ -3516,53 +3469,8 @@ export function ClientManagementPanel() {
     setMonthlyTasksError(null);
     setMonthlyTasksOpen(true);
 
-    let tasks = normalizeMonthlyTasks(selected.profile.monthlyTasks);
-    setMonthlyTasksDraft(tasks);
-
-    const hasAcceptedProposal = Boolean(
-      selected.profile.activeProposalSlug.trim(),
-    );
-    if (!canEdit || !hasAcceptedProposal) {
-      return;
-    }
-
-    setMonthlyTasksSaving(true);
-    try {
-      const response = await portalFetch("/api/client-profiles/monthly-tasks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "seed",
-          profileId: selected.profile.id,
-          proposalSlug: selected.profile.activeProposalSlug,
-        }),
-      });
-      const data = (await response.json()) as {
-        error?: string;
-        monthlyTasks?: MonthlyTaskItem[];
-        profile?: ClientProfileEntry;
-      };
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to load monthly tasks.");
-      }
-      tasks = normalizeMonthlyTasks(data.monthlyTasks);
-      setMonthlyTasksDraft(tasks);
-      if (data.profile) {
-        setProfiles((current) =>
-          current.map((profile) =>
-            profile.id === data.profile!.id ? data.profile! : profile,
-          ),
-        );
-      }
-    } catch (seedError) {
-      setMonthlyTasksError(
-        seedError instanceof Error
-          ? seedError.message
-          : "Failed to load monthly tasks.",
-      );
-    } finally {
-      setMonthlyTasksSaving(false);
-    }
+    // Monthly Bookkeeping tasks are seeded when Resource Allocation is saved.
+    setMonthlyTasksDraft(normalizeMonthlyTasks(selected.profile.monthlyTasks));
   }
 
   function closeMonthlyTasksList() {
