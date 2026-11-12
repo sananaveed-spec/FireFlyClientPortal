@@ -49,15 +49,16 @@ import {
 } from "@/lib/client-profiles";
 import {
   BD13_LATE_SOURCE_PREFIX,
-  BD9_EXCEL_SOURCE_PREFIX,
   currentMonthKey,
   getBd5LateActionItemsForMonth,
-  getBd7LateActionItemsForMonth,
+  getBd9LateActionItemsForMonth,
+  getBd10LateActionItemsForMonth,
   getClientRequestList,
   normalizeClientRequestListsStore,
   requestItemsForMonth,
   snapshotBd1ToBd5ForMonth,
   snapshotBd5LateToBd7ForMonth,
+  snapshotBd9LateToBd10ForMonth,
   type ActionWorkflowItem,
   type ClientRequestListsStore,
 } from "@/lib/client-request-lists";
@@ -272,51 +273,33 @@ function isOtherStatementsProfile(profile: ClientProfileEntry): boolean {
   );
 }
 
-/** Locked BD7 Late snapshot (what BD9 BD7 Status Check uses). */
-function getBd7LateItems(
-  store: ClientRequestListsStore,
-  clientId: string,
-  monthKey: string,
-): ActionWorkflowItem[] {
-  return getBd7LateActionItemsForMonth(store, clientId, monthKey);
-}
-
-/** BD10: Late from BD7 locked snapshot + BD9 Excel Status Check. */
+/** BD10 email: live BD9 Late (BD7 Status Check + BD8 Excel) before freeze. */
 function getBd10LateItems(
   store: ClientRequestListsStore,
   clientId: string,
   monthKey: string,
 ): ActionWorkflowItem[] {
-  const lateById = new Map<string, ActionWorkflowItem>();
-  for (const item of getBd7LateItems(store, clientId, monthKey)) {
-    lateById.set(item.id, item);
-  }
-  const bd9 = getClientRequestList(store, clientId, "bd9");
-  for (const item of bd9.actionItems) {
-    if (
-      item.monthKey === monthKey &&
-      item.status === "late" &&
-      item.sourceRequestId.startsWith(BD9_EXCEL_SOURCE_PREFIX)
-    ) {
-      lateById.set(item.id, item);
-    }
-  }
-  return Array.from(lateById.values());
+  return getBd9LateActionItemsForMonth(store, clientId, monthKey);
 }
 
-/** BD13: local late mirrors only. */
+/** BD13: local late mirrors only (seeded from BD10 freeze). */
 function getBd13LateItems(
   store: ClientRequestListsStore,
   clientId: string,
   monthKey: string,
 ): ActionWorkflowItem[] {
   const list = getClientRequestList(store, clientId, "bd13");
-  return list.actionItems.filter(
+  const localLate = list.actionItems.filter(
     (item) =>
       item.monthKey === monthKey &&
       item.status === "late" &&
       item.sourceRequestId.startsWith(BD13_LATE_SOURCE_PREFIX),
   );
+  if (localLate.length > 0) {
+    return localLate;
+  }
+  // Before BD13 mirrors exist, use locked BD10 snapshot.
+  return getBd10LateActionItemsForMonth(store, clientId, monthKey);
 }
 
 function normalizeBd15ReportKey(value: string): string {
@@ -855,6 +838,16 @@ export async function runBdAutoEmails(options?: {
       }
 
       if (scheduleId === "bd10") {
+        // Freeze BD9 Late onto BD10 for BD13 when BD10 send time is reached.
+        const bd10LateSnap = snapshotBd9LateToBd10ForMonth(
+          requestLists,
+          resource.id,
+          monthKey,
+        );
+        if (bd10LateSnap.created) {
+          requestLists = bd10LateSnap.store;
+          requestListsDirty = true;
+        }
         const late = getBd10LateItems(requestLists, resource.id, monthKey);
         if (late.length === 0) {
           result.skipped.push({
@@ -1080,6 +1073,17 @@ export async function runBdAutoEmails(options?: {
           );
           if (bd7LateSnap.created) {
             requestLists = bd7LateSnap.store;
+            requestListsDirty = true;
+          }
+        }
+        if (scheduleId === "bd10") {
+          const bd10LateSnap = snapshotBd9LateToBd10ForMonth(
+            requestLists,
+            resource.id,
+            monthKey,
+          );
+          if (bd10LateSnap.created) {
+            requestLists = bd10LateSnap.store;
             requestListsDirty = true;
           }
         }
