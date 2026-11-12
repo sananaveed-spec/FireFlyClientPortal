@@ -531,7 +531,7 @@ export type ClientProfileEntry = {
   activeProposalPdfUrl: string;
   /** One-time onboarding checklist (e.g. QBO Setup from bookkeeping proposals). */
   oneTimeTasks: OneTimeTaskItem[];
-  /** Annual tax checklist from Ignition Tax / Tax Compliance services. */
+  /** Annual checklist from Income Tax Compliance Service(s) proposal heading. */
   annualTasks: AnnualTaskItem[];
   /** Monthly recurring services checklist from Ignition monthly-billed services. */
   monthlyTasks: MonthlyTaskItem[];

@@ -2255,17 +2255,17 @@ export function ResourceAllocationPanel() {
               onClose={closeTasksDialog}
               intro={
                 <>
-                  Tax / Tax Compliance services from the proposal, with due
-                  dates. Empty when no proposal. Defaults cannot be edited or
-                  deleted.
+                  Income Tax Compliance Service(s) from the proposal fill in
+                  automatically. Set each due date as needed. Default labels
+                  cannot be edited or deleted.
                 </>
               }
               emptyHint={
                 <>
                   <p>No annual tasks yet.</p>
                   <p>
-                    Items appear when the linked proposal includes Tax services
-                    or Tax Compliance Services.
+                    Items appear when the linked proposal includes Income Tax
+                    Compliance Service or Income Tax Compliance Services.
                   </p>
                 </>
               }

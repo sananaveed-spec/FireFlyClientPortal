@@ -3500,15 +3500,15 @@ export function ClientProfilePanel() {
 
           <FormSection
             title="Annual Tasks"
-            description="Tax / Tax Compliance services from the proposal, with due dates."
+            description="Income Tax Compliance Service(s) from the proposal; due dates set by assigned users."
           >
             <div className="field">
               <span className="field-label">Annual Tasks</span>
               {normalizeAnnualTasks(form.annualTasks).length === 0 ? (
                 <p className="lookup-hint">
-                  No tasks yet. After Resource Allocation is added for a client
-                  whose proposal includes Tax services, items appear here with
-                  due dates. Open View list to check them off or add more.
+                  No tasks yet. When the accepted proposal has an Income Tax
+                  Compliance Service(s) heading, the default annual items appear
+                  here. Open View list to set due dates or add more.
                 </p>
               ) : (
                 <p className="lookup-hint">
@@ -4231,9 +4231,10 @@ export function ClientProfilePanel() {
               </button>
             </div>
             <p className="lookup-hint">
-              Tax services auto-fill with due dates. Default items cannot be
-              edited or deleted. Status is <strong>Completed</strong> only when
-              every checkbox is checked.
+              Income Tax Compliance Service(s) fill in automatically. Set each
+              due date as needed. Default labels cannot be edited or deleted.
+              Status is <strong>Completed</strong> only when every checkbox is
+              checked.
             </p>
             {annualTasksDraft.length === 0 ? (
               <p className="lookup-hint">No tasks yet. Add one below.</p>

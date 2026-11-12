@@ -7150,20 +7150,19 @@ export function ClientManagementPanel() {
               </button>
             </div>
             <p className="one-time-tasks-intro">
-              Tax / Tax Compliance services from the proposal fill in
-              automatically with due dates. Mark each item when finished.
-              Default items cannot be edited or deleted.
+              Income Tax Compliance Service(s) from the proposal fill in
+              automatically. Set each due date as needed. Default item labels
+              cannot be edited or deleted.
             </p>
             {annualTasksSaving && annualTasksDraft.length === 0 ? (
-              <p className="one-time-tasks-empty">Loading tax tasks…</p>
+              <p className="one-time-tasks-empty">Loading annual tasks…</p>
             ) : annualTasksDraft.length === 0 ? (
               <div className="one-time-tasks-empty">
                 <p>No annual tasks yet.</p>
                 <p>
-                  When the linked Ignition proposal includes Tax services or Tax
-                  Compliance Services, those items and due dates are added
-                  automatically after Resource Allocation is saved (or when you
-                  open this list).
+                  When the linked proposal includes Income Tax Compliance
+                  Service or Income Tax Compliance Services, the default annual
+                  items are added automatically (due dates left for you to set).
                 </p>
               </div>
             ) : (

@@ -86,13 +86,21 @@ export function normalizeAnnualTaskItem(value: unknown): AnnualTaskItem | null {
   };
 }
 
+/** Old auto-seed from service names (e.g. "Accounting & Tax services"). */
+export function isLegacyTaxServiceAnnualTask(
+  task: Pick<AnnualTaskItem, "kind">,
+): boolean {
+  return String(task.kind ?? "").startsWith("tax_service:");
+}
+
 export function normalizeAnnualTasks(value: unknown): AnnualTaskItem[] {
   if (!Array.isArray(value)) {
     return [];
   }
   return value
     .map(normalizeAnnualTaskItem)
-    .filter((item): item is AnnualTaskItem => Boolean(item));
+    .filter((item): item is AnnualTaskItem => Boolean(item))
+    .filter((item) => !isLegacyTaxServiceAnnualTask(item));
 }
 
 export function annualTasksStatusLabel(tasks: AnnualTaskItem[]): string {
@@ -111,12 +119,7 @@ export function annualTasksStatusLabel(tasks: AnnualTaskItem[]): string {
 export function isProtectedAnnualTask(
   task: Pick<AnnualTaskItem, "kind" | "source">,
 ): boolean {
-  const kind = String(task.kind ?? "");
-  return (
-    task.source === ANNUAL_TAX_TASK_SOURCE ||
-    kind.startsWith("tax_service:") ||
-    kind.startsWith("income_tax_compliance:")
-  );
+  return String(task.kind ?? "").startsWith("income_tax_compliance:");
 }
 
 export function isManualAnnualTask(
