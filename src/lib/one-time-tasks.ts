@@ -188,7 +188,7 @@ export function mergeProtectedOneTimeTasks(
 
 /**
  * True when an Ignition proposal has a service-group heading
- * "Bookkeeping Services" or "Bookkeeping Service".
+ * "Bookkeeping", "Bookkeeping Service", or "Bookkeeping Services".
  */
 export function proposalHasBookkeepingServicesHeading(
   services: ReadonlyArray<{ groupName?: string; name?: string }>,
@@ -197,7 +197,7 @@ export function proposalHasBookkeepingServicesHeading(
     const heading = String(service.groupName ?? "")
       .trim()
       .replace(/\s+/g, " ");
-    return /^bookkeeping\s+services?$/i.test(heading);
+    return /^bookkeeping(?:\s+services?)?$/i.test(heading);
   });
 }
 
