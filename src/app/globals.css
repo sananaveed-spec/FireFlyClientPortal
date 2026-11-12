@@ -2997,14 +2997,19 @@ h2,
 }
 
 .tax-due-email-notice {
-  margin: 0.4rem 0 0 1.75rem;
-  padding: 0.45rem 0.65rem;
-  border-radius: 0.4rem;
-  border: 1px solid color-mix(in srgb, #c2410c 28%, var(--line, #e5e7eb));
-  background: color-mix(in srgb, #c2410c 8%, #fff);
+  margin: 0.55rem 0 0.35rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 0.45rem;
+  border: 1px solid #fdba74;
+  background: #fff7ed;
   color: #9a3412;
-  font-size: 0.82rem;
+  font-size: 0.86rem;
+  font-weight: 500;
   line-height: 1.4;
+}
+
+.one-time-tasks-list .tax-due-email-notice {
+  margin-left: 1.75rem;
 }
 
 .one-time-tasks-add {

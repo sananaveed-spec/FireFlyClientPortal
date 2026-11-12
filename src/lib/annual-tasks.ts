@@ -58,6 +58,14 @@ export function formatAnnualDueDateLabel(dueDate: string): string {
   });
 }
 
+function incomeTaxComplianceKindForLabel(label: string): string {
+  const normalized = label.trim().toLowerCase().replace(/\s+/g, " ");
+  const match = INCOME_TAX_COMPLIANCE_ANNUAL_TASK_DEFINITIONS.find(
+    (def) => def.label.toLowerCase() === normalized,
+  );
+  return match?.kind ?? "";
+}
+
 export function normalizeAnnualTaskItem(value: unknown): AnnualTaskItem | null {
   if (!value || typeof value !== "object") {
     return null;
@@ -68,11 +76,12 @@ export function normalizeAnnualTaskItem(value: unknown): AnnualTaskItem | null {
   if (!id || !label) {
     return null;
   }
-  const source =
-    record.source === ANNUAL_TAX_TASK_SOURCE ? ANNUAL_TAX_TASK_SOURCE : "manual";
+  const kindFromLabel = incomeTaxComplianceKindForLabel(label);
+  const kind = String(record.kind ?? "").trim() || kindFromLabel;
+  const isIncomeTaxDefault = kind.startsWith("income_tax_compliance:");
   return {
     id,
-    kind: String(record.kind ?? "").trim(),
+    kind,
     label,
     dueDate: String(record.dueDate ?? "").trim(),
     completed: Boolean(record.completed),
@@ -81,7 +90,10 @@ export function normalizeAnnualTaskItem(value: unknown): AnnualTaskItem | null {
     completedByEmail: String(record.completedByEmail ?? "").trim(),
     createdAt:
       String(record.createdAt ?? "").trim() || new Date().toISOString(),
-    source,
+    source:
+      isIncomeTaxDefault || record.source === ANNUAL_TAX_TASK_SOURCE
+        ? ANNUAL_TAX_TASK_SOURCE
+        : "manual",
     proposalSlug: String(record.proposalSlug ?? "").trim(),
   };
 }

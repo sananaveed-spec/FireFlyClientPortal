@@ -7297,6 +7297,12 @@ export function ClientManagementPanel() {
               client time (same To/CC as BD). Default labels cannot be edited
               or deleted.
             </p>
+            {annualTasksDraft.some((task) => task.dueDate.trim()) ? (
+              <p className="tax-due-email-notice" role="status">
+                Due date set: email will auto-send at 9:00 AM client time zone
+                using the supervisor account on the due date.
+              </p>
+            ) : null}
             {annualTasksSaving && annualTasksDraft.length === 0 ? (
               <p className="one-time-tasks-empty">Loading annual tasks…</p>
             ) : annualTasksDraft.length === 0 ? (
@@ -7488,11 +7494,8 @@ export function ClientManagementPanel() {
                             : ""}
                         </p>
                       ) : null}
-                      {isProtectedAnnualTask(task) && task.dueDate.trim() ? (
-                        <p
-                          className="lookup-hint tax-due-email-notice"
-                          role="status"
-                        >
+                      {task.dueDate.trim() ? (
+                        <p className="tax-due-email-notice" role="status">
                           Email will auto-send at 9:00 AM client time zone using
                           the supervisor account on this due date.
                         </p>
@@ -7883,6 +7886,12 @@ export function ClientManagementPanel() {
               email auto-sends at 9:00 AM client time (same To/CC as BD).
               Default labels cannot be edited or deleted.
             </p>
+            {quarterlyTasksDraft.some((task) => task.dueDate.trim()) ? (
+              <p className="tax-due-email-notice" role="status">
+                Due date set: email will auto-send at 9:00 AM client time zone
+                using the supervisor account on the due date.
+              </p>
+            ) : null}
             {quarterlyTasksSaving && quarterlyTasksDraft.length === 0 ? (
               <p className="one-time-tasks-empty">Loading quarterly tasks…</p>
             ) : quarterlyTasksDraft.length === 0 ? (
@@ -8076,11 +8085,8 @@ export function ClientManagementPanel() {
                             : ""}
                         </p>
                       ) : null}
-                      {isProtectedQuarterlyTask(task) && task.dueDate.trim() ? (
-                        <p
-                          className="lookup-hint tax-due-email-notice"
-                          role="status"
-                        >
+                      {task.dueDate.trim() ? (
+                        <p className="tax-due-email-notice" role="status">
                           Email will auto-send at 9:00 AM client time zone using
                           the supervisor account on this due date.
                         </p>

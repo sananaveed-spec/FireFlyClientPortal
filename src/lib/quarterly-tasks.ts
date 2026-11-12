@@ -54,6 +54,14 @@ export function formatQuarterlyDueDateLabel(dueDate: string): string {
   });
 }
 
+function gstHstTaxComplianceKindForLabel(label: string): string {
+  const normalized = label.trim().toLowerCase().replace(/\s+/g, " ");
+  const match = GST_HST_TAX_COMPLIANCE_QUARTERLY_TASK_DEFINITIONS.find(
+    (def) => def.label.toLowerCase() === normalized,
+  );
+  return match?.kind ?? "";
+}
+
 export function normalizeQuarterlyTaskItem(
   value: unknown,
 ): QuarterlyTaskItem | null {
@@ -66,13 +74,11 @@ export function normalizeQuarterlyTaskItem(
   if (!id || !label) {
     return null;
   }
-  const source =
-    record.source === QUARTERLY_GST_HST_TASK_SOURCE
-      ? QUARTERLY_GST_HST_TASK_SOURCE
-      : "manual";
+  const kindFromLabel = gstHstTaxComplianceKindForLabel(label);
+  const kind = String(record.kind ?? "").trim() || kindFromLabel;
   return {
     id,
-    kind: String(record.kind ?? "").trim(),
+    kind,
     label,
     dueDate: String(record.dueDate ?? "").trim(),
     completed: Boolean(record.completed),
@@ -81,7 +87,11 @@ export function normalizeQuarterlyTaskItem(
     completedByEmail: String(record.completedByEmail ?? "").trim(),
     createdAt:
       String(record.createdAt ?? "").trim() || new Date().toISOString(),
-    source,
+    source:
+      kind.startsWith("gst_hst_tax_compliance:") ||
+      record.source === QUARTERLY_GST_HST_TASK_SOURCE
+        ? QUARTERLY_GST_HST_TASK_SOURCE
+        : "manual",
     proposalSlug: String(record.proposalSlug ?? "").trim(),
   };
 }
