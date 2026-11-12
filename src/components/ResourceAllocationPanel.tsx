@@ -26,6 +26,7 @@ import {
   type SearchableOption,
 } from "@/components/SearchableSelect";
 import {
+  annualTaskAutoEmailTemplateName,
   annualTasksStatusLabel,
   createManualAnnualTask,
   formatAnnualDueDateLabel,
@@ -2522,10 +2523,13 @@ export function ResourceAllocationPanel() {
                           : ""}
                       </p>
                     ) : null}
-                    {task.dueDate.trim() ? (
+                    {task.dueDate.trim() &&
+                    annualTaskAutoEmailTemplateName(task) ? (
                       <p className="tax-due-email-notice" role="status">
-                        Email will auto-send at 9:00 AM client time zone using
-                        the supervisor account on this due date.
+                        {annualTaskAutoEmailTemplateName(task)} email will
+                        auto-send at 9:00 AM client time zone using the
+                        supervisor account on{" "}
+                        {formatAnnualDueDateLabel(task.dueDate)}.
                       </p>
                     ) : null}
                   </li>

@@ -128,6 +128,17 @@ export function isProtectedQuarterlyTask(
   );
 }
 
+/** Lookup template label for due-date auto-send notice. */
+export function quarterlyTaskAutoEmailTemplateName(
+  task: Pick<QuarterlyTaskItem, "kind">,
+): string {
+  const kind = String(task.kind ?? "");
+  if (kind === "gst_hst_tax_compliance:return-filing") {
+    return "GST/HST Return";
+  }
+  return "";
+}
+
 export function isManualQuarterlyTask(
   task: Pick<QuarterlyTaskItem, "kind" | "source">,
 ): boolean {
