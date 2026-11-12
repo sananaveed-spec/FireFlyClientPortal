@@ -186,18 +186,67 @@ export function mergeProtectedOneTimeTasks(
   return [...missing, ...next];
 }
 
+/** Exact heading text: Bookkeeping / Bookkeeping Service / Bookkeeping Services. */
+export function isBookkeepingHeadingText(value: string): boolean {
+  const heading = String(value ?? "")
+    .trim()
+    .replace(/\s+/g, " ");
+  return /^bookkeeping(?:\s+services?)?$/i.test(heading);
+}
+
 /**
- * True when an Ignition proposal has a service-group heading
- * "Bookkeeping", "Bookkeeping Service", or "Bookkeeping Services".
+ * Ignition often puts "BOOKKEEPING" as bold/heading HTML inside the service
+ * description (not as service_group.name). Detect that form too.
+ */
+export function descriptionHtmlHasBookkeepingHeading(html: string): boolean {
+  const raw = String(html ?? "");
+  if (!raw.trim()) {
+    return false;
+  }
+  // <strong>BOOKKEEPING</strong>, <b>…</b>, <h1-6>…</h1-6>
+  if (
+    /<(?:h[1-6]|strong|b)(?:\s[^>]*)?>\s*bookkeeping(?:\s+services?)?\s*<\/(?:h[1-6]|strong|b)>/i.test(
+      raw,
+    )
+  ) {
+    return true;
+  }
+  // Standalone paragraph / div whose visible text is the heading.
+  const blocks = raw.match(/<(?:p|div)(?:\s[^>]*)?>[\s\S]*?<\/(?:p|div)>/gi) ?? [];
+  for (const block of blocks) {
+    const text = block
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (isBookkeepingHeadingText(text)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * True when an Ignition proposal has a Bookkeeping heading via service-group
+ * name or a Bookkeeping / Bookkeeping Service(s) heading in description HTML.
  */
 export function proposalHasBookkeepingServicesHeading(
-  services: ReadonlyArray<{ groupName?: string; name?: string }>,
+  services: ReadonlyArray<{
+    groupName?: string;
+    name?: string;
+    descriptionHtml?: string;
+  }>,
 ): boolean {
   return services.some((service) => {
-    const heading = String(service.groupName ?? "")
-      .trim()
-      .replace(/\s+/g, " ");
-    return /^bookkeeping(?:\s+services?)?$/i.test(heading);
+    if (isBookkeepingHeadingText(String(service.groupName ?? ""))) {
+      return true;
+    }
+    if (isBookkeepingHeadingText(String(service.name ?? ""))) {
+      return true;
+    }
+    return descriptionHtmlHasBookkeepingHeading(
+      String(service.descriptionHtml ?? ""),
+    );
   });
 }
 
