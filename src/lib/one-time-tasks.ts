@@ -316,6 +316,23 @@ export function proposalHasIncomeTaxComplianceServicesHeading(
   return proposalHasExactHeading(services, isIncomeTaxComplianceHeadingText);
 }
 
+/** Exact: GST/HST Tax Compliance Service / GST/HST Tax Compliance Services. */
+export function isGstHstTaxComplianceHeadingText(value: string): boolean {
+  return /^gst\s*\/\s*hst\s+tax\s+compliance\s+services?$/i.test(
+    normalizeHeadingText(value),
+  );
+}
+
+/**
+ * True when proposal has "GST/HST Tax Compliance Service" or
+ * "GST/HST Tax Compliance Services" (group/name or description HTML heading).
+ */
+export function proposalHasGstHstTaxComplianceServicesHeading(
+  services: ReadonlyArray<IgnitionServiceHeadingFields>,
+): boolean {
+  return proposalHasExactHeading(services, isGstHstTaxComplianceHeadingText);
+}
+
 /** @deprecated Use proposalHasBookkeepingServicesHeading */
 export function proposalServicesIncludeBookkeeping(
   services: ReadonlyArray<{ groupName?: string; name?: string }>,

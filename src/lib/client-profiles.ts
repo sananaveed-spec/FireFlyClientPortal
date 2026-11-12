@@ -544,7 +544,7 @@ export type ClientProfileEntry = {
   annualTasks: AnnualTaskItem[];
   /** Monthly recurring services checklist from Ignition monthly-billed services. */
   monthlyTasks: MonthlyTaskItem[];
-  /** Quarterly checklist managed in Client Management. */
+  /** Quarterly checklist (GST/HST Tax Compliance Service(s) from proposal). */
   quarterlyTasks: QuarterlyTaskItem[];
   createdAt: string;
 };

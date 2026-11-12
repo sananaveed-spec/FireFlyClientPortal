@@ -4,6 +4,7 @@ import {
   type ClientProfileEntry,
 } from "@/lib/client-profiles";
 import { readClientProfiles, writeClientProfiles } from "@/lib/data-store";
+import { seedQuarterlyTasksFromAcceptedProposal } from "@/lib/ignition/seed-quarterly-tasks";
 import {
   mergeProtectedQuarterlyTasks,
   normalizeQuarterlyTasks,
@@ -21,6 +22,7 @@ export async function POST(request: Request) {
     const body = (await request.json().catch(() => ({}))) as {
       action?: string;
       profileId?: string;
+      proposalSlug?: string;
       tasks?: QuarterlyTaskItem[];
     };
     const action = String(body.action ?? "").trim().toLowerCase();
@@ -41,7 +43,25 @@ export async function POST(request: Request) {
       );
     }
 
-    const profile = profiles[index]!;
+    let profile = profiles[index]!;
+
+    if (action === "seed") {
+      const slug =
+        String(body.proposalSlug ?? "").trim() ||
+        profile.activeProposalSlug.trim();
+      if (slug) {
+        profile = await seedQuarterlyTasksFromAcceptedProposal(profile, slug);
+      }
+
+      const next = [...profiles];
+      next[index] = normalizeClientProfile(profile);
+      await writeClientProfiles(next);
+      return NextResponse.json({
+        ok: true,
+        profile: next[index],
+        quarterlyTasks: next[index]!.quarterlyTasks,
+      });
+    }
 
     if (action === "save") {
       const gate = await requirePortalUser(request);
@@ -67,7 +87,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(
-      { error: 'Expected action "save".' },
+      { error: 'Expected action "seed" or "save".' },
       { status: 400 },
     );
   } catch (error) {

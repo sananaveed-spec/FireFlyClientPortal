@@ -90,6 +90,7 @@ import {
 } from "@/lib/one-time-tasks";
 import {
   createManualQuarterlyTask,
+  formatQuarterlyDueDateLabel,
   isManualQuarterlyTask,
   isProtectedQuarterlyTask,
   mergeProtectedQuarterlyTasks,
@@ -97,7 +98,7 @@ import {
   quarterlyTasksStatusLabel,
   removeQuarterlyTask,
   toggleQuarterlyTaskCompletion,
-  updateQuarterlyTaskLabel,
+  updateQuarterlyTaskFields,
   type QuarterlyTaskItem,
 } from "@/lib/quarterly-tasks";
 import {
@@ -1114,10 +1115,13 @@ export function ClientManagementPanel() {
     QuarterlyTaskItem[]
   >([]);
   const [quarterlyTasksNewLabel, setQuarterlyTasksNewLabel] = useState("");
+  const [quarterlyTasksNewDueDate, setQuarterlyTasksNewDueDate] = useState("");
   const [quarterlyTasksEditingId, setQuarterlyTasksEditingId] = useState<
     string | null
   >(null);
   const [quarterlyTasksEditLabel, setQuarterlyTasksEditLabel] = useState("");
+  const [quarterlyTasksEditDueDate, setQuarterlyTasksEditDueDate] =
+    useState("");
   const [quarterlyTasksSaving, setQuarterlyTasksSaving] = useState(false);
   const [quarterlyTasksError, setQuarterlyTasksError] = useState<string | null>(
     null,
@@ -3590,10 +3594,13 @@ export function ClientManagementPanel() {
       return;
     }
     setQuarterlyTasksNewLabel("");
+    setQuarterlyTasksNewDueDate("");
     setQuarterlyTasksEditingId(null);
     setQuarterlyTasksEditLabel("");
+    setQuarterlyTasksEditDueDate("");
     setQuarterlyTasksError(null);
     setQuarterlyTasksOpen(true);
+    // GST/HST quarterly tasks seed when Resource Allocation is saved.
     setQuarterlyTasksDraft(
       normalizeQuarterlyTasks(selected.profile.quarterlyTasks),
     );
@@ -3606,8 +3613,10 @@ export function ClientManagementPanel() {
     setQuarterlyTasksOpen(false);
     setQuarterlyTasksDraft([]);
     setQuarterlyTasksNewLabel("");
+    setQuarterlyTasksNewDueDate("");
     setQuarterlyTasksEditingId(null);
     setQuarterlyTasksEditLabel("");
+    setQuarterlyTasksEditDueDate("");
     setQuarterlyTasksError(null);
   }
 
@@ -7858,18 +7867,28 @@ export function ClientManagementPanel() {
               </button>
             </div>
             <p className="one-time-tasks-intro">
-              Track quarterly work for this client. Mark each item when
-              finished.
+              GST/HST Tax Compliance Service(s) from the proposal fill in
+              automatically. Set each due date as needed. Default labels cannot
+              be edited or deleted.
             </p>
             {quarterlyTasksSaving && quarterlyTasksDraft.length === 0 ? (
               <p className="one-time-tasks-empty">Loading quarterly tasks…</p>
             ) : quarterlyTasksDraft.length === 0 ? (
               <div className="one-time-tasks-empty">
                 <p>No quarterly tasks yet.</p>
-                <p>Add the first item below.</p>
+                <p>
+                  When the linked proposal includes GST/HST Tax Compliance
+                  Service or GST/HST Tax Compliance Services, the default item
+                  is added after Resource Allocation is saved.
+                </p>
               </div>
             ) : (
               <ul className="one-time-tasks-list">
+                <li className="annual-tasks-header-row" aria-hidden="true">
+                  <span className="annual-tasks-col-task">Task</span>
+                  <span className="annual-tasks-col-due">Due date</span>
+                  <span className="annual-tasks-col-actions" />
+                </li>
                 {quarterlyTasksDraft.map((task) => {
                   const manual = isManualQuarterlyTask(task);
                   const editing = quarterlyTasksEditingId === task.id;
@@ -7882,8 +7901,8 @@ export function ClientManagementPanel() {
                           : "one-time-tasks-item"
                       }
                     >
-                      <div className="one-time-tasks-item-row">
-                        <label className="one-time-tasks-check">
+                      <div className="one-time-tasks-item-row annual-tasks-item-row">
+                        <label className="one-time-tasks-check annual-tasks-col-task">
                           <input
                             type="checkbox"
                             checked={task.completed}
@@ -7923,8 +7942,43 @@ export function ClientManagementPanel() {
                             </span>
                           )}
                         </label>
+                        <div className="annual-tasks-col-due">
+                          {editing ? (
+                            <input
+                              type="date"
+                              className="field-input annual-tasks-due-input"
+                              value={quarterlyTasksEditDueDate}
+                              disabled={quarterlyTasksSaving}
+                              onChange={(event) =>
+                                setQuarterlyTasksEditDueDate(
+                                  event.target.value,
+                                )
+                              }
+                            />
+                          ) : canEdit && isProtectedQuarterlyTask(task) ? (
+                            <input
+                              type="date"
+                              className="field-input annual-tasks-due-input"
+                              value={task.dueDate}
+                              disabled={quarterlyTasksSaving}
+                              aria-label={`Due date for ${task.label}`}
+                              onChange={(event) => {
+                                const next = updateQuarterlyTaskFields(
+                                  quarterlyTasksDraft,
+                                  task.id,
+                                  { dueDate: event.target.value },
+                                );
+                                void persistQuarterlyTasksDraft(next);
+                              }}
+                            />
+                          ) : (
+                            <span className="annual-tasks-due-label">
+                              {formatQuarterlyDueDateLabel(task.dueDate)}
+                            </span>
+                          )}
+                        </div>
                         {canEdit && manual ? (
-                          <div className="one-time-tasks-item-actions">
+                          <div className="one-time-tasks-item-actions annual-tasks-col-actions">
                             {editing ? (
                               <>
                                 <button
@@ -7935,13 +7989,17 @@ export function ClientManagementPanel() {
                                     !quarterlyTasksEditLabel.trim()
                                   }
                                   onClick={() => {
-                                    const next = updateQuarterlyTaskLabel(
+                                    const next = updateQuarterlyTaskFields(
                                       quarterlyTasksDraft,
                                       task.id,
-                                      quarterlyTasksEditLabel,
+                                      {
+                                        label: quarterlyTasksEditLabel,
+                                        dueDate: quarterlyTasksEditDueDate,
+                                      },
                                     );
                                     setQuarterlyTasksEditingId(null);
                                     setQuarterlyTasksEditLabel("");
+                                    setQuarterlyTasksEditDueDate("");
                                     void persistQuarterlyTasksDraft(next);
                                   }}
                                 >
@@ -7954,6 +8012,7 @@ export function ClientManagementPanel() {
                                   onClick={() => {
                                     setQuarterlyTasksEditingId(null);
                                     setQuarterlyTasksEditLabel("");
+                                    setQuarterlyTasksEditDueDate("");
                                   }}
                                 >
                                   Cancel
@@ -7968,6 +8027,7 @@ export function ClientManagementPanel() {
                                   onClick={() => {
                                     setQuarterlyTasksEditingId(task.id);
                                     setQuarterlyTasksEditLabel(task.label);
+                                    setQuarterlyTasksEditDueDate(task.dueDate);
                                   }}
                                 >
                                   Edit
@@ -7989,7 +8049,9 @@ export function ClientManagementPanel() {
                               </>
                             )}
                           </div>
-                        ) : null}
+                        ) : (
+                          <span className="annual-tasks-col-actions" />
+                        )}
                       </div>
                       {task.completed ? (
                         <p className="one-time-tasks-meta">
@@ -8008,7 +8070,7 @@ export function ClientManagementPanel() {
               </ul>
             )}
             {canEdit ? (
-              <div className="one-time-tasks-add">
+              <div className="one-time-tasks-add annual-tasks-add">
                 <label className="field one-time-tasks-add-field">
                   <span className="field-label">Add another task</span>
                   <input
@@ -8026,13 +8088,27 @@ export function ClientManagementPanel() {
                         if (!label || quarterlyTasksSaving) {
                           return;
                         }
+                        const due = quarterlyTasksNewDueDate;
                         setQuarterlyTasksNewLabel("");
+                        setQuarterlyTasksNewDueDate("");
                         void persistQuarterlyTasksDraft([
                           ...quarterlyTasksDraft,
-                          createManualQuarterlyTask(label),
+                          createManualQuarterlyTask(label, due),
                         ]);
                       }
                     }}
+                  />
+                </label>
+                <label className="field annual-tasks-add-due-field">
+                  <span className="field-label">Due date</span>
+                  <input
+                    type="date"
+                    className="field-input"
+                    value={quarterlyTasksNewDueDate}
+                    disabled={quarterlyTasksSaving}
+                    onChange={(event) =>
+                      setQuarterlyTasksNewDueDate(event.target.value)
+                    }
                   />
                 </label>
                 <button
@@ -8046,10 +8122,12 @@ export function ClientManagementPanel() {
                     if (!label) {
                       return;
                     }
+                    const due = quarterlyTasksNewDueDate;
                     setQuarterlyTasksNewLabel("");
+                    setQuarterlyTasksNewDueDate("");
                     void persistQuarterlyTasksDraft([
                       ...quarterlyTasksDraft,
-                      createManualQuarterlyTask(label),
+                      createManualQuarterlyTask(label, due),
                     ]);
                   }}
                 >

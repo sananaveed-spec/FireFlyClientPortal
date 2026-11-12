@@ -1,23 +1,57 @@
 /**
  * Client Info — Quarterly Tasks checklist.
+ * GST/HST Tax Compliance Service(s) proposal heading seeds the GST/HST return
+ * bullet; due dates are set by assigned users.
  */
+
+export const QUARTERLY_GST_HST_TASK_SOURCE = "ignition_gst_hst" as const;
+
+/** Fixed Quarterly Task for GST/HST Tax Compliance Service(s) heading. */
+export const GST_HST_TAX_COMPLIANCE_QUARTERLY_TASK_DEFINITIONS = [
+  {
+    kind: "gst_hst_tax_compliance:return-filing",
+    label: "Monthly / quarterly GST/HST return preparation and filing.",
+  },
+] as const;
 
 export type QuarterlyTaskItem = {
   id: string;
-  /** Reserved for future default/auto tasks; empty for user-added. */
+  /** Stable key for default tasks; empty for user-added. */
   kind: string;
   label: string;
+  /** ISO date YYYY-MM-DD when set by an assigned user. */
+  dueDate: string;
   completed: boolean;
   completedAt: string;
   completedByName: string;
   completedByEmail: string;
   createdAt: string;
-  source: "manual";
+  source: typeof QUARTERLY_GST_HST_TASK_SOURCE | "manual";
   proposalSlug: string;
 };
 
 export function createQuarterlyTaskId() {
   return `qot-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function formatQuarterlyDueDateLabel(dueDate: string): string {
+  const match = dueDate.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return dueDate.trim() || "—";
+  }
+  const date = new Date(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3]),
+  );
+  if (Number.isNaN(date.getTime())) {
+    return dueDate;
+  }
+  return date.toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 export function normalizeQuarterlyTaskItem(
@@ -32,17 +66,22 @@ export function normalizeQuarterlyTaskItem(
   if (!id || !label) {
     return null;
   }
+  const source =
+    record.source === QUARTERLY_GST_HST_TASK_SOURCE
+      ? QUARTERLY_GST_HST_TASK_SOURCE
+      : "manual";
   return {
     id,
     kind: String(record.kind ?? "").trim(),
     label,
+    dueDate: String(record.dueDate ?? "").trim(),
     completed: Boolean(record.completed),
     completedAt: String(record.completedAt ?? "").trim(),
     completedByName: String(record.completedByName ?? "").trim(),
     completedByEmail: String(record.completedByEmail ?? "").trim(),
     createdAt:
       String(record.createdAt ?? "").trim() || new Date().toISOString(),
-    source: "manual",
+    source,
     proposalSlug: String(record.proposalSlug ?? "").trim(),
   };
 }
@@ -72,7 +111,11 @@ export function quarterlyTasksStatusLabel(tasks: QuarterlyTaskItem[]): string {
 export function isProtectedQuarterlyTask(
   task: Pick<QuarterlyTaskItem, "kind" | "source">,
 ): boolean {
-  return Boolean(String(task.kind ?? "").trim());
+  const kind = String(task.kind ?? "");
+  return (
+    task.source === QUARTERLY_GST_HST_TASK_SOURCE ||
+    kind.startsWith("gst_hst_tax_compliance:")
+  );
 }
 
 export function isManualQuarterlyTask(
@@ -81,11 +124,15 @@ export function isManualQuarterlyTask(
   return !isProtectedQuarterlyTask(task);
 }
 
-export function createManualQuarterlyTask(label: string): QuarterlyTaskItem {
+export function createManualQuarterlyTask(
+  label: string,
+  dueDate = "",
+): QuarterlyTaskItem {
   return {
     id: createQuarterlyTaskId(),
     kind: "",
     label: label.trim(),
+    dueDate: dueDate.trim(),
     completed: false,
     completedAt: "",
     completedByName: "",
@@ -126,18 +173,42 @@ export function toggleQuarterlyTaskCompletion(
   });
 }
 
+export function updateQuarterlyTaskFields(
+  tasks: QuarterlyTaskItem[],
+  taskId: string,
+  patch: { label?: string; dueDate?: string },
+): QuarterlyTaskItem[] {
+  return tasks.map((task) => {
+    if (task.id !== taskId) {
+      return task;
+    }
+    // Default tasks: due date editable; label locked.
+    if (isProtectedQuarterlyTask(task)) {
+      if (patch.dueDate === undefined) {
+        return task;
+      }
+      return {
+        ...task,
+        dueDate: patch.dueDate.trim(),
+      };
+    }
+    return {
+      ...task,
+      label:
+        patch.label !== undefined ? patch.label.trim() || task.label : task.label,
+      dueDate:
+        patch.dueDate !== undefined ? patch.dueDate.trim() : task.dueDate,
+    };
+  });
+}
+
+/** @deprecated Prefer updateQuarterlyTaskFields */
 export function updateQuarterlyTaskLabel(
   tasks: QuarterlyTaskItem[],
   taskId: string,
   label: string,
 ): QuarterlyTaskItem[] {
-  const nextLabel = label.trim();
-  return tasks.map((task) => {
-    if (task.id !== taskId || isProtectedQuarterlyTask(task) || !nextLabel) {
-      return task;
-    }
-    return { ...task, label: nextLabel };
-  });
+  return updateQuarterlyTaskFields(tasks, taskId, { label });
 }
 
 export function removeQuarterlyTask(
@@ -177,8 +248,9 @@ export function mergeProtectedQuarterlyTasks(
     return {
       ...prior,
       label: prior.label,
+      dueDate: prior.dueDate || task.dueDate,
       kind: prior.kind,
-      source: "manual" as const,
+      source: QUARTERLY_GST_HST_TASK_SOURCE,
       completed: task.completed,
       completedAt: task.completedAt,
       completedByName: task.completedByName,
@@ -186,4 +258,39 @@ export function mergeProtectedQuarterlyTasks(
     };
   });
   return missing.length > 0 ? [...missing, ...merged] : merged;
+}
+
+/**
+ * When proposal has GST/HST Tax Compliance Service(s) heading, ensure the
+ * fixed quarterly checklist. Due dates start empty for users to set.
+ */
+export function ensureGstHstTaxComplianceQuarterlyTasks(
+  tasks: QuarterlyTaskItem[],
+  proposalSlug = "",
+): QuarterlyTaskItem[] {
+  const existingKinds = new Set(
+    tasks.filter(isProtectedQuarterlyTask).map((task) => task.kind),
+  );
+  const additions: QuarterlyTaskItem[] = [];
+  const slug = proposalSlug.trim();
+  for (const def of GST_HST_TAX_COMPLIANCE_QUARTERLY_TASK_DEFINITIONS) {
+    if (existingKinds.has(def.kind)) {
+      continue;
+    }
+    existingKinds.add(def.kind);
+    additions.push({
+      id: createQuarterlyTaskId(),
+      kind: def.kind,
+      label: def.label,
+      dueDate: "",
+      completed: false,
+      completedAt: "",
+      completedByName: "",
+      completedByEmail: "",
+      createdAt: new Date().toISOString(),
+      source: QUARTERLY_GST_HST_TASK_SOURCE,
+      proposalSlug: slug,
+    });
+  }
+  return additions.length > 0 ? [...tasks, ...additions] : tasks;
 }
