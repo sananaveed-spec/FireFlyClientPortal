@@ -2522,6 +2522,15 @@ export function ResourceAllocationPanel() {
                           : ""}
                       </p>
                     ) : null}
+                    {isProtectedAnnualTask(task) && task.dueDate.trim() ? (
+                      <p
+                        className="lookup-hint tax-due-email-notice"
+                        role="status"
+                      >
+                        Email will auto-send at 9:00 AM client time zone using
+                        the supervisor account on this due date.
+                      </p>
+                    ) : null}
                   </li>
                 );
               })}

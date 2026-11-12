@@ -7488,6 +7488,15 @@ export function ClientManagementPanel() {
                             : ""}
                         </p>
                       ) : null}
+                      {isProtectedAnnualTask(task) && task.dueDate.trim() ? (
+                        <p
+                          className="lookup-hint tax-due-email-notice"
+                          role="status"
+                        >
+                          Email will auto-send at 9:00 AM client time zone using
+                          the supervisor account on this due date.
+                        </p>
+                      ) : null}
                     </li>
                   );
                 })}
@@ -8065,6 +8074,15 @@ export function ClientManagementPanel() {
                           {task.completedByName
                             ? ` · ${task.completedByName}`
                             : ""}
+                        </p>
+                      ) : null}
+                      {isProtectedQuarterlyTask(task) && task.dueDate.trim() ? (
+                        <p
+                          className="lookup-hint tax-due-email-notice"
+                          role="status"
+                        >
+                          Email will auto-send at 9:00 AM client time zone using
+                          the supervisor account on this due date.
                         </p>
                       ) : null}
                     </li>
