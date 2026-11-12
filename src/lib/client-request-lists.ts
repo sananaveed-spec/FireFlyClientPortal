@@ -650,7 +650,7 @@ export function snapshotBd1ToBd5ForMonth(
   };
 }
 
-/** BD5 Late only (what BD7 / cron use) — never BD1. */
+/** BD5 Late only (what BD7 email / cron use at send time) — never BD1. */
 export function getBd5LateActionItemsForMonth(
   store: ClientRequestListsStore,
   clientId: string,
@@ -680,6 +680,95 @@ export function getBd5LateActionItemsForMonth(
     const bTime = Date.parse(b.completedAt) || 0;
     return bTime - aTime;
   });
+}
+
+/** Marker + source prefix: BD5 Late frozen onto BD7 for BD9 (locked). */
+export const BD7_LATE_SNAPSHOT_MARKER = "__bd7_late_snapshot__";
+export const BD7_LATE_SOURCE_PREFIX = "bd7-late:";
+
+/**
+ * When BD7 email sends or BD7 9:00 AM client send time is reached (not merely
+ * the start of the BD7 calendar day): freeze current BD5 Late items onto the
+ * BD7 list for BD9. First snapshot for the month wins (locked); BD5 statuses
+ * also stop changing after that.
+ */
+export function snapshotBd5LateToBd7ForMonth(
+  store: ClientRequestListsStore,
+  clientId: string,
+  monthKey: string,
+): { store: ClientRequestListsStore; created: boolean } {
+  const id = clientId.trim();
+  const month = monthKey.trim();
+  if (!id || !/^\d{4}-\d{2}$/.test(month)) {
+    return { store, created: false };
+  }
+
+  const target = getClientRequestList(store, id, "bd7");
+  const alreadySnapshotted = target.requestItems.some(
+    (item) =>
+      item.createdMonth === month &&
+      item.label.trim() === BD7_LATE_SNAPSHOT_MARKER,
+  );
+  if (alreadySnapshotted) {
+    return { store, created: false };
+  }
+
+  const late = getBd5LateActionItemsForMonth(store, id, month);
+  const marker: RequestBulletItem = {
+    id: makeItemId("req"),
+    label: BD7_LATE_SNAPSHOT_MARKER,
+    createdMonth: month,
+  };
+  const newActions: ActionWorkflowItem[] = late.map((item) => ({
+    id: makeItemId("act"),
+    label: item.label,
+    sourceRequestId: `${BD7_LATE_SOURCE_PREFIX}${item.id}`,
+    monthKey: month,
+    status: "late",
+    completedAt: item.completedAt || new Date().toISOString(),
+  }));
+
+  const nextTarget: ClientRequestList = {
+    clientId: id,
+    scheduleId: "bd7",
+    requestItems: [...target.requestItems, marker],
+    actionItems: [
+      ...target.actionItems.filter((item) => item.monthKey !== month),
+      ...newActions,
+    ],
+    lastPromotedMonth: target.lastPromotedMonth || month,
+  };
+
+  return {
+    store: upsertClientRequestList(store, nextTarget),
+    created: true,
+  };
+}
+
+/** Locked BD7 Late snapshot for BD9 / BD10 (not live BD5). */
+export function getBd7LateActionItemsForMonth(
+  store: ClientRequestListsStore,
+  clientId: string,
+  monthKey: string,
+): ActionWorkflowItem[] {
+  const id = clientId.trim();
+  const month = monthKey.trim();
+  if (!id || !month) {
+    return [];
+  }
+  const list = getClientRequestList(store, id, "bd7");
+  return list.actionItems
+    .filter(
+      (item) =>
+        item.monthKey === month &&
+        item.status === "late" &&
+        item.sourceRequestId.startsWith(BD7_LATE_SOURCE_PREFIX),
+    )
+    .sort((a, b) => {
+      const aTime = Date.parse(a.completedAt) || 0;
+      const bTime = Date.parse(b.completedAt) || 0;
+      return bTime - aTime;
+    });
 }
 
 export function createRequestBulletItem(

@@ -105,12 +105,13 @@ import {
 } from "@/lib/quarterly-tasks";
 import {
   addRequestBulletToList,
+  BD7_LATE_SNAPSHOT_MARKER,
   BD9_EXCEL_SOURCE_PREFIX,
   BD13_LATE_SOURCE_PREFIX,
   createEmptyRequestListsStore,
   currentMonthKey,
   findListContainingActionItem,
-  getBd5LateActionItemsForMonth,
+  getBd7LateActionItemsForMonth,
   getClientActionItems,
   getClientRequestList,
   normalizeClientRequestListsStore,
@@ -119,6 +120,7 @@ import {
   requestItemsForMonth,
   setActionItemStatus,
   snapshotBd1ToBd5ForMonth,
+  snapshotBd5LateToBd7ForMonth,
   syncBd9ExcelRowsToActionItems,
   syncBd13LateItemsFromSources,
   updateRequestBulletLabel,
@@ -182,6 +184,7 @@ import {
   sumLateActionLabelAmounts,
 } from "@/lib/spreadsheet-row-count";
 import {
+  calendarYmdFromLocalDate,
   CLIENT_TIME_ZONE_REQUIRED_MESSAGE,
   getClientEpsFridaySendSchedule,
   getClientNineAmSchedule,
@@ -705,6 +708,25 @@ function requestTypeScheduleIds(subMenuId: Bd1SubMenuId): string[] {
   return subMenuId === "other-statements"
     ? ["bd1-other-statements", "bd5-other-statements"]
     : ["bd1", "bd5"];
+}
+
+/**
+ * BD7 lock trigger: email already sent, or 9:00 AM client time on the BD7
+ * calendar date has been reached (not merely the start of that calendar day).
+ */
+function isBd7EmailSendTimeReached(
+  bd7Date: Date | null,
+  clientTimeZone: string | undefined | null,
+  now: Date,
+): boolean {
+  if (!bd7Date) {
+    return false;
+  }
+  const schedule = getClientNineAmSchedule(bd7Date, clientTimeZone);
+  if (!schedule) {
+    return false;
+  }
+  return now.getTime() >= schedule.instant.getTime();
 }
 
 /** BD5 snapshot lists only (what was sent on BD1 — used by BD5 / BD7). */
@@ -2268,12 +2290,12 @@ export function ClientManagementPanel() {
       bd9ExcelEmailItemsPeriod.length > 0
         ? bd9ExcelEmailItemsPeriod
         : bd9ExcelEmailItemsWorking;
-    const bd9Bd7LateEmailPeriod = getBd5LateActionItemsForMonth(
+    const bd9Bd7LateEmailPeriod = getBd7LateActionItemsForMonth(
       requestLists,
       selectedClientId,
       emailMonthKey,
     );
-    const bd9Bd7LateEmailWorking = getBd5LateActionItemsForMonth(
+    const bd9Bd7LateEmailWorking = getBd7LateActionItemsForMonth(
       requestLists,
       selectedClientId,
       workingMonthKey,
@@ -2889,12 +2911,12 @@ export function ClientManagementPanel() {
     items: ActionWorkflowItem[],
   ): ActionWorkflowItem[] =>
     items.filter((item) => item.monthKey === scheduleMonthKey);
-  /** BD9 BD7 Status Check (+ BD10/BD13 upstream): BD5 Late items for the month. */
+  /** BD9 BD7 Status Check (+ BD10/BD13 upstream): locked BD7 Late snapshot. */
   const bd9Bd7StatusLateItems = useMemo(() => {
     if ((!showBd9Content && !showBd10OrBd13Content) || !selected) {
       return [];
     }
-    return getBd5LateActionItemsForMonth(
+    return getBd7LateActionItemsForMonth(
       requestLists,
       selected.resource.id,
       scheduleMonthKey,
@@ -3039,7 +3061,31 @@ export function ClientManagementPanel() {
   const completedItems = scopedActionItems.filter(
     (item) => item.status === "completed",
   );
+  /** Locked BD7 Late snapshot when frozen; else live BD5 Late (preview before BD7 lock). */
   const bd7LateItems = useMemo(() => {
+    if (!selected || !showBd7Content) {
+      return [];
+    }
+    const locked = getBd7LateActionItemsForMonth(
+      requestLists,
+      selected.resource.id,
+      scheduleMonthKey,
+    );
+    if (locked.length > 0) {
+      return locked;
+    }
+    const hasMarker = getClientRequestList(
+      requestLists,
+      selected.resource.id,
+      "bd7",
+    ).requestItems.some(
+      (item) =>
+        item.createdMonth === scheduleMonthKey &&
+        item.label.trim() === BD7_LATE_SNAPSHOT_MARKER,
+    );
+    if (hasMarker) {
+      return [];
+    }
     return scopedActionItems
       .filter((item) => item.status === "late")
       .sort((a, b) => {
@@ -3047,7 +3093,13 @@ export function ClientManagementPanel() {
         const bTime = Date.parse(b.completedAt) || 0;
         return bTime - aTime;
       });
-  }, [scopedActionItems]);
+  }, [
+    selected,
+    showBd7Content,
+    requestLists,
+    scheduleMonthKey,
+    scopedActionItems,
+  ]);
   const bd5ActionTableItems = useMemo(() => {
     if (showBd10Content) {
       return scopedActionItems
@@ -3756,6 +3808,94 @@ export function ClientManagementPanel() {
     requestTypeId,
   ]);
 
+  /** BD7 send time reached (9:00 AM client TZ) or BD7 email already sent. */
+  const bd7SendTimeReached = useMemo(() => {
+    if (!selected) {
+      return false;
+    }
+    const bd7Date = getScheduleBusinessDate(
+      "bd7",
+      holidays,
+      selected.profile?.country,
+      selected.profile?.state ?? "",
+      scheduleNow,
+    );
+    return isBd7EmailSendTimeReached(
+      bd7Date,
+      selected.profile?.timeZone,
+      scheduleNow,
+    );
+  }, [
+    selected,
+    holidays,
+    scheduleNow,
+  ]);
+
+  const hasBd7LateSnapshot = useMemo(() => {
+    if (!selected) {
+      return false;
+    }
+    return getClientRequestList(
+      requestLists,
+      selected.resource.id,
+      "bd7",
+    ).requestItems.some(
+      (item) =>
+        item.createdMonth === scheduleMonthKey &&
+        item.label.trim() === BD7_LATE_SNAPSHOT_MARKER,
+    );
+  }, [selected, requestLists, scheduleMonthKey]);
+
+  /**
+   * After BD7 email send / 9:00 AM send time: BD5 Complete/Late/Reopen locked;
+   * BD9 uses the frozen Late snapshot.
+   */
+  const bd5StatusesLockedAfterBd7 =
+    showBd5Content &&
+    (hasBd7LateSnapshot ||
+      bd7SendTimeReached ||
+      (showBd7Content && bdAutoEmailStatus.emailSent));
+
+  // BD5/BD7/BD9/BD10: freeze BD5 Late → BD7 when BD7 email sent or 9:00 AM send time reached.
+  useEffect(() => {
+    if (
+      !selected ||
+      (!showBd5Content &&
+        !showBd7Content &&
+        !showBd9Content &&
+        !showBd10OrBd13Content)
+    ) {
+      return;
+    }
+    const freezeNow =
+      (showBd7Content && bdAutoEmailStatus.emailSent) || bd7SendTimeReached;
+    if (!freezeNow) {
+      return;
+    }
+    const { store, created } = snapshotBd5LateToBd7ForMonth(
+      requestLists,
+      selected.resource.id,
+      scheduleMonthKey,
+    );
+    if (!created) {
+      return;
+    }
+    const nextList = getClientRequestList(store, selected.resource.id, "bd7");
+    void persistList(nextList);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- persist once when snapshot missing
+  }, [
+    selected?.resource.id,
+    showBd5Content,
+    showBd7Content,
+    showBd9Content,
+    showBd10OrBd13Content,
+    scheduleMonthKey,
+    bdAutoEmailStatus.emailSent,
+    bd7SendTimeReached,
+    holidays,
+    scheduleNow,
+  ]);
+
   function requireActiveSchedule(actionLabel = "perform this action"): boolean {
     if (isSelectedScheduleActive) {
       return true;
@@ -4260,6 +4400,12 @@ export function ClientManagementPanel() {
       setError("This business day is Inactive. Fill the star to activate it.");
       return;
     }
+    if (bd5StatusesLockedAfterBd7) {
+      setError(
+        "BD5 statuses are locked after BD7 email send time (9:00 AM client time). BD9 uses that frozen Late list.",
+      );
+      return;
+    }
     // BD5 Complete/Late must update the BD5 snapshot list only — never BD1.
     const owner = showBd5Content
       ? getClientRequestList(
@@ -4282,6 +4428,12 @@ export function ClientManagementPanel() {
     }
     if (!isSelectedScheduleActive) {
       setError("BD5 is Inactive for this client. Fill the star to activate it.");
+      return;
+    }
+    if (bd5StatusesLockedAfterBd7) {
+      setError(
+        "BD5 statuses are locked after BD7 email send time (9:00 AM client time).",
+      );
       return;
     }
     if (!selectedPortalLink) {
@@ -4429,6 +4581,12 @@ export function ClientManagementPanel() {
       return;
     }
     if (!requireActiveSchedule("update action items")) {
+      return;
+    }
+    if (bd5StatusesLockedAfterBd7) {
+      setError(
+        "BD5 statuses are locked after BD7 email send time (9:00 AM client time). BD9 uses that frozen Late list.",
+      );
       return;
     }
     const owner = showBd5Content
@@ -5869,12 +6027,14 @@ export function ClientManagementPanel() {
                                 BD7 Status Check
                               </h3>
                               <p className="lookup-hint">
-                                List items marked Late on BD5 (same items that
-                                appear on BD7).
+                                Locked Late items from BD7 (frozen when BD7
+                                email sent or BD7 time reached). Not live BD5
+                                data.
                               </p>
                               {bd9Bd7StatusLateItems.length === 0 ? (
                                 <p className="lookup-hint">
-                                  No late action items from BD7 found.
+                                  No locked late action items from BD7 yet.
+                                  They appear after BD7 send or BD7 day.
                                 </p>
                               ) : (
                                 <div className="table-wrap bd5-action-table-wrap">
@@ -5884,7 +6044,6 @@ export function ClientManagementPanel() {
                                         <th scope="col">List</th>
                                         <th scope="col">Date Time</th>
                                         <th scope="col">Status</th>
-                                        <th scope="col">Action</th>
                                       </tr>
                                     </thead>
                                     <tbody>
@@ -5908,20 +6067,6 @@ export function ClientManagementPanel() {
                                               <span className="bd5-action-status bd5-action-status--late">
                                                 Late
                                               </span>
-                                            </td>
-                                            <td>
-                                              <button
-                                                type="button"
-                                                className="button secondary"
-                                                disabled={savingRequestList}
-                                                onClick={() =>
-                                                  void handleReopenActionItem(
-                                                    item.id,
-                                                  )
-                                                }
-                                              >
-                                                Reopen
-                                              </button>
                                             </td>
                                           </tr>
                                         );
@@ -6114,9 +6259,17 @@ export function ClientManagementPanel() {
                                   <p className="lookup-hint">
                                     BD5 is a locked copy of the BD1 list from
                                     when BD1 email was sent. Labels cannot be
-                                    edited — mark Complete or Late only. Late
-                                    here is what BD7 emails.
+                                    edited — mark Complete or Late only until
+                                    BD7 email send time (9:00 AM client time).
+                                    Late here is what BD7 emails.
                                   </p>
+                                  {bd5StatusesLockedAfterBd7 ? (
+                                    <p className="lookup-hint">
+                                      BD5 Complete/Late is locked — BD7 email
+                                      send time reached (or email sent). BD9
+                                      uses the frozen Late snapshot.
+                                    </p>
+                                  ) : null}
                                   <p className="lookup-hint">
                                     SharePoint auto-check is paused until search
                                     logic is defined for this client’s folder
@@ -6202,7 +6355,11 @@ export function ClientManagementPanel() {
                                           </td>
                                           {showBd10Content ? null : (
                                           <td>
-                                            {showBd13Content || isOpen ? (
+                                            {bd5StatusesLockedAfterBd7 ? (
+                                              <span className="lookup-hint">
+                                                Locked after BD7 send time
+                                              </span>
+                                            ) : showBd13Content || isOpen ? (
                                               <div className="bd5-action-row-actions">
                                                 <button
                                                   type="button"
@@ -6324,8 +6481,9 @@ export function ClientManagementPanel() {
                           <>
                             {bd7LateItems.length === 0 ? (
                               <p className="lookup-hint">
-                                No BD5 Late items for this month. Mark Late on
-                                BD5 after BD1 has been sent.
+                                No BD7 Late items for this month. Mark Late on
+                                BD5; they lock here when BD7 email sends or BD7
+                                time is reached.
                               </p>
                             ) : (
                               <div className="table-wrap bd5-action-table-wrap">

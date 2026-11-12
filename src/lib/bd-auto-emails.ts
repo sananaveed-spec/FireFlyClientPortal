@@ -52,10 +52,12 @@ import {
   BD9_EXCEL_SOURCE_PREFIX,
   currentMonthKey,
   getBd5LateActionItemsForMonth,
+  getBd7LateActionItemsForMonth,
   getClientRequestList,
   normalizeClientRequestListsStore,
   requestItemsForMonth,
   snapshotBd1ToBd5ForMonth,
+  snapshotBd5LateToBd7ForMonth,
   type ActionWorkflowItem,
   type ClientRequestListsStore,
 } from "@/lib/client-request-lists";
@@ -270,14 +272,23 @@ function isOtherStatementsProfile(profile: ClientProfileEntry): boolean {
   );
 }
 
-/** BD10: Late from BD5 (BD7 Status Check) + BD9 Excel Status Check. */
+/** Locked BD7 Late snapshot (what BD9 BD7 Status Check uses). */
+function getBd7LateItems(
+  store: ClientRequestListsStore,
+  clientId: string,
+  monthKey: string,
+): ActionWorkflowItem[] {
+  return getBd7LateActionItemsForMonth(store, clientId, monthKey);
+}
+
+/** BD10: Late from BD7 locked snapshot + BD9 Excel Status Check. */
 function getBd10LateItems(
   store: ClientRequestListsStore,
   clientId: string,
   monthKey: string,
 ): ActionWorkflowItem[] {
   const lateById = new Map<string, ActionWorkflowItem>();
-  for (const item of getBd5LateItems(store, clientId, monthKey)) {
+  for (const item of getBd7LateItems(store, clientId, monthKey)) {
     lateById.set(item.id, item);
   }
   const bd9 = getClientRequestList(store, clientId, "bd9");
@@ -821,6 +832,16 @@ export async function runBdAutoEmails(options?: {
           requestLists = ensured.store;
           requestListsDirty = true;
         }
+        // Freeze BD5 Late onto BD7 for BD9 (locked) when BD7 time is reached.
+        const bd7LateSnap = snapshotBd5LateToBd7ForMonth(
+          requestLists,
+          resource.id,
+          monthKey,
+        );
+        if (bd7LateSnap.created) {
+          requestLists = bd7LateSnap.store;
+          requestListsDirty = true;
+        }
         const late = getBd5LateItems(requestLists, resource.id, monthKey);
         if (late.length === 0) {
           result.skipped.push({
@@ -1048,6 +1069,17 @@ export async function runBdAutoEmails(options?: {
           );
           if (snap.created) {
             requestLists = snap.store;
+            requestListsDirty = true;
+          }
+        }
+        if (scheduleId === "bd7") {
+          const bd7LateSnap = snapshotBd5LateToBd7ForMonth(
+            requestLists,
+            resource.id,
+            monthKey,
+          );
+          if (bd7LateSnap.created) {
+            requestLists = bd7LateSnap.store;
             requestListsDirty = true;
           }
         }
