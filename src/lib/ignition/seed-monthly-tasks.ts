@@ -1,14 +1,18 @@
 import {
   ensureBookkeepingMonthlyTasks,
+  ensureFinancialReportingMonthlyTasks,
 } from "@/lib/monthly-tasks";
 import type { ClientProfileEntry } from "@/lib/client-profiles";
 import { fetchIgnitionProposalView } from "@/lib/ignition/proposals";
-import { proposalHasBookkeepingServicesHeading } from "@/lib/one-time-tasks";
+import {
+  proposalHasBookkeepingServicesHeading,
+  proposalHasFinancialReportingServicesHeading,
+} from "@/lib/one-time-tasks";
 
 /**
  * Called when Resource Allocation is saved (not on proposal accept).
- * If the client's accepted proposal has a "Bookkeeping", "Bookkeeping
- * Service", or "Bookkeeping Services" heading, auto-add fixed Monthly Tasks.
+ * Seeds fixed Monthly Tasks from proposal description/group headings:
+ * Bookkeeping / Bookkeeping Service(s), and Financial Reporting Service(s).
  */
 export async function seedMonthlyTasksFromAcceptedProposal(
   profile: ClientProfileEntry,
@@ -21,12 +25,19 @@ export async function seedMonthlyTasksFromAcceptedProposal(
 
   try {
     const view = await fetchIgnitionProposalView(slug);
-    if (!proposalHasBookkeepingServicesHeading(view.services)) {
+    let monthlyTasks = profile.monthlyTasks;
+    if (proposalHasBookkeepingServicesHeading(view.services)) {
+      monthlyTasks = ensureBookkeepingMonthlyTasks(monthlyTasks, slug);
+    }
+    if (proposalHasFinancialReportingServicesHeading(view.services)) {
+      monthlyTasks = ensureFinancialReportingMonthlyTasks(monthlyTasks, slug);
+    }
+    if (monthlyTasks === profile.monthlyTasks) {
       return profile;
     }
     return {
       ...profile,
-      monthlyTasks: ensureBookkeepingMonthlyTasks(profile.monthlyTasks, slug),
+      monthlyTasks,
     };
   } catch (error) {
     console.error("Ignition monthly task seed failed:", error);

@@ -1082,8 +1082,8 @@ export function ResourceAllocationPanel() {
       setEditingId(null);
       setForm(createEmptyResourceClientForm(getDefaultStatus(statusOptions)));
 
-      // On Resource Allocation save: seed One-Time + Monthly if accepted
-      // proposal has Bookkeeping / Bookkeeping Service(s) heading; Annual from tax.
+      // On Resource Allocation save: seed One-Time + Monthly from proposal
+      // headings (Bookkeeping / Financial Reporting Service(s)); Annual from tax.
       if (profile?.id && profile.activeProposalSlug.trim()) {
         void Promise.all([
           portalFetch("/api/client-profiles/one-time-tasks", {

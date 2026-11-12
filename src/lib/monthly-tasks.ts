@@ -35,6 +35,34 @@ export const BOOKKEEPING_MONTHLY_TASK_DEFINITIONS = [
   },
 ] as const;
 
+/** Fixed Monthly Tasks for Financial Reporting Service(s) heading. */
+export const FINANCIAL_REPORTING_MONTHLY_TASK_DEFINITIONS = [
+  {
+    kind: "financial_reporting_monthly:ar-reports",
+    label: "Weekly / monthly Accounts Receivable (AR) reports.",
+  },
+  {
+    kind: "financial_reporting_monthly:ap-reports",
+    label: "Weekly / monthly Accounts Payable (AP) reports.",
+  },
+  {
+    kind: "financial_reporting_monthly:pl-statements",
+    label: "Monthly / quarterly Profit & Loss (P&L) statements.",
+  },
+  {
+    kind: "financial_reporting_monthly:balance-sheet",
+    label: "Monthly / quarterly Balance Sheet statements.",
+  },
+  {
+    kind: "financial_reporting_monthly:cash-flow",
+    label: "Monthly / quarterly Cash Flow statements.",
+  },
+  {
+    kind: "financial_reporting_monthly:budget-variance",
+    label: "Monthly / quarterly budget and variance analysis.",
+  },
+] as const;
+
 export type MonthlyTaskItem = {
   id: string;
   /** Stable key for default monthly services; empty for user-added. */
@@ -135,7 +163,8 @@ export function isProtectedMonthlyTask(
   return (
     task.source === MONTHLY_SERVICE_TASK_SOURCE ||
     kind.startsWith("monthly_service:") ||
-    kind.startsWith("bookkeeping_monthly:")
+    kind.startsWith("bookkeeping_monthly:") ||
+    kind.startsWith("financial_reporting_monthly:")
   );
 }
 
@@ -303,12 +332,9 @@ export function ensureMonthlyTasksFromServices(
   return additions.length > 0 ? [...tasks, ...additions] : tasks;
 }
 
-/**
- * When proposal has Bookkeeping Services heading, ensure the fixed monthly
- * checklist (no duplicates by kind).
- */
-export function ensureBookkeepingMonthlyTasks(
+function ensureFixedMonthlyTasksFromDefinitions(
   tasks: MonthlyTaskItem[],
+  definitions: ReadonlyArray<{ kind: string; label: string }>,
   proposalSlug = "",
 ): MonthlyTaskItem[] {
   const existingKinds = new Set(
@@ -316,7 +342,7 @@ export function ensureBookkeepingMonthlyTasks(
   );
   const additions: MonthlyTaskItem[] = [];
   const slug = proposalSlug.trim();
-  for (const def of BOOKKEEPING_MONTHLY_TASK_DEFINITIONS) {
+  for (const def of definitions) {
     if (existingKinds.has(def.kind)) {
       continue;
     }
@@ -335,4 +361,34 @@ export function ensureBookkeepingMonthlyTasks(
     });
   }
   return additions.length > 0 ? [...tasks, ...additions] : tasks;
+}
+
+/**
+ * When proposal has Bookkeeping Services heading, ensure the fixed monthly
+ * checklist (no duplicates by kind).
+ */
+export function ensureBookkeepingMonthlyTasks(
+  tasks: MonthlyTaskItem[],
+  proposalSlug = "",
+): MonthlyTaskItem[] {
+  return ensureFixedMonthlyTasksFromDefinitions(
+    tasks,
+    BOOKKEEPING_MONTHLY_TASK_DEFINITIONS,
+    proposalSlug,
+  );
+}
+
+/**
+ * When proposal has Financial Reporting Service(s) heading, ensure the fixed
+ * monthly reporting checklist (no duplicates by kind).
+ */
+export function ensureFinancialReportingMonthlyTasks(
+  tasks: MonthlyTaskItem[],
+  proposalSlug = "",
+): MonthlyTaskItem[] {
+  return ensureFixedMonthlyTasksFromDefinitions(
+    tasks,
+    FINANCIAL_REPORTING_MONTHLY_TASK_DEFINITIONS,
+    proposalSlug,
+  );
 }

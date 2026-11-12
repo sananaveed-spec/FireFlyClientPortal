@@ -186,44 +186,97 @@ export function mergeProtectedOneTimeTasks(
   return [...missing, ...next];
 }
 
-/** Exact heading text: Bookkeeping / Bookkeeping Service / Bookkeeping Services. */
-export function isBookkeepingHeadingText(value: string): boolean {
-  const heading = String(value ?? "")
+export type IgnitionServiceHeadingFields = {
+  groupName?: string;
+  name?: string;
+  descriptionHtml?: string;
+};
+
+function normalizeHeadingText(value: string): string {
+  return String(value ?? "")
     .trim()
     .replace(/\s+/g, " ");
-  return /^bookkeeping(?:\s+services?)?$/i.test(heading);
+}
+
+/** Exact heading text: Bookkeeping / Bookkeeping Service / Bookkeeping Services. */
+export function isBookkeepingHeadingText(value: string): boolean {
+  return /^bookkeeping(?:\s+services?)?$/i.test(normalizeHeadingText(value));
+}
+
+/** Exact: Financial Reporting Service / Financial Reporting Services. */
+export function isFinancialReportingHeadingText(value: string): boolean {
+  return /^financial\s+reporting\s+services?$/i.test(
+    normalizeHeadingText(value),
+  );
 }
 
 /**
- * Ignition often puts "BOOKKEEPING" as bold/heading HTML inside the service
- * description (not as service_group.name). Detect that form too.
+ * Ignition often puts section titles as bold/heading HTML inside the service
+ * description (service_group.name is often empty).
  */
-export function descriptionHtmlHasBookkeepingHeading(html: string): boolean {
+export function descriptionHtmlHasExactHeading(
+  html: string,
+  isMatch: (text: string) => boolean,
+): boolean {
   const raw = String(html ?? "");
   if (!raw.trim()) {
     return false;
   }
-  // <strong>BOOKKEEPING</strong>, <b>…</b>, <h1-6>…</h1-6>
-  if (
-    /<(?:h[1-6]|strong|b)(?:\s[^>]*)?>\s*bookkeeping(?:\s+services?)?\s*<\/(?:h[1-6]|strong|b)>/i.test(
-      raw,
-    )
-  ) {
-    return true;
+  const tagged =
+    raw.match(
+      /<(?:h[1-6]|strong|b)(?:\s[^>]*)?>\s*([\s\S]*?)\s*<\/(?:h[1-6]|strong|b)>/gi,
+    ) ?? [];
+  for (const tag of tagged) {
+    const text = tag
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (isMatch(text)) {
+      return true;
+    }
   }
-  // Standalone paragraph / div whose visible text is the heading.
-  const blocks = raw.match(/<(?:p|div)(?:\s[^>]*)?>[\s\S]*?<\/(?:p|div)>/gi) ?? [];
+  const blocks =
+    raw.match(/<(?:p|div)(?:\s[^>]*)?>[\s\S]*?<\/(?:p|div)>/gi) ?? [];
   for (const block of blocks) {
     const text = block
       .replace(/<[^>]+>/g, " ")
       .replace(/&nbsp;/gi, " ")
       .replace(/\s+/g, " ")
       .trim();
-    if (isBookkeepingHeadingText(text)) {
+    if (isMatch(text)) {
       return true;
     }
   }
   return false;
+}
+
+export function descriptionHtmlHasBookkeepingHeading(html: string): boolean {
+  return descriptionHtmlHasExactHeading(html, isBookkeepingHeadingText);
+}
+
+export function descriptionHtmlHasFinancialReportingHeading(
+  html: string,
+): boolean {
+  return descriptionHtmlHasExactHeading(html, isFinancialReportingHeadingText);
+}
+
+function proposalHasExactHeading(
+  services: ReadonlyArray<IgnitionServiceHeadingFields>,
+  isMatch: (text: string) => boolean,
+): boolean {
+  return services.some((service) => {
+    if (isMatch(String(service.groupName ?? ""))) {
+      return true;
+    }
+    if (isMatch(String(service.name ?? ""))) {
+      return true;
+    }
+    return descriptionHtmlHasExactHeading(
+      String(service.descriptionHtml ?? ""),
+      isMatch,
+    );
+  });
 }
 
 /**
@@ -231,23 +284,19 @@ export function descriptionHtmlHasBookkeepingHeading(html: string): boolean {
  * name or a Bookkeeping / Bookkeeping Service(s) heading in description HTML.
  */
 export function proposalHasBookkeepingServicesHeading(
-  services: ReadonlyArray<{
-    groupName?: string;
-    name?: string;
-    descriptionHtml?: string;
-  }>,
+  services: ReadonlyArray<IgnitionServiceHeadingFields>,
 ): boolean {
-  return services.some((service) => {
-    if (isBookkeepingHeadingText(String(service.groupName ?? ""))) {
-      return true;
-    }
-    if (isBookkeepingHeadingText(String(service.name ?? ""))) {
-      return true;
-    }
-    return descriptionHtmlHasBookkeepingHeading(
-      String(service.descriptionHtml ?? ""),
-    );
-  });
+  return proposalHasExactHeading(services, isBookkeepingHeadingText);
+}
+
+/**
+ * True when proposal has "Financial Reporting Service" or
+ * "Financial Reporting Services" (group/name or description HTML heading).
+ */
+export function proposalHasFinancialReportingServicesHeading(
+  services: ReadonlyArray<IgnitionServiceHeadingFields>,
+): boolean {
+  return proposalHasExactHeading(services, isFinancialReportingHeadingText);
 }
 
 /** @deprecated Use proposalHasBookkeepingServicesHeading */
