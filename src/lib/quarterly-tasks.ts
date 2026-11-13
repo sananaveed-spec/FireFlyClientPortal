@@ -118,6 +118,7 @@ export function quarterlyTasksStatusLabel(tasks: QuarterlyTaskItem[]): string {
   return "Pending";
 }
 
+/** Seeded from GST/HST Tax Compliance proposal heading. Still fully editable. */
 export function isProtectedQuarterlyTask(
   task: Pick<QuarterlyTaskItem, "kind" | "source">,
 ): boolean {
@@ -139,10 +140,11 @@ export function quarterlyTaskAutoEmailTemplateName(
   return "";
 }
 
+/** All quarterly tasks are editable (seeded defaults included). */
 export function isManualQuarterlyTask(
-  task: Pick<QuarterlyTaskItem, "kind" | "source">,
+  _task: Pick<QuarterlyTaskItem, "kind" | "source">,
 ): boolean {
-  return !isProtectedQuarterlyTask(task);
+  return true;
 }
 
 export function createManualQuarterlyTask(
@@ -203,16 +205,6 @@ export function updateQuarterlyTaskFields(
     if (task.id !== taskId) {
       return task;
     }
-    // Default tasks: due date editable; label locked.
-    if (isProtectedQuarterlyTask(task)) {
-      if (patch.dueDate === undefined) {
-        return task;
-      }
-      return {
-        ...task,
-        dueDate: patch.dueDate.trim(),
-      };
-    }
     return {
       ...task,
       label:
@@ -236,49 +228,15 @@ export function removeQuarterlyTask(
   tasks: QuarterlyTaskItem[],
   taskId: string,
 ): QuarterlyTaskItem[] {
-  return tasks.filter((task) => {
-    if (task.id !== taskId) {
-      return true;
-    }
-    return isProtectedQuarterlyTask(task);
-  });
+  return tasks.filter((task) => task.id !== taskId);
 }
 
+/** Saves trust the client list (edits/deletes stick). Seed re-adds missing kinds on RA save. */
 export function mergeProtectedQuarterlyTasks(
-  previous: QuarterlyTaskItem[],
+  _previous: QuarterlyTaskItem[],
   next: QuarterlyTaskItem[],
 ): QuarterlyTaskItem[] {
-  const protectedPrevious = previous.filter(isProtectedQuarterlyTask);
-  const nextIds = new Set(next.map((task) => task.id));
-  const nextKinds = new Set(
-    next.filter(isProtectedQuarterlyTask).map((task) => task.kind),
-  );
-  const missing = protectedPrevious.filter(
-    (task) => !nextIds.has(task.id) && !nextKinds.has(task.kind),
-  );
-  const merged = next.map((task) => {
-    if (!isProtectedQuarterlyTask(task)) {
-      return task;
-    }
-    const prior =
-      previous.find((item) => item.id === task.id) ||
-      previous.find((item) => item.kind && item.kind === task.kind);
-    if (!prior) {
-      return task;
-    }
-    return {
-      ...prior,
-      label: prior.label,
-      dueDate: prior.dueDate || task.dueDate,
-      kind: prior.kind,
-      source: QUARTERLY_GST_HST_TASK_SOURCE,
-      completed: task.completed,
-      completedAt: task.completedAt,
-      completedByName: task.completedByName,
-      completedByEmail: task.completedByEmail,
-    };
-  });
-  return missing.length > 0 ? [...missing, ...merged] : merged;
+  return next;
 }
 
 /**
@@ -290,7 +248,7 @@ export function ensureGstHstTaxComplianceQuarterlyTasks(
   proposalSlug = "",
 ): QuarterlyTaskItem[] {
   const existingKinds = new Set(
-    tasks.filter(isProtectedQuarterlyTask).map((task) => task.kind),
+    tasks.map((task) => task.kind.trim()).filter(Boolean),
   );
   const additions: QuarterlyTaskItem[] = [];
   const slug = proposalSlug.trim();

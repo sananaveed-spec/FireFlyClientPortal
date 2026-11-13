@@ -156,6 +156,7 @@ export function monthlyTasksStatusLabel(tasks: MonthlyTaskItem[]): string {
   return "Pending";
 }
 
+/** True when this row was seeded from a proposal (kind used for seed dedupe). */
 export function isProtectedMonthlyTask(
   task: Pick<MonthlyTaskItem, "kind" | "source">,
 ): boolean {
@@ -168,10 +169,11 @@ export function isProtectedMonthlyTask(
   );
 }
 
+/** All monthly tasks are editable (seeded defaults included). */
 export function isManualMonthlyTask(
-  task: Pick<MonthlyTaskItem, "kind" | "source">,
+  _task: Pick<MonthlyTaskItem, "kind" | "source">,
 ): boolean {
-  return !isProtectedMonthlyTask(task);
+  return true;
 }
 
 export function createManualMonthlyTask(label: string): MonthlyTaskItem {
@@ -244,60 +246,27 @@ export function updateMonthlyTaskLabel(
   label: string,
 ): MonthlyTaskItem[] {
   const nextLabel = label.trim();
-  return tasks.map((task) => {
-    if (task.id !== taskId || isProtectedMonthlyTask(task) || !nextLabel) {
-      return task;
-    }
-    return { ...task, label: nextLabel };
-  });
+  if (!nextLabel) {
+    return tasks;
+  }
+  return tasks.map((task) =>
+    task.id === taskId ? { ...task, label: nextLabel } : task,
+  );
 }
 
 export function removeMonthlyTask(
   tasks: MonthlyTaskItem[],
   taskId: string,
 ): MonthlyTaskItem[] {
-  return tasks.filter((task) => {
-    if (task.id !== taskId) {
-      return true;
-    }
-    return isProtectedMonthlyTask(task);
-  });
+  return tasks.filter((task) => task.id !== taskId);
 }
 
+/** Saves trust the client list (edits/deletes stick). Seed re-adds missing kinds on RA save. */
 export function mergeProtectedMonthlyTasks(
-  previous: MonthlyTaskItem[],
+  _previous: MonthlyTaskItem[],
   next: MonthlyTaskItem[],
 ): MonthlyTaskItem[] {
-  const protectedPrevious = previous.filter(isProtectedMonthlyTask);
-  const nextIds = new Set(next.map((task) => task.id));
-  const nextKinds = new Set(
-    next.filter(isProtectedMonthlyTask).map((task) => task.kind),
-  );
-  const missing = protectedPrevious.filter(
-    (task) => !nextIds.has(task.id) && !nextKinds.has(task.kind),
-  );
-  const merged = next.map((task) => {
-    if (!isProtectedMonthlyTask(task)) {
-      return task;
-    }
-    const prior =
-      previous.find((item) => item.id === task.id) ||
-      previous.find((item) => item.kind && item.kind === task.kind);
-    if (!prior) {
-      return task;
-    }
-    return {
-      ...prior,
-      label: prior.label,
-      kind: prior.kind,
-      source: MONTHLY_SERVICE_TASK_SOURCE,
-      completed: task.completed,
-      completedAt: task.completedAt,
-      completedByName: task.completedByName,
-      completedByEmail: task.completedByEmail,
-    };
-  });
-  return missing.length > 0 ? [...missing, ...merged] : merged;
+  return next;
 }
 
 export function ensureMonthlyTasksFromServices(
@@ -309,7 +278,7 @@ export function ensureMonthlyTasksFromServices(
     return tasks;
   }
   const existingKinds = new Set(
-    tasks.filter(isProtectedMonthlyTask).map((task) => task.kind),
+    tasks.map((task) => task.kind.trim()).filter(Boolean),
   );
   const additions: MonthlyTaskItem[] = [];
   for (const service of monthlyServices) {
@@ -338,7 +307,7 @@ function ensureFixedMonthlyTasksFromDefinitions(
   proposalSlug = "",
 ): MonthlyTaskItem[] {
   const existingKinds = new Set(
-    tasks.filter(isProtectedMonthlyTask).map((task) => task.kind),
+    tasks.map((task) => task.kind.trim()).filter(Boolean),
   );
   const additions: MonthlyTaskItem[] = [];
   const slug = proposalSlug.trim();

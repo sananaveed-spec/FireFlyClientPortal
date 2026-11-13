@@ -93,7 +93,6 @@ import {
 import {
   createManualMonthlyTask,
   isManualMonthlyTask,
-  isProtectedMonthlyTask,
   mergeProtectedMonthlyTasks,
   monthlyTasksStatusLabel,
   normalizeMonthlyTasks,
@@ -107,7 +106,6 @@ import {
   createManualOneTimeTask,
   hasQboSetupOneTimeTask,
   isManualOneTimeTask,
-  isProtectedOneTimeTask,
   mergeProtectedOneTimeTasks,
   normalizeOneTimeTasks,
   oneTimeTasksStatusLabel,
@@ -4046,12 +4044,6 @@ export function ClientProfilePanel() {
                           ) : (
                             <span className="one-time-tasks-label">
                               {task.label}
-                              {isProtectedOneTimeTask(task) ? (
-                                <span className="one-time-tasks-lock">
-                                  {" "}
-                                  · Default
-                                </span>
-                              ) : null}
                             </span>
                           )}
                         </label>
@@ -4294,12 +4286,6 @@ export function ClientProfilePanel() {
                           ) : (
                             <span className="one-time-tasks-label">
                               {task.label}
-                              {isProtectedAnnualTask(task) ? (
-                                <span className="one-time-tasks-lock">
-                                  {" "}
-                                  · Default
-                                </span>
-                              ) : null}
                             </span>
                           )}
                         </label>
@@ -4586,12 +4572,6 @@ export function ClientProfilePanel() {
                           ) : (
                             <span className="one-time-tasks-label">
                               {task.label}
-                              {isProtectedMonthlyTask(task) ? (
-                                <span className="one-time-tasks-lock">
-                                  {" "}
-                                  · Default
-                                </span>
-                              ) : null}
                             </span>
                           )}
                         </label>

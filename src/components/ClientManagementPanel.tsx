@@ -68,7 +68,6 @@ import {
 import {
   createManualMonthlyTask,
   isManualMonthlyTask,
-  isProtectedMonthlyTask,
   mergeProtectedMonthlyTasks,
   monthlyTasksStatusLabel,
   normalizeMonthlyTasks,
@@ -80,7 +79,6 @@ import {
 import {
   createManualOneTimeTask,
   isManualOneTimeTask,
-  isProtectedOneTimeTask,
   mergeProtectedOneTimeTasks,
   normalizeOneTimeTasks,
   oneTimeTasksStatusLabel,
@@ -7544,12 +7542,6 @@ export function ClientManagementPanel() {
                           ) : (
                             <span className="one-time-tasks-label">
                               {task.label}
-                              {isProtectedOneTimeTask(task) ? (
-                                <span className="one-time-tasks-lock">
-                                  {" "}
-                                  · Default
-                                </span>
-                              ) : null}
                             </span>
                           )}
                         </label>
@@ -7815,12 +7807,6 @@ export function ClientManagementPanel() {
                           ) : (
                             <span className="one-time-tasks-label">
                               {task.label}
-                              {isProtectedAnnualTask(task) ? (
-                                <span className="one-time-tasks-lock">
-                                  {" "}
-                                  · Default
-                                </span>
-                              ) : null}
                             </span>
                           )}
                         </label>
@@ -8129,12 +8115,6 @@ export function ClientManagementPanel() {
                           ) : (
                             <span className="one-time-tasks-label">
                               {task.label}
-                              {isProtectedMonthlyTask(task) ? (
-                                <span className="one-time-tasks-lock">
-                                  {" "}
-                                  · Default
-                                </span>
-                              ) : null}
                             </span>
                           )}
                         </label>
@@ -8401,12 +8381,6 @@ export function ClientManagementPanel() {
                           ) : (
                             <span className="one-time-tasks-label">
                               {task.label}
-                              {isProtectedQuarterlyTask(task) ? (
-                                <span className="one-time-tasks-lock">
-                                  {" "}
-                                  · Default
-                                </span>
-                              ) : null}
                             </span>
                           )}
                         </label>

@@ -109,15 +109,18 @@ export function hasQboSetupOneTimeTask(tasks: readonly OneTimeTaskItem[]): boole
   return tasks.some((task) => task.kind === QBO_SETUP_TASK_KIND);
 }
 
-/** Default seeded tasks (e.g. QBO Setup) cannot be edited or deleted. */
+/** Seeded from proposal (e.g. QBO Setup). Still fully editable. */
 export function isProtectedOneTimeTask(task: Pick<OneTimeTaskItem, "kind" | "source">): boolean {
   return (
     task.kind === QBO_SETUP_TASK_KIND || task.source === "ignition_bookkeeping"
   );
 }
 
-export function isManualOneTimeTask(task: Pick<OneTimeTaskItem, "kind" | "source">): boolean {
-  return !isProtectedOneTimeTask(task);
+/** All one-time tasks are editable (seeded defaults included). */
+export function isManualOneTimeTask(
+  _task: Pick<OneTimeTaskItem, "kind" | "source">,
+): boolean {
+  return true;
 }
 
 export function updateOneTimeTaskLabel(
@@ -129,61 +132,24 @@ export function updateOneTimeTaskLabel(
   if (!nextLabel) {
     return tasks;
   }
-  return tasks.map((task) => {
-    if (task.id !== taskId || isProtectedOneTimeTask(task)) {
-      return task;
-    }
-    return { ...task, label: nextLabel };
-  });
+  return tasks.map((task) =>
+    task.id === taskId ? { ...task, label: nextLabel } : task,
+  );
 }
 
 export function removeOneTimeTask(
   tasks: OneTimeTaskItem[],
   taskId: string,
 ): OneTimeTaskItem[] {
-  return tasks.filter((task) => {
-    if (task.id !== taskId) {
-      return true;
-    }
-    // Never drop protected default tasks.
-    return isProtectedOneTimeTask(task);
-  });
+  return tasks.filter((task) => task.id !== taskId);
 }
 
-/**
- * When saving, keep any protected defaults that were omitted from the payload.
- */
+/** Saves trust the client list (edits/deletes stick). Seed re-adds missing kinds on RA save. */
 export function mergeProtectedOneTimeTasks(
-  previous: OneTimeTaskItem[],
+  _previous: OneTimeTaskItem[],
   next: OneTimeTaskItem[],
 ): OneTimeTaskItem[] {
-  const protectedPrevious = previous.filter(isProtectedOneTimeTask);
-  const nextIds = new Set(next.map((task) => task.id));
-  const missing = protectedPrevious.filter((task) => !nextIds.has(task.id));
-  if (missing.length === 0) {
-    return next.map((task) => {
-      if (!isProtectedOneTimeTask(task)) {
-        return task;
-      }
-      const prior = previous.find((item) => item.id === task.id);
-      if (!prior) {
-        return {
-          ...task,
-          kind: QBO_SETUP_TASK_KIND,
-          label: QBO_SETUP_TASK_LABEL,
-          source: "ignition_bookkeeping" as const,
-        };
-      }
-      return {
-        ...prior,
-        completed: task.completed,
-        completedAt: task.completedAt,
-        completedByName: task.completedByName,
-        completedByEmail: task.completedByEmail,
-      };
-    });
-  }
-  return [...missing, ...next];
+  return next;
 }
 
 export type IgnitionServiceHeadingFields = {
@@ -205,9 +171,8 @@ export function isBookkeepingHeadingText(value: string): boolean {
 
 /** Exact: Financial Reporting Service / Financial Reporting Services. */
 export function isFinancialReportingHeadingText(value: string): boolean {
-  return /^financial\s+reporting\s+services?$/i.test(
-    normalizeHeadingText(value),
-  );
+  const text = normalizeHeadingText(value).replace(/[./]+$/g, "").trim();
+  return /^financial\s+reporting\s+services?$/i.test(text);
 }
 
 /**

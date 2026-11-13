@@ -128,6 +128,7 @@ export function annualTasksStatusLabel(tasks: AnnualTaskItem[]): string {
   return "Pending";
 }
 
+/** Seeded from Income Tax Compliance proposal heading. Still fully editable. */
 export function isProtectedAnnualTask(
   task: Pick<AnnualTaskItem, "kind" | "source">,
 ): boolean {
@@ -148,10 +149,11 @@ export function annualTaskAutoEmailTemplateName(
   return "";
 }
 
+/** All annual tasks are editable (seeded defaults included). */
 export function isManualAnnualTask(
-  task: Pick<AnnualTaskItem, "kind" | "source">,
+  _task: Pick<AnnualTaskItem, "kind" | "source">,
 ): boolean {
-  return !isProtectedAnnualTask(task);
+  return true;
 }
 
 export function createManualAnnualTask(
@@ -212,16 +214,6 @@ export function updateAnnualTaskFields(
     if (task.id !== taskId) {
       return task;
     }
-    // Default (protected) tasks: due date editable by assigned users; label locked.
-    if (isProtectedAnnualTask(task)) {
-      if (patch.dueDate === undefined) {
-        return task;
-      }
-      return {
-        ...task,
-        dueDate: patch.dueDate.trim(),
-      };
-    }
     return {
       ...task,
       label:
@@ -236,49 +228,15 @@ export function removeAnnualTask(
   tasks: AnnualTaskItem[],
   taskId: string,
 ): AnnualTaskItem[] {
-  return tasks.filter((task) => {
-    if (task.id !== taskId) {
-      return true;
-    }
-    return isProtectedAnnualTask(task);
-  });
+  return tasks.filter((task) => task.id !== taskId);
 }
 
+/** Saves trust the client list (edits/deletes stick). Seed re-adds missing kinds on RA save. */
 export function mergeProtectedAnnualTasks(
-  previous: AnnualTaskItem[],
+  _previous: AnnualTaskItem[],
   next: AnnualTaskItem[],
 ): AnnualTaskItem[] {
-  const protectedPrevious = previous.filter(isProtectedAnnualTask);
-  const nextIds = new Set(next.map((task) => task.id));
-  const nextKinds = new Set(
-    next.filter(isProtectedAnnualTask).map((task) => task.kind),
-  );
-  const missing = protectedPrevious.filter(
-    (task) => !nextIds.has(task.id) && !nextKinds.has(task.kind),
-  );
-  const merged = next.map((task) => {
-    if (!isProtectedAnnualTask(task)) {
-      return task;
-    }
-    const prior =
-      previous.find((item) => item.id === task.id) ||
-      previous.find((item) => item.kind && item.kind === task.kind);
-    if (!prior) {
-      return task;
-    }
-    return {
-      ...prior,
-      label: prior.label,
-      dueDate: prior.dueDate || task.dueDate,
-      kind: prior.kind,
-      source: ANNUAL_TAX_TASK_SOURCE,
-      completed: task.completed,
-      completedAt: task.completedAt,
-      completedByName: task.completedByName,
-      completedByEmail: task.completedByEmail,
-    };
-  });
-  return missing.length > 0 ? [...missing, ...merged] : merged;
+  return next;
 }
 
 /**
@@ -290,7 +248,7 @@ export function ensureIncomeTaxComplianceAnnualTasks(
   proposalSlug = "",
 ): AnnualTaskItem[] {
   const existingKinds = new Set(
-    tasks.filter(isProtectedAnnualTask).map((task) => task.kind),
+    tasks.map((task) => task.kind.trim()).filter(Boolean),
   );
   const additions: AnnualTaskItem[] = [];
   const slug = proposalSlug.trim();
